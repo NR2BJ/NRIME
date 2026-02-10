@@ -1,0 +1,27 @@
+# Xcode build
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserdata/
+
+# Generated files (recreate with: xcodegen generate)
+# Generated files (recreate with: python3 Tools/build_hanja_db.py)
+NRIME/Resources/hanja.db
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Xcode
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM

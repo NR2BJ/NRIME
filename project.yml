@@ -1,0 +1,54 @@
+name: NRIME
+options:
+  bundleIdPrefix: com.nrime.inputmethod
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+targets:
+  NRIME:
+    type: application
+    platform: macOS
+    sources:
+      - path: NRIME
+        excludes:
+          - Resources/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.NRIME
+        INFOPLIST_FILE: NRIME/Resources/Info.plist
+        INSTALL_PATH: /Library/Input Methods
+        SKIP_INSTALL: false
+        LS_BACKGROUND_ONLY: true
+        PRODUCT_NAME: NRIME
+        COMBINE_HIDPI_IMAGES: true
+        # No @main — we use main.swift
+        # Disable automatic code signing for input methods
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: false
+    dependencies:
+      - framework: InputMethodKit.framework
+        embed: false
+      - sdk: Carbon.framework
+      - sdk: libsqlite3.tbd
+
+  NRIMETests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: NRIMETests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.NRIMETests
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: false
+    dependencies:
+      - target: NRIME
