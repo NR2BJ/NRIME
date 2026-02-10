@@ -74,11 +74,16 @@ final class InlineIndicator {
             client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineHeightRect)
 
             if lineHeightRect != .zero {
-                // Position above and to the right of the caret
-                return NSPoint(
-                    x: lineHeightRect.origin.x + lineHeightRect.width + 4,
-                    y: lineHeightRect.origin.y + lineHeightRect.height + 4
-                )
+                let gap: CGFloat = 4
+                let x = lineHeightRect.origin.x + lineHeightRect.width + gap
+
+                // Prefer above the caret; if that goes off-screen, show below
+                let aboveY = lineHeightRect.origin.y + lineHeightRect.height + gap
+                if let screen = NSScreen.main, aboveY + panelSize.height > screen.visibleFrame.maxY {
+                    // Show below the caret
+                    return NSPoint(x: x, y: lineHeightRect.origin.y - panelSize.height - gap)
+                }
+                return NSPoint(x: x, y: aboveY)
             }
         }
 

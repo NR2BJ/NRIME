@@ -8,6 +8,7 @@ class NRIMEInputController: IMKInputController {
     private let shortcutHandler = ShortcutHandler()
     private let englishEngine = EnglishEngine()
     private let koreanEngine = KoreanEngine()
+    private let japaneseEngine = JapaneseEngine()
 
     /// Track current candidate selection index (interpretKeyEvents doesn't update selectedCandidate())
     private var candidateSelectionIndex: Int = 0
@@ -26,15 +27,13 @@ class NRIMEInputController: IMKInputController {
             return false
         }
 
-        let clientBundleId = client.bundleIdentifier() ?? "unknown"
-
         // 1. Secure Input: bypass all internal logic
         if secureInputDetector.isSecureInputActive() {
             return false
         }
 
         // 1.5. Pass through all events when NRIMESettings is the active app
-        if clientBundleId == "com.nrime.inputmethod.settings" {
+        if client.bundleIdentifier() == "com.nrime.inputmethod.settings" {
             return false
         }
 
@@ -56,7 +55,7 @@ class NRIMEInputController: IMKInputController {
         case .korean:
             return koreanEngine.handleEvent(event, client: client)
         case .japanese:
-            return false // Phase 4
+            return japaneseEngine.handleEvent(event, client: client)
         }
     }
 
@@ -120,7 +119,7 @@ class NRIMEInputController: IMKInputController {
             case .korean:
                 return koreanEngine.handleEvent(event, client: client)
             case .japanese:
-                return false
+                return japaneseEngine.handleEvent(event, client: client)
             }
         }
     }
@@ -141,6 +140,8 @@ class NRIMEInputController: IMKInputController {
             case .toggleEnglish, .switchKorean, .switchJapanese:
                 if previousMode == .korean {
                     self.koreanEngine.forceCommit(client: client)
+                } else if previousMode == .japanese {
+                    self.japaneseEngine.forceCommit(client: client)
                 }
                 switch action {
                 case .toggleEnglish: StateManager.shared.toggleEnglish()
@@ -184,9 +185,10 @@ class NRIMEInputController: IMKInputController {
             StateManager.shared.deactivateApp(bundleId)
         }
 
-        // Force commit any composing Korean text
+        // Force commit any composing text
         let client = self.client() as? (any IMKTextInput)
         koreanEngine.forceCommit(client: client)
+        japaneseEngine.forceCommit(client: client)
         shortcutHandler.reset()
         NSLog("NRIME: deactivateServer")
         super.deactivateServer(sender)
