@@ -7,6 +7,11 @@ options:
   createIntermediateGroups: true
   generateEmptyDirectories: true
 
+packages:
+  SwiftProtobuf:
+    url: https://github.com/apple/swift-protobuf.git
+    from: "1.28.0"
+
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -20,6 +25,10 @@ targets:
       - path: NRIME
         excludes:
           - Resources/Info.plist
+          - Resources/mozc_server
+      - path: NRIME/Resources/mozc_server
+        buildPhase: resources
+        type: file
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.app
@@ -29,6 +38,7 @@ targets:
         # LSUIElement is set in Info.plist (allows NSStatusItem + windows)
         PRODUCT_NAME: NRIME
         COMBINE_HIDPI_IMAGES: true
+        SWIFT_OBJC_BRIDGING_HEADER: NRIME/NRIME-Bridging-Header.h
         # No @main — we use main.swift
         # Disable automatic code signing for input methods
         CODE_SIGN_IDENTITY: "-"
@@ -38,6 +48,7 @@ targets:
         embed: false
       - sdk: Carbon.framework
       - sdk: libsqlite3.tbd
+      - package: SwiftProtobuf
 
   NRIMESettings:
     type: application

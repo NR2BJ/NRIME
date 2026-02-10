@@ -3,7 +3,11 @@ import InputMethodKit
 
 final class JapaneseEngine: InputEngine {
     private let composer = RomajiComposer()
+    let mozcConverter = MozcConverter()
     private let backspaceKeyCode: UInt16 = 0x33
+
+    /// Called when Mozc candidates are about to be shown, so controller can reset selection index.
+    var onCandidatesShow: (() -> Void)?
 
     func handleEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
         guard event.type == .keyDown else { return false }
@@ -27,11 +31,10 @@ final class JapaneseEngine: InputEngine {
             return composer.isComposing // was composing → consume; otherwise pass through
         }
 
-        // Space — commit composing text (Phase 4-2: will trigger Mozc conversion)
+        // Space — trigger Mozc conversion (or commit hiragana if Mozc unavailable)
         if keyCode == 0x31 {
             if composer.isComposing {
-                commitComposing(client: client)
-                return true
+                return triggerMozcConversion(client: client)
             }
             return false
         }
@@ -82,14 +85,44 @@ final class JapaneseEngine: InputEngine {
     }
 
     func forceCommit(client: (any IMKTextInput)?) {
-        guard let client = client, composer.isComposing else { return }
+        guard let client = client else { return }
+        mozcConverter.reset()
+        guard composer.isComposing else { return }
         let text = composer.flush()
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
     }
 
+    /// Clear composer state without committing (used after candidate selection).
+    func clearComposerState() {
+        composer.clear()
+    }
+
     // MARK: - Private
+
+    private func triggerMozcConversion(client: any IMKTextInput) -> Bool {
+        let hiragana = composer.flush()
+        guard !hiragana.isEmpty else { return false }
+
+        if mozcConverter.convert(hiragana: hiragana) {
+            // Keep hiragana as marked text while showing candidates
+            client.setMarkedText(hiragana as NSString,
+                                 selectionRange: NSRange(location: hiragana.count, length: 0),
+                                 replacementRange: replacementRange())
+
+            onCandidatesShow?()
+            if let appDelegate = NSApp.delegate as? AppDelegate {
+                appDelegate.candidatesWindow.update()
+                appDelegate.candidatesWindow.show(kIMKLocateCandidatesBelowHint)
+            }
+            return true
+        }
+
+        // Mozc unavailable or no candidates — commit hiragana directly
+        client.insertText(hiragana as NSString, replacementRange: replacementRange())
+        return true
+    }
 
     private func handleBackspace(client: any IMKTextInput) -> Bool {
         guard composer.isComposing else { return false }

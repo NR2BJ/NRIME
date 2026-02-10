@@ -64,7 +64,15 @@ class NRIMEInputController: IMKInputController {
     private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, candidates: IMKCandidates) -> Bool {
         guard event.type == .keyDown else { return false }
 
-        let candidateList = koreanEngine.hanjaConverter?.currentCandidateStrings ?? []
+        let candidateList: [String]
+        switch StateManager.shared.currentMode {
+        case .korean:
+            candidateList = koreanEngine.hanjaConverter?.currentCandidateStrings ?? []
+        case .japanese:
+            candidateList = japaneseEngine.mozcConverter.currentCandidateStrings
+        default:
+            candidateList = []
+        }
         let count = candidateList.count
 
         switch event.keyCode {
@@ -92,6 +100,9 @@ class NRIMEInputController: IMKInputController {
             }
             return true
         case 0x35: // Escape — dismiss
+            if StateManager.shared.currentMode == .japanese {
+                japaneseEngine.mozcConverter.cancel()
+            }
             candidates.hide()
             return true
         case 0x12, 0x13, 0x14, 0x15, 0x17, 0x16, 0x1A, 0x1C, 0x19: // Number keys 1-9
@@ -160,6 +171,11 @@ class NRIMEInputController: IMKInputController {
             }
         }
 
+        // Wire up Japanese candidate show callback
+        japaneseEngine.onCandidatesShow = { [weak self] in
+            self?.candidateSelectionIndex = 0
+        }
+
         // Wire up mode change callback for inline indicator
         StateManager.shared.onModeChanged = { [weak self] mode in
             if Settings.shared.inlineIndicatorEnabled {
@@ -197,24 +213,42 @@ class NRIMEInputController: IMKInputController {
     // MARK: - IMKCandidates Support
 
     override func candidates(_ sender: Any!) -> [Any]! {
-        return koreanEngine.hanjaConverter?.currentCandidateStrings ?? []
+        switch StateManager.shared.currentMode {
+        case .korean:
+            return koreanEngine.hanjaConverter?.currentCandidateStrings ?? []
+        case .japanese:
+            return japaneseEngine.mozcConverter.currentCandidateStrings
+        default:
+            return []
+        }
     }
 
     override func candidateSelected(_ candidateString: NSAttributedString!) {
         guard let client = self.client() as? (any IMKTextInput),
               let selectedText = candidateString?.string else { return }
 
-        let hanja = String(selectedText.prefix(while: { $0 != " " }))
+        let replacementRange = NSRange(location: NSNotFound, length: NSNotFound)
 
-        if let converter = koreanEngine.hanjaConverter, converter.isSelectedTextConversion {
-            // Selected text conversion: replace the original selected range
-            client.insertText(hanja as NSString, replacementRange: converter.selectedTextRange)
-            converter.isSelectedTextConversion = false
-            converter.selectedTextRange = NSRange(location: NSNotFound, length: NSNotFound)
-        } else {
-            // Composing text conversion: flush automata state first, then replace marked text
-            koreanEngine.clearAutomataState()
-            client.insertText(hanja as NSString, replacementRange: NSRange(location: NSNotFound, length: NSNotFound))
+        switch StateManager.shared.currentMode {
+        case .japanese:
+            // Use the selected text directly (same as Korean approach)
+            japaneseEngine.mozcConverter.cancel()
+            japaneseEngine.clearComposerState()
+            client.insertText(selectedText as NSString, replacementRange: replacementRange)
+
+        case .korean:
+            let hanja = String(selectedText.prefix(while: { $0 != " " }))
+            if let converter = koreanEngine.hanjaConverter, converter.isSelectedTextConversion {
+                client.insertText(hanja as NSString, replacementRange: converter.selectedTextRange)
+                converter.isSelectedTextConversion = false
+                converter.selectedTextRange = NSRange(location: NSNotFound, length: NSNotFound)
+            } else {
+                koreanEngine.clearAutomataState()
+                client.insertText(hanja as NSString, replacementRange: replacementRange)
+            }
+
+        default:
+            break
         }
 
         // Dismiss candidate window after selection
