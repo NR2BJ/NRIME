@@ -1,9 +1,9 @@
 import Foundation
 
 enum InputMode: String, CaseIterable {
-    case english = "com.nrime.inputmethod.NRIME.en"
-    case korean = "com.nrime.inputmethod.NRIME.ko"
-    case japanese = "com.nrime.inputmethod.NRIME.ja"
+    case english = "com.nrime.inputmethod.app.en"
+    case korean = "com.nrime.inputmethod.app.ko"
+    case japanese = "com.nrime.inputmethod.app.ja"
 
     var label: String {
         switch self {

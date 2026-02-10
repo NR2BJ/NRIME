@@ -103,6 +103,9 @@ final class HangulAutomata {
     func flush() -> String {
         let text = currentComposingText()
         state = .empty
+        onset = 0
+        nucleus = 0
+        coda = 0
         nucleusFirst = nil
         codaFirst = nil
         return text
@@ -201,7 +204,9 @@ final class HangulAutomata {
         case .onset:
             // Onset + vowel → compose syllable
             nucleus = nucleusIdx
+            coda = 0
             nucleusFirst = nil
+            codaFirst = nil
             state = .onsetNucleus
             return HangulResult(committed: "", composing: currentSyllable())
 

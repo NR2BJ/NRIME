@@ -19,7 +19,7 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
 
-    <key>LSBackgroundOnly</key>
+    <key>LSUIElement</key>
     <true/>
 
     <key>NSPrincipalClass</key>
@@ -48,10 +48,10 @@
     <dict>
         <key>tsInputModeListKey</key>
         <dict>
-            <key>com.nrime.inputmethod.NRIME.en</key>
+            <key>com.nrime.inputmethod.app.en</key>
             <dict>
                 <key>TISInputSourceID</key>
-                <string>com.nrime.inputmethod.NRIME.en</string>
+                <string>com.nrime.inputmethod.app.en</string>
                 <key>TISIntendedLanguage</key>
                 <string>en</string>
                 <key>tsInputModeScriptKey</key>
@@ -66,28 +66,28 @@
                 <string>icon_en</string>
             </dict>
 
-            <key>com.nrime.inputmethod.NRIME.ko</key>
+            <key>com.nrime.inputmethod.app.ko</key>
             <dict>
                 <key>TISInputSourceID</key>
-                <string>com.nrime.inputmethod.NRIME.ko</string>
+                <string>com.nrime.inputmethod.app.ko</string>
                 <key>TISIntendedLanguage</key>
                 <string>ko</string>
                 <key>tsInputModeScriptKey</key>
                 <string>smKorean</string>
                 <key>tsInputModeIsVisibleKey</key>
-                <true/>
+                <false/>
                 <key>tsInputModeDefaultStateKey</key>
                 <false/>
                 <key>tsInputModePrimaryInScriptKey</key>
-                <true/>
+                <false/>
                 <key>tsInputModeMenuIconFileKey</key>
                 <string>icon_ko</string>
             </dict>
 
-            <key>com.nrime.inputmethod.NRIME.ja</key>
+            <key>com.nrime.inputmethod.app.ja</key>
             <dict>
                 <key>TISInputSourceID</key>
-                <string>com.nrime.inputmethod.NRIME.ja</string>
+                <string>com.nrime.inputmethod.app.ja</string>
                 <key>TISIntendedLanguage</key>
                 <string>ja</string>
                 <key>tsInputModeScriptKey</key>
@@ -105,8 +105,7 @@
 
         <key>tsVisibleInputModeOrderedArrayKey</key>
         <array>
-            <string>com.nrime.inputmethod.NRIME.en</string>
-            <string>com.nrime.inputmethod.NRIME.ko</string>
+            <string>com.nrime.inputmethod.app.en</string>
         </array>
     </dict>
 </dict>

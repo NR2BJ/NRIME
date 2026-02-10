@@ -203,6 +203,29 @@ final class HangulAutomataTests: XCTestCase {
         XCTAssertEqual(result.composing, "국")
     }
 
+    func testTyping_둘_다() {
+        // "둘 다" = enf + space + ek
+        // e=ㄷ, n=ㅜ, f=ㄹ → 둘(composing)
+        // space → non-jamo, flush "둘", committed="둘 "
+        // e=ㄷ → onset(composing=ㄷ)
+        // k=ㅏ → composing=다
+        let result = type("enf ek")
+        XCTAssertEqual(result.committed, "둘 ")
+        XCTAssertEqual(result.composing, "다")
+    }
+
+    func testTyping_뛰어() {
+        // "뛰어" = Enl + dj
+        // E=ㄸ → onset
+        // n=ㅜ → 뚜(onsetNucleus)
+        // l=ㅣ → 뛔? no... ㅜ(13)+ㅣ(20) = ㅟ(16) compound → 뛰(composing)
+        // d=ㅇ → ㅇ can be coda(21) → 뛱(composing)
+        // j=ㅓ → split: commit 뛰, new ㅇ+ㅓ = 어(composing)
+        let result = type("Enldj")
+        XCTAssertEqual(result.committed, "뛰")
+        XCTAssertEqual(result.composing, "어")
+    }
+
     func testTyping_사랑() {
         // 사: t=ㅅ, k=ㅏ → 사
         // 랑: f=ㄹ, k=ㅏ... wait

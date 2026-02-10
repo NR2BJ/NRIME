@@ -22,11 +22,11 @@ targets:
           - Resources/Info.plist
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.NRIME
+        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.app
         INFOPLIST_FILE: NRIME/Resources/Info.plist
         INSTALL_PATH: /Library/Input Methods
         SKIP_INSTALL: false
-        LS_BACKGROUND_ONLY: true
+        # LSUIElement is set in Info.plist (allows NSStatusItem + windows)
         PRODUCT_NAME: NRIME
         COMBINE_HIDPI_IMAGES: true
         # No @main — we use main.swift
@@ -39,6 +39,25 @@ targets:
       - sdk: Carbon.framework
       - sdk: libsqlite3.tbd
 
+  NRIMESettings:
+    type: application
+    platform: macOS
+    sources:
+      - path: NRIMESettings
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.settings
+        GENERATE_INFOPLIST_FILE: true
+        PRODUCT_NAME: NRIMESettings
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: false
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+    info:
+      path: NRIMESettings/Info.plist
+      properties:
+        LSUIElement: true
+    dependencies: []
+
   NRIMETests:
     type: bundle.unit-test
     platform: macOS
@@ -46,7 +65,7 @@ targets:
       - path: NRIMETests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.NRIMETests
+        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.app.tests
         GENERATE_INFOPLIST_FILE: true
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_ALLOWED: false

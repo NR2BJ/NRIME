@@ -69,7 +69,7 @@ final class InputSourceRecovery {
         lastRecoveryTime = now
 
         let conditions = [
-            kTISPropertyBundleID: "com.nrime.inputmethod.NRIME"
+            kTISPropertyBundleID: "com.nrime.inputmethod.app"
         ] as CFDictionary
 
         guard let sources = TISCreateInputSourceList(conditions, false)?.takeRetainedValue() as? [TISInputSource],

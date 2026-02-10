@@ -8,7 +8,7 @@ final class ShortcutHandlerTests: XCTestCase {
     override func setUp() {
         super.setUp()
         handler = ShortcutHandler()
-        handler.tapThreshold = 0.2
+        Settings.shared.tapThreshold = 0.2
         // Reset StateManager to known state
         StateManager.shared.switchTo(.english)
     }

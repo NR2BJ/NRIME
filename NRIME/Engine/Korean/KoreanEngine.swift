@@ -8,16 +8,20 @@ final class KoreanEngine: InputEngine {
     // The backspace key code
     private let backspaceKeyCode: UInt16 = 0x33
 
+    init() {
+        self.hanjaConverter = HanjaConverter()
+        if hanjaConverter == nil {
+            NSLog("NRIME: Warning — HanjaConverter failed to initialize (hanja.db missing?)")
+        }
+    }
+
     func handleEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
         guard event.type == .keyDown else { return false }
 
-        // Check for Hanja shortcut (Option + Enter)
-        if event.modifierFlags.contains(.option) && event.keyCode == 0x24 {
-            return triggerHanjaConversion(client: client)
-        }
+        // Hanja shortcut is now handled by ShortcutHandler → NRIMEInputController.onAction
 
-        // Ignore events with Command or Control modifiers (system shortcuts)
-        if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
+        // Ignore events with Command, Control, or Option modifiers (system shortcuts)
+        if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || event.modifierFlags.contains(.option) {
             commitComposing(client: client)
             return false
         }
@@ -27,26 +31,33 @@ final class KoreanEngine: InputEngine {
             return handleBackspace(client: client)
         }
 
-        // Get the character from the event
-        guard let chars = event.characters, let char = chars.first else {
-            return false
-        }
-
-        // Look up jamo
-        if let jamo = JamoTable.jamo(for: char) {
+        // Primary: keyCode-based jamo lookup (works in ALL apps including Electron/VSCode)
+        let isShifted = event.modifierFlags.contains(.shift)
+        if let jamo = JamoTable.jamo(forKeyCode: event.keyCode, shifted: isShifted) {
             let result = automata.input(jamo)
+            NSLog("NRIME: keyCode=0x%02X shift=%d → jamo=%@ committed='%@' composing='%@'",
+                  event.keyCode, isShifted ? 1 : 0,
+                  String(jamo.value),
+                  result.committed, result.composing)
             applyResult(result, client: client)
             return true
         }
 
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
         // Commit composing text and let the system handle the key
+        NSLog("NRIME: non-jamo keyCode=0x%02X shift=%d — flushing composing",
+              event.keyCode, isShifted ? 1 : 0)
         commitComposing(client: client)
         return false
     }
 
     func reset(client: any IMKTextInput) {
         commitComposing(client: client)
+    }
+
+    /// Clear automata state without committing (used when hanja candidate replaces composing text).
+    func clearAutomataState() {
+        _ = automata.flush()
     }
 
     /// Force commit any composing text (called from deactivateServer).
@@ -117,22 +128,39 @@ final class KoreanEngine: InputEngine {
         }
     }
 
-    private func triggerHanjaConversion(client: any IMKTextInput) -> Bool {
-        guard let converter = hanjaConverter else { return false }
+    func triggerHanjaConversion(client: any IMKTextInput) -> Bool {
+        guard let converter = hanjaConverter else { return true }
 
+        // 1. Try composing text first (actively being typed)
         let composing = automata.currentComposingText()
-        guard !composing.isEmpty else { return false }
+        if !composing.isEmpty {
+            return showHanjaCandidates(for: composing, converter: converter, client: client, isSelectedText: false)
+        }
 
-        let candidates = converter.lookupCandidates(for: composing)
-        guard !candidates.isEmpty else { return false }
+        // 2. Fall back to selected text (user dragged to select)
+        let selRange = client.selectedRange()
+        if selRange.location != NSNotFound && selRange.length > 0 {
+            if let selAttr = client.attributedSubstring(from: selRange),
+               !selAttr.string.isEmpty {
+                return showHanjaCandidates(for: selAttr.string, converter: converter, client: client, isSelectedText: true)
+            }
+        }
+
+        return true
+    }
+
+    private func showHanjaCandidates(for text: String, converter: HanjaConverter, client: any IMKTextInput, isSelectedText: Bool) -> Bool {
+        let candidates = converter.lookupCandidates(for: text)
+        if candidates.isEmpty { return true }
 
         converter.currentCandidateStrings = candidates.map { "\($0.hanja) \($0.meaning)" }
         converter.client = client
+        converter.isSelectedTextConversion = isSelectedText
+        converter.selectedTextRange = isSelectedText ? client.selectedRange() : NSRange(location: NSNotFound, length: NSNotFound)
 
-        // Show the candidates window
         if let appDelegate = NSApp.delegate as? AppDelegate {
             appDelegate.candidatesWindow.update()
-            appDelegate.candidatesWindow.show()
+            appDelegate.candidatesWindow.show(kIMKLocateCandidatesBelowHint)
         }
 
         return true

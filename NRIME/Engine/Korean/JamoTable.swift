@@ -210,7 +210,85 @@ enum JamoTable {
         return String(Unicode.Scalar(scalar)!)
     }
 
-    // MARK: - QWERTY Mapping Table (Private)
+    // MARK: - KeyCode to Jamo Mapping (Hardware keyCode-based, Electron-safe)
+
+    /// Maps a macOS hardware keyCode + shift state to a Jamo.
+    /// This is the primary lookup used for all apps because `event.keyCode` is always
+    /// reliable, unlike `event.characters` / `event.charactersIgnoringModifiers` which
+    /// can return nil in Electron-based apps (VSCode, Slack, Discord, etc.).
+    static func jamo(forKeyCode keyCode: UInt16, shifted: Bool) -> Jamo? {
+        guard let entry = keyCodeMap[keyCode] else { return nil }
+        if shifted, let shiftedJamo = entry.shifted {
+            return shiftedJamo
+        }
+        return entry.base
+    }
+
+    private static let keyCodeMap: [UInt16: (base: Jamo, shifted: Jamo?)] = {
+        var m: [UInt16: (base: Jamo, shifted: Jamo?)] = [:]
+
+        // Helper: consonant
+        func c(_ keyCode: UInt16,
+               _ jamoChar: Character, onset: Int, coda: Int?,
+               shifted: (Character, Int, Int?)? = nil) {
+            let base = Jamo(type: .consonant, value: jamoChar,
+                            onsetIndex: onset, nucleusIndex: nil, codaIndex: coda)
+            var shiftedJamo: Jamo? = nil
+            if let s = shifted {
+                shiftedJamo = Jamo(type: .consonant, value: s.0,
+                                   onsetIndex: s.1, nucleusIndex: nil, codaIndex: s.2)
+            }
+            m[keyCode] = (base: base, shifted: shiftedJamo)
+        }
+
+        // Helper: vowel
+        func v(_ keyCode: UInt16,
+               _ jamoChar: Character, nucleus: Int,
+               shifted: (Character, Int)? = nil) {
+            let base = Jamo(type: .vowel, value: jamoChar,
+                            onsetIndex: nil, nucleusIndex: nucleus, codaIndex: nil)
+            var shiftedJamo: Jamo? = nil
+            if let s = shifted {
+                shiftedJamo = Jamo(type: .vowel, value: s.0,
+                                   onsetIndex: nil, nucleusIndex: s.1, codaIndex: nil)
+            }
+            m[keyCode] = (base: base, shifted: shiftedJamo)
+        }
+
+        // Consonants — keyCode : base jamo, shifted jamo
+        c(0x0F, "ㄱ", onset: 0,  coda: 1,  shifted: ("ㄲ", 1, 2))    // r / R
+        c(0x01, "ㄴ", onset: 2,  coda: 4)                              // s
+        c(0x0E, "ㄷ", onset: 3,  coda: 7,  shifted: ("ㄸ", 4, nil))   // e / E
+        c(0x03, "ㄹ", onset: 5,  coda: 8)                              // f
+        c(0x00, "ㅁ", onset: 6,  coda: 16)                             // a
+        c(0x0C, "ㅂ", onset: 7,  coda: 17, shifted: ("ㅃ", 8, nil))   // q / Q
+        c(0x11, "ㅅ", onset: 9,  coda: 19, shifted: ("ㅆ", 10, 20))   // t / T
+        c(0x02, "ㅇ", onset: 11, coda: 21)                             // d
+        c(0x0D, "ㅈ", onset: 12, coda: 22, shifted: ("ㅉ", 13, nil))  // w / W
+        c(0x08, "ㅊ", onset: 14, coda: 23)                             // c
+        c(0x06, "ㅋ", onset: 15, coda: 24)                             // z
+        c(0x07, "ㅌ", onset: 16, coda: 25)                             // x
+        c(0x09, "ㅍ", onset: 17, coda: 26)                             // v
+        c(0x05, "ㅎ", onset: 18, coda: 27)                             // g
+
+        // Vowels — keyCode : base jamo, shifted jamo
+        v(0x28, "ㅏ", nucleus: 0)                                       // k
+        v(0x1F, "ㅐ", nucleus: 1,  shifted: ("ㅒ", 3))                 // o / O
+        v(0x22, "ㅑ", nucleus: 2)                                       // i
+        v(0x26, "ㅓ", nucleus: 4)                                       // j
+        v(0x23, "ㅔ", nucleus: 5,  shifted: ("ㅖ", 7))                 // p / P
+        v(0x20, "ㅕ", nucleus: 6)                                       // u
+        v(0x04, "ㅗ", nucleus: 8)                                       // h
+        v(0x10, "ㅛ", nucleus: 12)                                      // y
+        v(0x2D, "ㅜ", nucleus: 13)                                      // n
+        v(0x0B, "ㅠ", nucleus: 17)                                      // b
+        v(0x2E, "ㅡ", nucleus: 18)                                      // m
+        v(0x25, "ㅣ", nucleus: 20)                                      // l
+
+        return m
+    }()
+
+    // MARK: - QWERTY Mapping Table (Character-based, for unit tests)
 
     private static let qwertyMap: [Character: Jamo] = {
         var m: [Character: Jamo] = [:]

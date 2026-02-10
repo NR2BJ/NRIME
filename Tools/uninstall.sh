@@ -19,16 +19,16 @@ sudo rm -rf "/Library/Input Methods/NRIME.app" 2>/dev/null || true
 
 # 3. Remove UserDefaults / preferences
 echo "[3/6] Removing preferences..."
-defaults delete com.nrime.inputmethod.NRIME 2>/dev/null || true
-rm -f "$HOME/Library/Preferences/com.nrime.inputmethod.NRIME.plist"
-rm -f "$HOME/Library/Preferences/com.nrime.inputmethod.NRIME.plist.lockfile"
+defaults delete com.nrime.inputmethod.app 2>/dev/null || true
+rm -f "$HOME/Library/Preferences/com.nrime.inputmethod.app.plist"
+rm -f "$HOME/Library/Preferences/com.nrime.inputmethod.app.plist.lockfile"
 
 # 4. Remove App Group shared container (if any)
 rm -rf "$HOME/Library/Group Containers/group.com.nrime" 2>/dev/null || true
 
 # 5. Remove cached/derived data
 echo "[4/6] Removing caches and derived data..."
-rm -rf "$HOME/Library/Caches/com.nrime.inputmethod.NRIME"
+rm -rf "$HOME/Library/Caches/com.nrime.inputmethod.app"
 # Remove from LaunchServices database
 /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -u "$HOME/Library/Input Methods/NRIME.app" 2>/dev/null || true
 /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -u "/Library/Input Methods/NRIME.app" 2>/dev/null || true
