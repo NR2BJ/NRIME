@@ -38,7 +38,29 @@ final class KoreanEngine: InputEngine {
         }
 
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
-        // Commit composing text and let the system handle the key
+
+        // Shift+Enter while composing: Electron apps (Claude) lose committed
+        // text when return false lets the app process Shift+Enter simultaneously.
+        // Electron ignores insertText("\n"), so we must re-post the key event
+        // via CGEvent after committing. Requires Accessibility permission.
+        let isEnter = event.keyCode == 0x24 || event.keyCode == 0x4C
+        if automata.isComposing && isEnter && isShifted {
+            commitComposing(client: client)
+            let kc = event.keyCode
+            DispatchQueue.main.async {
+                let src = CGEventSource(stateID: .hidSystemState)
+                if let down = CGEvent(keyboardEventSource: src, virtualKey: kc, keyDown: true),
+                   let up = CGEvent(keyboardEventSource: src, virtualKey: kc, keyDown: false) {
+                    down.flags = .maskShift
+                    up.flags = .maskShift
+                    down.post(tap: .cghidEventTap)
+                    up.post(tap: .cghidEventTap)
+                }
+            }
+            return true
+        }
+
+        // All other non-jamo keys: commit and let the system handle the key
         commitComposing(client: client)
         return false
     }
