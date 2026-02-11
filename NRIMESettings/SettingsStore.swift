@@ -125,6 +125,8 @@ struct JapaneseKeyConfig: Codable, Equatable {
     var slashToNakaguro: Bool = true
     /// Whether ¥ key produces ¥ (yen sign)
     var yenKeyToYen: Bool = true
+    /// Whether Space inserts full-width space (U+3000) instead of half-width (U+0020)
+    var fullWidthSpace: Bool = false
 
     static let `default` = JapaneseKeyConfig()
 }

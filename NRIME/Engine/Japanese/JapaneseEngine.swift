@@ -131,10 +131,15 @@ final class JapaneseEngine: InputEngine {
             return wasComposing
         }
 
-        // Space — trigger Mozc conversion
+        // Space — trigger Mozc conversion, or insert full-width space
         if keyCode == 0x31 {
             if composer.isComposing {
                 return triggerMozcConversion(client: client)
+            }
+            // Not composing: insert full-width space if configured
+            if Settings.shared.japaneseKeyConfig.fullWidthSpace {
+                client.insertText("\u{3000}" as NSString, replacementRange: replacementRange())
+                return true
             }
             return false
         }

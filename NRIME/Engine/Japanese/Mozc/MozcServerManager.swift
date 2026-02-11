@@ -13,6 +13,10 @@ final class MozcServerManager {
             return true
         }
 
+        // Kill any stale mozc_server from a previous NRIME instance whose
+        // Mach port is no longer reachable but still occupies the port name.
+        killStaleServers()
+
         // Try to launch the server
         guard launchServer() else {
             NSLog("NRIME: Failed to launch mozc_server")
@@ -61,6 +65,24 @@ final class MozcServerManager {
     }
 
     // MARK: - Private
+
+    /// Kill any existing mozc_server processes that are not managed by this instance.
+    /// This handles stale servers left behind after NRIME is reinstalled/restarted.
+    private func killStaleServers() {
+        let killTask = Process()
+        killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        killTask.arguments = ["mozc_server"]
+        killTask.standardOutput = FileHandle.nullDevice
+        killTask.standardError = FileHandle.nullDevice
+        try? killTask.run()
+        killTask.waitUntilExit()
+
+        serverProcess?.terminate()
+        serverProcess = nil
+
+        // Brief wait for Mach port to be deregistered
+        Thread.sleep(forTimeInterval: 0.3)
+    }
 
     private func isServerReachable() -> Bool {
         var serverPort: mach_port_t = 0

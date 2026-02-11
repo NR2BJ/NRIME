@@ -72,6 +72,19 @@ struct JapaneseTab: View {
                 }
             }
 
+            Section("Space") {
+                Picker("Space Width", selection: Binding(
+                    get: { store.japaneseKeyConfig.fullWidthSpace },
+                    set: { store.japaneseKeyConfig.fullWidthSpace = $0 }
+                )) {
+                    Text("Half-width (U+0020)").tag(false)
+                    Text("Full-width (U+3000)").tag(true)
+                }
+                Text("Applies when not composing. During composition, Space triggers conversion.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Punctuation & Symbols") {
                 Picker("Punctuation Style", selection: Binding(
                     get: { store.japaneseKeyConfig.punctuationStyle },
