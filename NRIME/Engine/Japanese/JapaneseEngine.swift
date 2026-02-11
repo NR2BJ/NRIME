@@ -18,6 +18,8 @@ final class JapaneseEngine: InputEngine {
 
     /// Tracks whether the current composing text should be committed as katakana (Shift+katakana mode).
     private var shiftKatakanaActive = false
+    /// Tracks whether Caps Lock katakana mode is active (for commitComposing to use).
+    private var capsLockKatakanaActive = false
 
     /// Whether the engine is in Mozc conversion state (for controller routing).
     var isInConversionState: Bool {
@@ -114,6 +116,8 @@ final class JapaneseEngine: InputEngine {
     private func handleComposingEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
         let keyCode = event.keyCode
         let isShifted = event.modifierFlags.contains(.shift)
+        let isCapsLockOn = event.modifierFlags.contains(.capsLock)
+        let capsAction = Settings.shared.japaneseKeyConfig.capsLockAction
 
         // Backspace
         if keyCode == backspaceKeyCode {
@@ -174,12 +178,22 @@ final class JapaneseEngine: InputEngine {
         if let char = Self.charForKeyCode(keyCode, shifted: isShifted) {
             let shiftAction = Settings.shared.japaneseKeyConfig.shiftKeyAction
 
+            // Caps Lock romaji: insert the character directly (bypass romaji→kana)
+            if isCapsLockOn && capsAction == .romaji {
+                commitComposing(client: client)
+                client.insertText(String(char) as NSString, replacementRange: replacementRange())
+                return true
+            }
+
             // Shift+key with romaji action: insert the character directly (bypass romaji→kana)
             if isShifted && shiftAction == .romaji {
                 commitComposing(client: client)
                 client.insertText(String(char) as NSString, replacementRange: replacementRange())
                 return true
             }
+
+            // Track caps-lock-katakana state (for commitComposing)
+            capsLockKatakanaActive = isCapsLockOn && capsAction == .katakana
 
             // Track shift-katakana state
             if isShifted && shiftAction == .katakana {
@@ -191,8 +205,8 @@ final class JapaneseEngine: InputEngine {
             let result = composer.input(char)
             var display = result.composing + result.pending
 
-            // Show katakana while shift-katakana is active
-            if shiftKatakanaActive {
+            // Show katakana while shift-katakana or caps-lock-katakana is active
+            if shiftKatakanaActive || capsLockKatakanaActive {
                 display = hiraganaToKatakana(display)
             }
 
@@ -365,7 +379,7 @@ final class JapaneseEngine: InputEngine {
     private func commitComposing(client: any IMKTextInput) {
         guard composer.isComposing else { return }
         var text = composer.flush()
-        if shiftKatakanaActive {
+        if shiftKatakanaActive || capsLockKatakanaActive {
             text = hiraganaToKatakana(text)
             shiftKatakanaActive = false
         }
@@ -399,25 +413,16 @@ final class JapaneseEngine: InputEngine {
 
         for (index, segment) in preedit.segment.enumerated() {
             let text = segment.value
-            let segAttr = NSMutableAttributedString(string: text)
-            let range = NSRange(location: 0, length: text.count)
+            let isHighlight = segment.annotation == .highlight
+            let underline: NSUnderlineStyle = isHighlight ? .thick : .single
 
-            switch segment.annotation {
-            case .highlight:
-                segAttr.addAttribute(.underlineStyle,
-                                     value: NSNumber(value: NSUnderlineStyle.thick.rawValue),
-                                     range: range)
-                segAttr.addAttribute(.markedClauseSegment,
-                                     value: NSNumber(value: index),
-                                     range: range)
+            let segAttr = NSMutableAttributedString(string: text, attributes: [
+                .underlineStyle: underline.rawValue,
+                .markedClauseSegment: index
+            ])
+
+            if isHighlight {
                 cursorPosition = attrString.length + text.count
-            default:
-                segAttr.addAttribute(.underlineStyle,
-                                     value: NSNumber(value: NSUnderlineStyle.single.rawValue),
-                                     range: range)
-                segAttr.addAttribute(.markedClauseSegment,
-                                     value: NSNumber(value: index),
-                                     range: range)
             }
 
             attrString.append(segAttr)
@@ -431,15 +436,11 @@ final class JapaneseEngine: InputEngine {
     // MARK: - Candidate Window
 
     private func showCandidateWindow(client: (any IMKTextInput)? = nil) {
-        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel {
-            panel.show(candidates: mozcConverter.currentCandidateStrings, client: client)
-        }
+        NSApp.candidatePanel?.show(candidates: mozcConverter.currentCandidateStrings, client: client)
     }
 
     private func hideCandidateWindow() {
-        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel {
-            panel.hide()
-        }
+        NSApp.candidatePanel?.hide()
     }
 
     // MARK: - Key Mapping

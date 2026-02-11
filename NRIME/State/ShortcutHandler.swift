@@ -15,6 +15,14 @@ final class ShortcutHandler {
     /// Set by NRIMEInputController. Returns true to consume the event.
     var onAction: ((Action) -> Bool)?
 
+    /// All shortcut keys and their corresponding actions.
+    private static let allShortcuts: [(String, Action)] = [
+        ("toggleEnglish", .toggleEnglish),
+        ("switchKorean", .switchKorean),
+        ("switchJapanese", .switchJapanese),
+        ("hanjaConvert", .hanjaConvert),
+    ]
+
     // Tracking state for modifier-only tap detection
     private var activeModifierKeyCode: UInt16?   // which modifier key is currently held
     private var modifierDownTime: Date?
@@ -118,14 +126,7 @@ final class ShortcutHandler {
 
     /// Check all modifier-only tap shortcuts
     private func checkModifierOnlyTap(_ keyCode: UInt16) -> Bool {
-        let shortcuts: [(String, Action)] = [
-            ("toggleEnglish", .toggleEnglish),
-            ("switchKorean", .switchKorean),
-            ("switchJapanese", .switchJapanese),
-            ("hanjaConvert", .hanjaConvert),
-        ]
-
-        for (key, action) in shortcuts {
+        for (key, action) in Self.allShortcuts {
             let config = Settings.shared.shortcut(for: key)
             if config.isModifierOnlyTap && config.keyCode == keyCode {
                 return performAction(action)
@@ -136,14 +137,7 @@ final class ShortcutHandler {
 
     /// Check modifier+key combo shortcuts. Returns nil if no match, Bool if matched.
     private func checkModifierKeyCombo(_ event: NSEvent) -> Bool? {
-        let shortcuts: [(String, Action)] = [
-            ("toggleEnglish", .toggleEnglish),
-            ("switchKorean", .switchKorean),
-            ("switchJapanese", .switchJapanese),
-            ("hanjaConvert", .hanjaConvert),
-        ]
-
-        for (key, action) in shortcuts {
+        for (key, action) in Self.allShortcuts {
             let config = Settings.shared.shortcut(for: key)
             guard !config.isModifierOnlyTap else { continue }
 
@@ -177,14 +171,7 @@ final class ShortcutHandler {
 
     /// Check plain-key shortcuts (no modifier, e.g. F13, Caps Lock)
     private func checkPlainKeyShortcut(_ keyCode: UInt16) -> Bool {
-        let shortcuts: [(String, Action)] = [
-            ("toggleEnglish", .toggleEnglish),
-            ("switchKorean", .switchKorean),
-            ("switchJapanese", .switchJapanese),
-            ("hanjaConvert", .hanjaConvert),
-        ]
-
-        for (key, action) in shortcuts {
+        for (key, action) in Self.allShortcuts {
             let config = Settings.shared.shortcut(for: key)
             guard !config.isModifierOnlyTap else { continue }
             guard NSEvent.ModifierFlags(rawValue: UInt(config.modifiers)).isEmpty else { continue }

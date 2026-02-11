@@ -156,9 +156,7 @@ final class KoreanEngine: InputEngine {
                                  replacementRange: selRange)
         }
 
-        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel {
-            panel.show(candidates: candidateStrings, client: client)
-        }
+        NSApp.candidatePanel?.show(candidates: candidateStrings, client: client)
 
         return true
     }

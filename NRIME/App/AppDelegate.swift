@@ -83,3 +83,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 }
+
+// MARK: - Convenience Accessor
+
+extension NSApplication {
+    /// Shorthand for `(NSApp.delegate as? AppDelegate)?.candidatePanel`.
+    var candidatePanel: CandidatePanel? {
+        (delegate as? AppDelegate)?.candidatePanel
+    }
+}

@@ -37,7 +37,7 @@ class NRIMEInputController: IMKInputController {
         }
 
         // 2. Candidate panel navigation (both Japanese and Korean)
-        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel, panel.isVisible() {
+        if let panel = NSApp.candidatePanel, panel.isVisible() {
             return handleCandidateNavigation(event, client: client, panel: panel)
         }
 
@@ -46,24 +46,8 @@ class NRIMEInputController: IMKInputController {
             return japaneseEngine.handleEvent(event, client: client)
         }
 
-        // 4. Shortcut detection (all configurable shortcuts)
-        // Ensure onAction is wired up (activateServer may not have been called yet after process restart)
-        if shortcutHandler.onAction == nil {
-            wireUpShortcutHandler()
-        }
-        if shortcutHandler.handleEvent(event) {
-            return true
-        }
-
-        // 5. Route to active engine based on current mode
-        switch mode {
-        case .english:
-            return englishEngine.handleEvent(event, client: client)
-        case .korean:
-            return koreanEngine.handleEvent(event, client: client)
-        case .japanese:
-            return japaneseEngine.handleEvent(event, client: client)
-        }
+        // 4. Shortcut detection + engine routing
+        return routeEvent(event, client: client)
     }
 
     /// Handle keyboard events when the candidate panel is visible.
@@ -130,25 +114,12 @@ class NRIMEInputController: IMKInputController {
             return false
 
         default:
-            // Dismiss panel and route event normally
+            // Dismiss panel and route event through normal handling
             panel.hide()
-            if StateManager.shared.currentMode == .japanese {
-                // Non-nav key during Japanese conversion: let engine handle (e.g., alpha key starts new input)
-                if japaneseEngine.isInConversionState {
-                    return japaneseEngine.handleEvent(event, client: client)
-                }
-            }
-            if shortcutHandler.handleEvent(event) {
-                return true
-            }
-            switch StateManager.shared.currentMode {
-            case .english:
-                return englishEngine.handleEvent(event, client: client)
-            case .korean:
-                return koreanEngine.handleEvent(event, client: client)
-            case .japanese:
+            if StateManager.shared.currentMode == .japanese && japaneseEngine.isInConversionState {
                 return japaneseEngine.handleEvent(event, client: client)
             }
+            return routeEvent(event, client: client)
         }
     }
 
@@ -238,12 +209,31 @@ class NRIMEInputController: IMKInputController {
         shortcutHandler.reset()
 
         // Hide candidate panel
-        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel {
-            panel.hide()
-        }
+        NSApp.candidatePanel?.hide()
 
         NSLog("NRIME: deactivateServer")
         super.deactivateServer(sender)
+    }
+
+    // MARK: - Event Routing
+
+    /// Route an event through shortcut detection and engine handling.
+    /// Shared by handle() and handleCandidateNavigation's default case.
+    private func routeEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
+        if shortcutHandler.onAction == nil {
+            wireUpShortcutHandler()
+        }
+        if shortcutHandler.handleEvent(event) {
+            return true
+        }
+        switch StateManager.shared.currentMode {
+        case .english:
+            return englishEngine.handleEvent(event, client: client)
+        case .korean:
+            return koreanEngine.handleEvent(event, client: client)
+        case .japanese:
+            return japaneseEngine.handleEvent(event, client: client)
+        }
     }
 
     // MARK: - Shortcut Handler Wiring

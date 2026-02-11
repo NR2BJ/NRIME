@@ -1,5 +1,4 @@
 import Foundation
-import InputMethodKit
 import SQLite3
 
 final class HanjaConverter {
