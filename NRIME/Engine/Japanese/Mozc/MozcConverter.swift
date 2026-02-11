@@ -7,6 +7,13 @@ struct MozcResult {
     var preedit: Mozc_Commands_Preedit? = nil
     var hasCandidates: Bool = false
     var consumed: Bool = true
+    var focusedCandidateIndex: Int = 0
+}
+
+/// A candidate with its Mozc ID for SELECT_CANDIDATE commands.
+struct MozcCandidate {
+    let value: String
+    let id: Int32
 }
 
 /// Manages Mozc conversion state and candidate display.
@@ -17,6 +24,12 @@ final class MozcConverter {
     /// Current candidate strings for CandidatePanel display.
     var currentCandidateStrings: [String] = []
 
+    /// Current candidates with Mozc IDs (for number-key selection).
+    private(set) var currentCandidates: [MozcCandidate] = []
+
+    /// The latest preedit from Mozc (multi-segment data after conversion).
+    private(set) var currentPreedit: Mozc_Commands_Preedit? = nil
+
     /// The original hiragana text being converted.
     var originalHiragana: String = ""
 
@@ -25,6 +38,9 @@ final class MozcConverter {
 
     /// Whether Mozc currently has an active conversion (segments in preedit).
     private(set) var isConverting: Bool = false
+
+    /// The currently focused candidate index from Mozc's candidate window.
+    private(set) var currentFocusedIndex: Int = 0
 
     // MARK: - Key Forwarding API
 
@@ -90,14 +106,24 @@ final class MozcConverter {
         // 2. Check for preedit (segments)
         if output.hasPreedit, !output.preedit.segment.isEmpty {
             result.preedit = output.preedit
+            currentPreedit = output.preedit
             isConverting = true
         } else {
+            currentPreedit = nil
             isConverting = false
         }
 
         // 3. Extract candidates
         extractCandidates(from: output)
         result.hasCandidates = !currentCandidateStrings.isEmpty
+
+        // 4. Extract focused candidate index
+        if output.hasAllCandidateWords, output.allCandidateWords.hasFocusedIndex {
+            currentFocusedIndex = Int(output.allCandidateWords.focusedIndex)
+        } else if output.hasCandidateWindow, output.candidateWindow.hasFocusedIndex {
+            currentFocusedIndex = Int(output.candidateWindow.focusedIndex)
+        }
+        result.focusedCandidateIndex = currentFocusedIndex
 
         result.consumed = output.consumed
         return result
@@ -112,6 +138,9 @@ final class MozcConverter {
 
         isConverting = false
         currentCandidateStrings = []
+        currentCandidates = []
+        currentPreedit = nil
+        currentFocusedIndex = 0
 
         if output.hasResult, output.result.hasValue {
             return output.result.value
@@ -133,6 +162,8 @@ final class MozcConverter {
     /// If IPC fails after feedHiragana, restarts server and retries the full sequence once.
     func convert(hiragana: String) -> Bool {
         currentCandidateStrings = []
+        currentCandidates = []
+        currentPreedit = nil
         originalHiragana = hiragana
 
         guard feedHiragana(hiragana) else { return false }
@@ -156,10 +187,8 @@ final class MozcConverter {
             }
         }
 
-        isConverting = true
-        extractCandidates(from: output!)
-
-        return !currentCandidateStrings.isEmpty || output!.hasPreedit
+        let result = updateFromOutput(output!)
+        return result.hasCandidates || result.preedit != nil
     }
 
     /// Cancel the current conversion, reverting to hiragana.
@@ -169,6 +198,9 @@ final class MozcConverter {
 
         _ = client.sendCommand(command)
         currentCandidateStrings = []
+        currentCandidates = []
+        currentPreedit = nil
+        currentFocusedIndex = 0
         isConverting = false
     }
 
@@ -178,19 +210,37 @@ final class MozcConverter {
             cancel()
         }
         currentCandidateStrings = []
+        currentCandidates = []
+        currentPreedit = nil
+        currentFocusedIndex = 0
         originalHiragana = ""
         isConverting = false
+    }
+
+    // MARK: - Candidate Selection
+
+    /// Select a candidate by its index using Mozc's SELECT_CANDIDATE command.
+    /// Returns the output from Mozc after selection (may commit segment and advance to next).
+    func selectCandidateByIndex(_ index: Int) -> Mozc_Commands_Output? {
+        guard index >= 0 && index < currentCandidates.count else { return nil }
+
+        let candidate = currentCandidates[index]
+        var command = Mozc_Commands_SessionCommand()
+        command.type = .selectCandidate
+        command.id = candidate.id
+
+        return client.sendCommand(command)
     }
 
     // MARK: - Private
 
     private func extractCandidates(from output: Mozc_Commands_Output) {
-        var candidates: [String] = []
+        var candidates: [MozcCandidate] = []
 
         if output.hasAllCandidateWords {
             for candidate in output.allCandidateWords.candidates {
                 if candidate.hasValue && !candidate.value.isEmpty {
-                    candidates.append(candidate.value)
+                    candidates.append(MozcCandidate(value: candidate.value, id: candidate.id))
                 }
             }
         }
@@ -198,25 +248,27 @@ final class MozcConverter {
         if candidates.isEmpty, output.hasCandidateWindow {
             for candidate in output.candidateWindow.candidate {
                 if candidate.hasValue && !candidate.value.isEmpty {
-                    candidates.append(candidate.value)
+                    candidates.append(MozcCandidate(value: candidate.value, id: candidate.id))
                 }
             }
         }
 
+        // Deduplicate by value
         var seen = Set<String>()
-        candidates = candidates.filter { seen.insert($0).inserted }
+        candidates = candidates.filter { seen.insert($0.value).inserted }
 
         if candidates.isEmpty, output.hasPreedit {
             let text = output.preedit.segment.map { $0.value }.joined()
             if !text.isEmpty {
-                candidates.append(text)
+                candidates.append(MozcCandidate(value: text, id: 0))
             }
             if !originalHiragana.isEmpty && text != originalHiragana {
-                candidates.append(originalHiragana)
+                candidates.append(MozcCandidate(value: originalHiragana, id: -1))
             }
         }
 
-        currentCandidateStrings = candidates
+        currentCandidates = candidates
+        currentCandidateStrings = candidates.map { $0.value }
     }
 
     deinit {

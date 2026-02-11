@@ -90,6 +90,60 @@ final class JapaneseEngine: InputEngine {
         hideCandidateWindow()
     }
 
+    /// Process a MozcResult from an external action (e.g., number-key candidate selection in controller).
+    /// Updates preedit display and candidate panel based on Mozc output.
+    func processMozcResult(_ result: MozcResult, client: any IMKTextInput) {
+        // Handle committed text
+        if let committed = result.committedText {
+            client.insertText(committed as NSString, replacementRange: replacementRange())
+            conversionState = .composing
+            composer.clear()
+            hideCandidateWindow()
+
+            // Check if Mozc started a new preedit after commit (next segment)
+            if let preedit = result.preedit, !preedit.segment.isEmpty {
+                renderPreedit(preedit, client: client)
+                conversionState = .converting
+                if result.hasCandidates {
+                    showCandidateWindow(client: client)
+                }
+            } else {
+                client.setMarkedText("" as NSString,
+                                     selectionRange: NSRange(location: 0, length: 0),
+                                     replacementRange: replacementRange())
+            }
+            return
+        }
+
+        // Handle preedit update (segment navigation, candidate change)
+        if let preedit = result.preedit {
+            if preedit.segment.isEmpty {
+                // Mozc cleared the preedit
+                conversionState = .composing
+                composer.clear()
+                client.setMarkedText("" as NSString,
+                                     selectionRange: NSRange(location: 0, length: 0),
+                                     replacementRange: replacementRange())
+                hideCandidateWindow()
+            } else {
+                renderPreedit(preedit, client: client)
+                if result.hasCandidates {
+                    showCandidateWindow(client: client)
+                } else {
+                    hideCandidateWindow()
+                }
+            }
+            return
+        }
+
+        // No preedit and no result — conversion probably ended
+        if !result.consumed {
+            conversionState = .composing
+            composer.clear()
+            hideCandidateWindow()
+        }
+    }
+
     // MARK: - Flags Changed (Caps Lock)
 
     private func handleFlagsChanged(_ event: NSEvent, client: any IMKTextInput) -> Bool {
@@ -318,10 +372,14 @@ final class JapaneseEngine: InputEngine {
         if mozcConverter.convert(hiragana: hiragana) {
             conversionState = .converting
 
-            // Render preedit segments from Mozc if available, otherwise show hiragana
-            client.setMarkedText(hiragana as NSString,
-                                 selectionRange: NSRange(location: hiragana.count, length: 0),
-                                 replacementRange: replacementRange())
+            // Render Mozc's multi-segment preedit if available, otherwise show hiragana
+            if let preedit = mozcConverter.currentPreedit, !preedit.segment.isEmpty {
+                renderPreedit(preedit, client: client)
+            } else {
+                client.setMarkedText(hiragana as NSString,
+                                     selectionRange: NSRange(location: hiragana.count, length: 0),
+                                     replacementRange: replacementRange())
+            }
 
             showCandidateWindow(client: client)
             return true
@@ -441,7 +499,9 @@ final class JapaneseEngine: InputEngine {
     // MARK: - Candidate Window
 
     private func showCandidateWindow(client: (any IMKTextInput)? = nil) {
-        NSApp.candidatePanel?.show(candidates: mozcConverter.currentCandidateStrings, client: client)
+        NSApp.candidatePanel?.show(candidates: mozcConverter.currentCandidateStrings,
+                                   selectedIndex: mozcConverter.currentFocusedIndex,
+                                   client: client)
     }
 
     private func hideCandidateWindow() {

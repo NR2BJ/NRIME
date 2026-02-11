@@ -36,44 +36,92 @@ class NRIMEInputController: IMKInputController {
             return false
         }
 
-        // 2. Candidate panel navigation (both Japanese and Korean)
-        if let panel = NSApp.candidatePanel, panel.isVisible() {
-            return handleCandidateNavigation(event, client: client, panel: panel)
+        // 2. Japanese conversion state: Mozc manages ALL key handling (including candidates)
+        if mode == .japanese && japaneseEngine.isInConversionState {
+            return handleJapaneseConversion(event, client: client)
         }
 
-        // 3. Japanese conversion state: Mozc manages key handling
-        if mode == .japanese && japaneseEngine.isInConversionState {
-            return japaneseEngine.handleEvent(event, client: client)
+        // 3. Candidate panel navigation (Korean hanja only at this point)
+        if let panel = NSApp.candidatePanel, panel.isVisible() {
+            return handleCandidateNavigation(event, client: client, panel: panel)
         }
 
         // 4. Shortcut detection + engine routing
         return routeEvent(event, client: client)
     }
 
-    /// Handle keyboard events when the candidate panel is visible.
-    /// Directly controls CandidatePanel selection — no IMKCandidates involved.
+    /// Handle all keyboard events during Japanese Mozc conversion.
+    /// Number keys select candidates via Mozc's SELECT_CANDIDATE; all other keys go to JapaneseEngine.
+    private func handleJapaneseConversion(_ event: NSEvent, client: any IMKTextInput) -> Bool {
+        guard event.type == .keyDown else {
+            return japaneseEngine.handleEvent(event, client: client)
+        }
+
+        // Number keys 1-9: select candidate by index via Mozc's SELECT_CANDIDATE command
+        let numberMap: [UInt16: Int] = [
+            0x12: 0, 0x13: 1, 0x14: 2, 0x15: 3, 0x17: 4,
+            0x16: 5, 0x1A: 6, 0x1C: 7, 0x19: 8
+        ]
+        if let offset = numberMap[event.keyCode],
+           let panel = NSApp.candidatePanel, panel.isVisible() {
+            let pageStart = panel.currentPage * panel.pageSize
+            let candidateIndex = pageStart + offset
+            if candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count {
+                // Use Mozc's SELECT_CANDIDATE to properly handle multi-segment conversion
+                if let output = japaneseEngine.mozcConverter.selectCandidateByIndex(candidateIndex) {
+                    let result = japaneseEngine.mozcConverter.updateFromOutput(output)
+                    japaneseEngine.processMozcResult(result, client: client)
+
+                    // Update candidate panel from Mozc's new state
+                    if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty {
+                        panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                                   selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
+                                   client: client)
+                    }
+                    return true
+                }
+            }
+            return true
+        }
+
+        // All other keys: forward to JapaneseEngine (which sends to Mozc)
+        let handled = japaneseEngine.handleEvent(event, client: client)
+
+        // Update candidate panel from Mozc's current state
+        if let panel = NSApp.candidatePanel {
+            if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty
+                && japaneseEngine.isInConversionState {
+                panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                           selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
+                           client: client)
+            } else if panel.isVisible() {
+                panel.hide()
+            }
+        }
+
+        return handled
+    }
+
+    /// Handle keyboard events when the candidate panel is visible (Korean hanja only).
+    /// Japanese conversion is handled entirely by handleJapaneseConversion() above.
     private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, panel: CandidatePanel) -> Bool {
         guard event.type == .keyDown else { return false }
 
         switch event.keyCode {
         case 0x7E: // Up
             panel.moveUp()
-            updatePreeditFromPanel(panel, client: client)
             return true
 
         case 0x7D: // Down
             panel.moveDown()
-            updatePreeditFromPanel(panel, client: client)
             return true
 
         case 0x7B: // Left — previous page
             panel.pageUp()
-            updatePreeditFromPanel(panel, client: client)
             return true
 
         case 0x7C: // Right — next page
             panel.pageDown()
-            updatePreeditFromPanel(panel, client: client)
             return true
 
         case 0x24, 0x4C: // Return/Enter — select current candidate
@@ -81,10 +129,6 @@ class NRIMEInputController: IMKInputController {
             return true
 
         case 0x35: // Escape — dismiss
-            if StateManager.shared.currentMode == .japanese {
-                japaneseEngine.mozcConverter.cancel()
-                japaneseEngine.exitConversionState()
-            }
             panel.hide()
             return true
 
@@ -103,44 +147,20 @@ class NRIMEInputController: IMKInputController {
             }
             return true
 
-        case 0x31: // Space — same as Down (next candidate) during conversion
-            if StateManager.shared.currentMode == .japanese && japaneseEngine.isInConversionState {
-                panel.moveDown()
-                updatePreeditFromPanel(panel, client: client)
-                return true
-            }
-            // For Korean hanja, space dismisses and passes through
+        case 0x31: // Space — dismiss and pass through for Korean hanja
             panel.hide()
             return false
 
         default:
             // Dismiss panel and route event through normal handling
             panel.hide()
-            if StateManager.shared.currentMode == .japanese && japaneseEngine.isInConversionState {
-                return japaneseEngine.handleEvent(event, client: client)
-            }
             return routeEvent(event, client: client)
         }
     }
 
-    /// Update preedit (marked text) to show the currently highlighted candidate from the panel.
-    /// This keeps the inline text in sync with what the user sees selected in the CandidatePanel,
-    /// without forwarding keys to Mozc (which has its own independent selection state).
-    private func updatePreeditFromPanel(_ panel: CandidatePanel, client: any IMKTextInput) {
-        guard StateManager.shared.currentMode == .japanese,
-              japaneseEngine.isInConversionState,
-              let text = panel.currentSelection() else { return }
-
-        let attrString = NSAttributedString(string: text, attributes: [
-            .underlineStyle: NSUnderlineStyle.single.rawValue,
-            .markedClauseSegment: 0
-        ])
-        client.setMarkedText(attrString,
-                             selectionRange: NSRange(location: text.count, length: 0),
-                             replacementRange: NSRange(location: NSNotFound, length: NSNotFound))
-    }
-
     /// Select the currently highlighted candidate and commit.
+    /// For Japanese: uses Mozc submit() to properly commit multi-segment conversion.
+    /// For Korean: commits hanja text directly.
     private func selectCurrentCandidate(client: any IMKTextInput, panel: CandidatePanel) {
         guard let selectedText = panel.currentSelection() else {
             panel.hide()
@@ -151,12 +171,16 @@ class NRIMEInputController: IMKInputController {
 
         switch StateManager.shared.currentMode {
         case .japanese:
-            // Always use the panel's selected text directly (not Mozc's internal state)
-            // because CandidatePanel selection and Mozc's selection may be out of sync
-            // (e.g., after page navigation with ←→).
-            japaneseEngine.mozcConverter.cancel()
+            // Submit through Mozc to properly handle multi-segment state.
+            // This is a fallback path — normal Japanese candidate selection goes
+            // through handleJapaneseConversion() using SELECT_CANDIDATE.
+            if let text = japaneseEngine.mozcConverter.submit() {
+                client.insertText(text as NSString, replacementRange: replacementRange)
+            } else {
+                // Fallback: use panel's selected text if Mozc submit fails
+                client.insertText(selectedText as NSString, replacementRange: replacementRange)
+            }
             japaneseEngine.exitConversionState()
-            client.insertText(selectedText as NSString, replacementRange: replacementRange)
 
         case .korean:
             let hanja = String(selectedText.prefix(while: { $0 != " " }))
