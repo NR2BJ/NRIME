@@ -57,7 +57,7 @@ class NRIMEInputController: IMKInputController {
             return japaneseEngine.handleEvent(event, client: client)
         }
 
-        // Number keys 1-9: select candidate by index via Mozc's SELECT_CANDIDATE command
+        // Number keys 1-9: select candidate and commit the segment
         let numberMap: [UInt16: Int] = [
             0x12: 0, 0x13: 1, 0x14: 2, 0x15: 3, 0x17: 4,
             0x16: 5, 0x1A: 6, 0x1C: 7, 0x19: 8
@@ -67,19 +67,20 @@ class NRIMEInputController: IMKInputController {
             let pageStart = panel.currentPage * panel.pageSize
             let candidateIndex = pageStart + offset
             if candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count {
-                // Use Mozc's SELECT_CANDIDATE to properly handle multi-segment conversion
                 if let output = japaneseEngine.mozcConverter.selectCandidateByIndex(candidateIndex) {
                     let result = japaneseEngine.mozcConverter.updateFromOutput(output)
                     japaneseEngine.processMozcResult(result, client: client)
-
-                    // Update candidate panel from Mozc's new state
-                    if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty {
-                        panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
-                                   selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
-                                   client: client)
-                    }
-                    return true
                 }
+            }
+            // After number-key selection, only show panel if there are new candidates
+            // (next segment). Otherwise the selection is final.
+            if japaneseEngine.isInConversionState
+                && !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty {
+                panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                           selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
+                           client: client)
+            } else {
+                panel.hide()
             }
             return true
         }

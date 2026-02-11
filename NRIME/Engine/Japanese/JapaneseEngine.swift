@@ -182,6 +182,11 @@ final class JapaneseEngine: InputEngine {
         if keyCode == 0x24 || keyCode == 0x4C {
             let wasComposing = composer.isComposing
             commitComposing(client: client)
+            // Shift+Enter while composing: re-post via CGEvent (same as Korean).
+            if wasComposing && isShifted {
+                Self.repostShiftEnter(keyCode: keyCode)
+                return true
+            }
             return wasComposing
         }
 
@@ -226,8 +231,8 @@ final class JapaneseEngine: InputEngine {
             return false
         }
 
-        // Punctuation, slash, yen — configurable Japanese symbol handling
-        if let symbol = symbolForKeyCode(keyCode) {
+        // Punctuation, slash, yen — configurable Japanese symbol handling (only without Shift)
+        if !isShifted, let symbol = symbolForKeyCode(keyCode) {
             commitComposing(client: client)
             client.insertText(symbol as NSString, replacementRange: replacementRange())
             return true
@@ -291,6 +296,13 @@ final class JapaneseEngine: InputEngine {
     private func handleConvertingEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
         let keyCode = event.keyCode
         let isShifted = event.modifierFlags.contains(.shift)
+
+        // Shift+Enter — commit conversion then re-post via CGEvent.
+        if (keyCode == 0x24 || keyCode == 0x4C) && isShifted {
+            commitConversion(client: client)
+            Self.repostShiftEnter(keyCode: keyCode)
+            return true
+        }
 
         // Build Mozc KeyEvent from NSEvent
         guard let mozcKey = buildMozcKeyEvent(keyCode: keyCode, shifted: isShifted) else {
@@ -593,6 +605,24 @@ final class JapaneseEngine: InputEngine {
         })
     }
 
+    // MARK: - Shift+Enter Re-injection
+
+    /// Re-post Shift+Enter as a CGEvent so the app receives a newline after commit.
+    /// The re-posted event arrives when composer.isComposing is false (composing) or
+    /// conversionState is .composing (converting), so it falls through naturally.
+    private static func repostShiftEnter(keyCode: UInt16) {
+        DispatchQueue.main.async {
+            let src = CGEventSource(stateID: .hidSystemState)
+            if let down = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: true),
+               let up = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: false) {
+                down.flags = .maskShift
+                up.flags = .maskShift
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+            }
+        }
+    }
+
     // MARK: - KeyCode → Character mapping
 
     /// Maps hardware keyCode to character, independent of system keyboard layout.
@@ -625,7 +655,7 @@ final class JapaneseEngine: InputEngine {
         case 0x29: return shifted ? ":" : ";"
         case 0x2D: return "n"
         case 0x2E: return "m"
-        case 0x1B: return "-"
+        case 0x1B: return shifted ? nil : "-"
         default: return nil
         }
     }

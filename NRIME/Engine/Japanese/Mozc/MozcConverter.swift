@@ -253,10 +253,6 @@ final class MozcConverter {
             }
         }
 
-        // Deduplicate by value
-        var seen = Set<String>()
-        candidates = candidates.filter { seen.insert($0.value).inserted }
-
         if candidates.isEmpty, output.hasPreedit {
             let text = output.preedit.segment.map { $0.value }.joined()
             if !text.isEmpty {

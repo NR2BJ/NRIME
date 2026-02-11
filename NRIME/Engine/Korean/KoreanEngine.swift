@@ -39,10 +39,10 @@ final class KoreanEngine: InputEngine {
 
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
 
-        // Shift+Enter while composing: Electron apps (Claude) lose committed
-        // text when return false lets the app process Shift+Enter simultaneously.
-        // Electron ignores insertText("\n"), so we must re-post the key event
-        // via CGEvent after committing. Requires Accessibility permission.
+        // Shift+Enter while composing: commit then re-post via CGEvent.
+        // Returning false directly causes Electron apps to lose the committed text.
+        // The re-posted CGEvent arrives when isComposing is already false,
+        // so it falls through to return false naturally (no infinite loop).
         let isEnter = event.keyCode == 0x24 || event.keyCode == 0x4C
         if automata.isComposing && isEnter && isShifted {
             commitComposing(client: client)
