@@ -36,7 +36,9 @@ SETTINGS_APP="NRIMESettings.app"
 rm -rf "$INSTALL_DIR/$SETTINGS_APP"
 cp -R "$BUILD_DIR/$SETTINGS_APP" "$INSTALL_DIR/"
 
-# Ensure mozc_server has execute permissions
+# Ensure executables have execute permissions
+chmod +x "$INSTALL_DIR/$APP_NAME/Contents/MacOS/NRIME"
+chmod +x "$INSTALL_DIR/$SETTINGS_APP/Contents/MacOS/NRIMESettings"
 chmod +x "$INSTALL_DIR/$APP_NAME/Contents/Resources/mozc_server" 2>/dev/null || true
 
 # Kill AFTER install — macOS auto-restarts the IME with the new binary

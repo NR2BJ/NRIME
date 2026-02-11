@@ -43,6 +43,9 @@ targets:
         # Disable automatic code signing for input methods
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_ALLOWED: false
+    postBuildScripts:
+      - script: chmod +x "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+        name: "Fix executable permissions"
     dependencies:
       - framework: InputMethodKit.framework
         embed: false
@@ -67,6 +70,9 @@ targets:
       path: NRIMESettings/Info.plist
       properties:
         LSUIElement: true
+    postBuildScripts:
+      - script: chmod +x "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+        name: "Fix executable permissions"
     dependencies: []
 
   NRIMETests:
