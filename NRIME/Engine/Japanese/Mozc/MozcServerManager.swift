@@ -32,6 +32,26 @@ final class MozcServerManager {
         return false
     }
 
+    /// Kill any existing mozc_server (including stale ones from previous NRIME instances),
+    /// then relaunch. Returns true if the fresh server is available.
+    func restartServer() -> Bool {
+        let killTask = Process()
+        killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        killTask.arguments = ["mozc_server"]
+        killTask.standardOutput = FileHandle.nullDevice
+        killTask.standardError = FileHandle.nullDevice
+        try? killTask.run()
+        killTask.waitUntilExit()
+
+        serverProcess?.terminate()
+        serverProcess = nil
+
+        // Brief wait for Mach port to be deregistered
+        Thread.sleep(forTimeInterval: 0.2)
+
+        return ensureServerRunning()
+    }
+
     /// Shuts down the managed mozc_server process.
     func shutdownServer() {
         guard let process = serverProcess, process.isRunning else { return }

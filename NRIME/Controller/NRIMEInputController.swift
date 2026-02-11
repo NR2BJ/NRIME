@@ -10,9 +10,6 @@ class NRIMEInputController: IMKInputController {
     private let koreanEngine = KoreanEngine()
     private let japaneseEngine = JapaneseEngine()
 
-    /// Track current candidate selection index (interpretKeyEvents doesn't update selectedCandidate())
-    private var candidateSelectionIndex: Int = 0
-
     // MARK: - IMKInputController Overrides
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -27,29 +24,39 @@ class NRIMEInputController: IMKInputController {
             return false
         }
 
+        let mode = StateManager.shared.currentMode
+
         // 1. Secure Input: bypass all internal logic
         if secureInputDetector.isSecureInputActive() {
             return false
         }
 
         // 1.5. Pass through all events when NRIMESettings is the active app
-        if client.bundleIdentifier() == "com.nrime.inputmethod.settings" {
+        if client.bundleIdentifier() == "com.nrime.settings" {
             return false
         }
 
-        // 2. Hanja candidate window navigation
-        if let appDelegate = NSApp.delegate as? AppDelegate,
-           appDelegate.candidatesWindow.isVisible() {
-            return handleCandidateNavigation(event, client: client, candidates: appDelegate.candidatesWindow)
+        // 2. Candidate panel navigation (both Japanese and Korean)
+        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel, panel.isVisible() {
+            return handleCandidateNavigation(event, client: client, panel: panel)
         }
 
-        // 3. Shortcut detection (all configurable shortcuts)
+        // 3. Japanese conversion state: Mozc manages key handling
+        if mode == .japanese && japaneseEngine.isInConversionState {
+            return japaneseEngine.handleEvent(event, client: client)
+        }
+
+        // 4. Shortcut detection (all configurable shortcuts)
+        // Ensure onAction is wired up (activateServer may not have been called yet after process restart)
+        if shortcutHandler.onAction == nil {
+            wireUpShortcutHandler()
+        }
         if shortcutHandler.handleEvent(event) {
             return true
         }
 
-        // 4. Route to active engine based on current mode
-        switch StateManager.shared.currentMode {
+        // 5. Route to active engine based on current mode
+        switch mode {
         case .english:
             return englishEngine.handleEvent(event, client: client)
         case .korean:
@@ -59,68 +66,78 @@ class NRIMEInputController: IMKInputController {
         }
     }
 
-    /// Handle keyboard events when the Hanja candidate window is visible.
-    /// All navigation is tracked via candidateSelectionIndex; IMKCandidates only used for display.
-    private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, candidates: IMKCandidates) -> Bool {
+    /// Handle keyboard events when the candidate panel is visible.
+    /// Directly controls CandidatePanel selection — no IMKCandidates involved.
+    private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, panel: CandidatePanel) -> Bool {
         guard event.type == .keyDown else { return false }
 
-        let candidateList: [String]
-        switch StateManager.shared.currentMode {
-        case .korean:
-            candidateList = koreanEngine.hanjaConverter?.currentCandidateStrings ?? []
-        case .japanese:
-            candidateList = japaneseEngine.mozcConverter.currentCandidateStrings
-        default:
-            candidateList = []
-        }
-        let count = candidateList.count
-
         switch event.keyCode {
-        case 0x7E: // Up — move selection up by 1
-            if candidateSelectionIndex > 0 { candidateSelectionIndex -= 1 }
-            candidates.interpretKeyEvents([event])
+        case 0x7E: // Up
+            panel.moveUp()
+            updatePreeditFromPanel(panel, client: client)
             return true
-        case 0x7D: // Down — move selection down by 1
-            if candidateSelectionIndex < count - 1 { candidateSelectionIndex += 1 }
-            candidates.interpretKeyEvents([event])
+
+        case 0x7D: // Down
+            panel.moveDown()
+            updatePreeditFromPanel(panel, client: client)
             return true
+
         case 0x7B: // Left — previous page
-            candidateSelectionIndex = max(0, candidateSelectionIndex - 9)
-            candidates.interpretKeyEvents([event])
+            panel.pageUp()
+            updatePreeditFromPanel(panel, client: client)
             return true
+
         case 0x7C: // Right — next page
-            candidateSelectionIndex = min(candidateSelectionIndex + 9, count - 1)
-            candidates.interpretKeyEvents([event])
+            panel.pageDown()
+            updatePreeditFromPanel(panel, client: client)
             return true
+
         case 0x24, 0x4C: // Return/Enter — select current candidate
-            if candidateSelectionIndex >= 0 && candidateSelectionIndex < count {
-                candidateSelected(NSAttributedString(string: candidateList[candidateSelectionIndex]))
-            } else {
-                candidates.hide()
-            }
+            selectCurrentCandidate(client: client, panel: panel)
             return true
+
         case 0x35: // Escape — dismiss
             if StateManager.shared.currentMode == .japanese {
                 japaneseEngine.mozcConverter.cancel()
+                japaneseEngine.exitConversionState()
             }
-            candidates.hide()
+            panel.hide()
             return true
+
         case 0x12, 0x13, 0x14, 0x15, 0x17, 0x16, 0x1A, 0x1C, 0x19: // Number keys 1-9
             let numberMap: [UInt16: Int] = [
                 0x12: 0, 0x13: 1, 0x14: 2, 0x15: 3, 0x17: 4,
                 0x16: 5, 0x1A: 6, 0x1C: 7, 0x19: 8
             ]
             if let offset = numberMap[event.keyCode] {
-                let pageStart = (candidateSelectionIndex / 9) * 9
+                let pageStart = panel.currentPage * panel.pageSize
                 let idx = pageStart + offset
-                if idx < count {
-                    candidateSelectionIndex = idx
-                    candidateSelected(NSAttributedString(string: candidateList[idx]))
+                if idx < panel.candidates.count {
+                    panel.select(at: idx)
+                    selectCurrentCandidate(client: client, panel: panel)
                 }
             }
             return true
+
+        case 0x31: // Space — same as Down (next candidate) during conversion
+            if StateManager.shared.currentMode == .japanese && japaneseEngine.isInConversionState {
+                panel.moveDown()
+                updatePreeditFromPanel(panel, client: client)
+                return true
+            }
+            // For Korean hanja, space dismisses and passes through
+            panel.hide()
+            return false
+
         default:
-            candidates.hide()
+            // Dismiss panel and route event normally
+            panel.hide()
+            if StateManager.shared.currentMode == .japanese {
+                // Non-nav key during Japanese conversion: let engine handle (e.g., alpha key starts new input)
+                if japaneseEngine.isInConversionState {
+                    return japaneseEngine.handleEvent(event, client: client)
+                }
+            }
             if shortcutHandler.handleEvent(event) {
                 return true
             }
@@ -135,46 +152,59 @@ class NRIMEInputController: IMKInputController {
         }
     }
 
+    /// Update preedit (marked text) to show the currently highlighted candidate from the panel.
+    /// This keeps the inline text in sync with what the user sees selected in the CandidatePanel,
+    /// without forwarding keys to Mozc (which has its own independent selection state).
+    private func updatePreeditFromPanel(_ panel: CandidatePanel, client: any IMKTextInput) {
+        guard StateManager.shared.currentMode == .japanese,
+              japaneseEngine.isInConversionState,
+              let text = panel.currentSelection() else { return }
+
+        let attrString = NSAttributedString(string: text, attributes: [
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .markedClauseSegment: 0
+        ])
+        client.setMarkedText(attrString,
+                             selectionRange: NSRange(location: text.count, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: NSNotFound))
+    }
+
+    /// Select the currently highlighted candidate and commit.
+    private func selectCurrentCandidate(client: any IMKTextInput, panel: CandidatePanel) {
+        guard let selectedText = panel.currentSelection() else {
+            panel.hide()
+            return
+        }
+
+        let replacementRange = NSRange(location: NSNotFound, length: NSNotFound)
+
+        switch StateManager.shared.currentMode {
+        case .japanese:
+            // Always use the panel's selected text directly (not Mozc's internal state)
+            // because CandidatePanel selection and Mozc's selection may be out of sync
+            // (e.g., after page navigation with ←→).
+            japaneseEngine.mozcConverter.cancel()
+            japaneseEngine.exitConversionState()
+            client.insertText(selectedText as NSString, replacementRange: replacementRange)
+
+        case .korean:
+            let hanja = String(selectedText.prefix(while: { $0 != " " }))
+            koreanEngine.clearAutomataState()
+            // Both composing and selected-text hanja conversions use marked text,
+            // so insertText with NSNotFound replaces the current marked text.
+            client.insertText(hanja as NSString, replacementRange: replacementRange)
+
+        default:
+            break
+        }
+
+        panel.hide()
+    }
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
 
-        // Wire up shortcut action handler (uses self.client() for fresh reference)
-        shortcutHandler.onAction = { [weak self] action in
-            guard let self = self,
-                  let client = self.client() as? (any IMKTextInput) else {
-                return false
-            }
-            let previousMode = StateManager.shared.currentMode
-
-            switch action {
-            case .toggleEnglish, .switchKorean, .switchJapanese:
-                if previousMode == .korean {
-                    self.koreanEngine.forceCommit(client: client)
-                } else if previousMode == .japanese {
-                    self.japaneseEngine.forceCommit(client: client)
-                }
-                switch action {
-                case .toggleEnglish: StateManager.shared.toggleEnglish()
-                case .switchKorean:  StateManager.shared.switchTo(.korean)
-                case .switchJapanese: StateManager.shared.switchTo(.japanese)
-                default: break
-                }
-                return true
-
-            case .hanjaConvert:
-                if StateManager.shared.currentMode == .korean {
-                    self.candidateSelectionIndex = 0
-                    return self.koreanEngine.triggerHanjaConversion(client: client)
-                }
-                return false
-            }
-        }
-
-        // Wire up Japanese candidate show callback
-        japaneseEngine.onCandidatesShow = { [weak self] in
-            self?.candidateSelectionIndex = 0
-        }
+        wireUpShortcutHandler()
 
         // Wire up mode change callback for inline indicator
         StateManager.shared.onModeChanged = { [weak self] mode in
@@ -206,54 +236,48 @@ class NRIMEInputController: IMKInputController {
         koreanEngine.forceCommit(client: client)
         japaneseEngine.forceCommit(client: client)
         shortcutHandler.reset()
+
+        // Hide candidate panel
+        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel {
+            panel.hide()
+        }
+
         NSLog("NRIME: deactivateServer")
         super.deactivateServer(sender)
     }
 
-    // MARK: - IMKCandidates Support
+    // MARK: - Shortcut Handler Wiring
 
-    override func candidates(_ sender: Any!) -> [Any]! {
-        switch StateManager.shared.currentMode {
-        case .korean:
-            return koreanEngine.hanjaConverter?.currentCandidateStrings ?? []
-        case .japanese:
-            return japaneseEngine.mozcConverter.currentCandidateStrings
-        default:
-            return []
-        }
-    }
-
-    override func candidateSelected(_ candidateString: NSAttributedString!) {
-        guard let client = self.client() as? (any IMKTextInput),
-              let selectedText = candidateString?.string else { return }
-
-        let replacementRange = NSRange(location: NSNotFound, length: NSNotFound)
-
-        switch StateManager.shared.currentMode {
-        case .japanese:
-            // Use the selected text directly (same as Korean approach)
-            japaneseEngine.mozcConverter.cancel()
-            japaneseEngine.clearComposerState()
-            client.insertText(selectedText as NSString, replacementRange: replacementRange)
-
-        case .korean:
-            let hanja = String(selectedText.prefix(while: { $0 != " " }))
-            if let converter = koreanEngine.hanjaConverter, converter.isSelectedTextConversion {
-                client.insertText(hanja as NSString, replacementRange: converter.selectedTextRange)
-                converter.isSelectedTextConversion = false
-                converter.selectedTextRange = NSRange(location: NSNotFound, length: NSNotFound)
-            } else {
-                koreanEngine.clearAutomataState()
-                client.insertText(hanja as NSString, replacementRange: replacementRange)
+    private func wireUpShortcutHandler() {
+        shortcutHandler.onAction = { [weak self] action in
+            guard let self = self,
+                  let client = self.client() as? (any IMKTextInput) else {
+                return false
             }
+            let previousMode = StateManager.shared.currentMode
 
-        default:
-            break
-        }
+            switch action {
+            case .toggleEnglish, .switchKorean, .switchJapanese:
+                if previousMode == .korean {
+                    self.koreanEngine.forceCommit(client: client)
+                } else if previousMode == .japanese {
+                    self.japaneseEngine.forceCommit(client: client)
+                }
+                switch action {
+                case .toggleEnglish: StateManager.shared.toggleEnglish()
+                case .switchKorean:  StateManager.shared.switchTo(.korean)
+                case .switchJapanese: StateManager.shared.switchTo(.japanese)
+                default: break
+                }
+                return true
 
-        // Dismiss candidate window after selection
-        if let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.candidatesWindow.hide()
+            case .hanjaConvert:
+                if StateManager.shared.currentMode == .korean {
+                    return self.koreanEngine.triggerHanjaConversion(client: client)
+                }
+                return false
+            }
         }
     }
+
 }

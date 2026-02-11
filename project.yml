@@ -57,7 +57,7 @@ targets:
       - path: NRIMESettings
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.settings
+        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.settings
         GENERATE_INFOPLIST_FILE: true
         PRODUCT_NAME: NRIMESettings
         CODE_SIGN_IDENTITY: "-"

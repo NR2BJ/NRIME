@@ -158,6 +158,7 @@ final class ShortcutHandler {
             let significantFlags: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
             let eventSignificant = event.modifierFlags.intersection(significantFlags)
             let requiredSignificant = requiredFlags.intersection(significantFlags)
+
             guard eventSignificant == requiredSignificant else { continue }
 
             // Check left/right distinction via modifier keyCode
@@ -219,4 +220,5 @@ final class ShortcutHandler {
     private func hasAnyModifier(_ flags: NSEvent.ModifierFlags) -> Bool {
         return !flags.intersection([.shift, .control, .option, .command]).isEmpty
     }
+
 }

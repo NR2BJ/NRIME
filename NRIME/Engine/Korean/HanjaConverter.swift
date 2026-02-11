@@ -4,10 +4,6 @@ import SQLite3
 
 final class HanjaConverter {
     private var db: OpaquePointer?
-    var currentCandidateStrings: [String] = []
-    weak var client: (any IMKTextInput)?
-    var isSelectedTextConversion = false
-    var selectedTextRange = NSRange(location: NSNotFound, length: NSNotFound)
 
     init?() {
         guard let dbPath = Bundle.main.path(forResource: "hanja", ofType: "db") else {

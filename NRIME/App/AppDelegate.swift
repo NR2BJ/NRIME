@@ -3,7 +3,7 @@ import InputMethodKit
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var server: IMKServer!
-    var candidatesWindow: IMKCandidates!
+    var candidatePanel: CandidatePanel!
 
     private var statusItem: NSStatusItem!
 
@@ -16,10 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             bundleIdentifier: Bundle.main.bundleIdentifier
         )
 
-        candidatesWindow = IMKCandidates(
-            server: server,
-            panelType: kIMKSingleColumnScrollingCandidatePanel
-        )
+        candidatePanel = CandidatePanel()
 
         InputSourceRecovery.shared.startMonitoring()
         setupStatusItem()

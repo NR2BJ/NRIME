@@ -154,6 +154,73 @@ final class Settings {
         set { defaults.set(newValue, forKey: "perAppSavedModes") }
     }
 
+    // MARK: - Japanese IME Keys
+
+    /// Japanese IME key configuration.
+    /// Each key maps an action name to an optional macOS keyCode.
+    /// nil = disabled (user removed the binding).
+    struct JapaneseKeyConfig: Codable, Equatable {
+        /// Convert to hiragana (default: F6 = 0x61)
+        var hiraganaKeyCode: UInt16? = 0x61
+        /// Convert to full-width katakana (default: F7 = 0x62)
+        var fullKatakanaKeyCode: UInt16? = 0x62
+        /// Convert to half-width katakana (default: F8 = 0x64)
+        var halfKatakanaKeyCode: UInt16? = 0x64
+        /// Convert to full-width romaji (default: F9 = 0x65)
+        var fullRomajiKeyCode: UInt16? = 0x65
+        /// Convert to half-width romaji (default: F10 = 0x6D)
+        var halfRomajiKeyCode: UInt16? = 0x6D
+
+        /// Caps Lock action in Japanese mode
+        var capsLockAction: CapsLockAction = .capsLock
+        /// Shift key action in Japanese mode
+        var shiftKeyAction: ShiftKeyAction = .none
+
+        /// Punctuation style: .japanese → 。、  .western → .,
+        var punctuationStyle: PunctuationStyle = .japanese
+        /// Whether / key produces ・ (nakaguro)
+        var slashToNakaguro: Bool = true
+        /// Whether ¥ key produces ¥ (yen sign)
+        var yenKeyToYen: Bool = true
+
+        static let `default` = JapaneseKeyConfig()
+    }
+
+    /// Caps Lock behavior options for Japanese input
+    enum CapsLockAction: String, Codable, CaseIterable {
+        case capsLock = "capsLock"           // System default (toggle caps)
+        case katakana = "katakana"           // Convert to full-width katakana
+        case romaji = "romaji"               // Convert to half-width romaji
+    }
+
+    /// Shift key behavior options for Japanese input
+    enum ShiftKeyAction: String, Codable, CaseIterable {
+        case none = "none"                   // Normal shift (no special behavior)
+        case katakana = "katakana"           // Shift+input → katakana
+        case romaji = "romaji"               // Shift+input → romaji passthrough
+    }
+
+    /// Punctuation style options for Japanese input
+    enum PunctuationStyle: String, Codable, CaseIterable {
+        case japanese = "japanese"           // 。、
+        case fullWidthWestern = "fullWidthWestern"  // ．，
+    }
+
+    var japaneseKeyConfig: JapaneseKeyConfig {
+        get {
+            guard let data = defaults.data(forKey: "japaneseKeyConfig"),
+                  let config = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
+                return .default
+            }
+            return config
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: "japaneseKeyConfig")
+            }
+        }
+    }
+
     // MARK: - Sync
 
     func synchronize() {

@@ -27,6 +27,9 @@ final class SettingsStore: ObservableObject {
         _switchKoreanShortcut = Published(initialValue: Self.loadShortcut("switchKorean", from: defaults) ?? .defaultSwitchKorean)
         _switchJapaneseShortcut = Published(initialValue: Self.loadShortcut("switchJapanese", from: defaults) ?? .defaultSwitchJapanese)
         _hanjaConvertShortcut = Published(initialValue: Self.loadShortcut("hanjaConvert", from: defaults) ?? .defaultHanjaConvert)
+
+        // Load Japanese key config
+        _japaneseKeyConfig = Published(initialValue: Self.loadJapaneseKeyConfig(from: defaults))
     }
 
     // MARK: - Shortcuts
@@ -68,6 +71,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(perAppModeList, forKey: "perAppModeList") }
     }
 
+    // MARK: - Japanese Key Config
+
+    @Published var japaneseKeyConfig: JapaneseKeyConfig {
+        didSet { saveJapaneseKeyConfig() }
+    }
+
     // MARK: - Private
 
     private static func loadShortcut(_ key: String, from defaults: UserDefaults) -> ShortcutConfig? {
@@ -83,6 +92,58 @@ final class SettingsStore: ObservableObject {
             defaults.set(data, forKey: "shortcut_\(key)")
         }
     }
+
+    private static func loadJapaneseKeyConfig(from defaults: UserDefaults) -> JapaneseKeyConfig {
+        guard let data = defaults.data(forKey: "japaneseKeyConfig"),
+              let config = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
+            return .default
+        }
+        return config
+    }
+
+    private func saveJapaneseKeyConfig() {
+        if let data = try? JSONEncoder().encode(japaneseKeyConfig) {
+            defaults.set(data, forKey: "japaneseKeyConfig")
+        }
+    }
+}
+
+/// Japanese IME key configuration — must match Settings.JapaneseKeyConfig in the input method.
+struct JapaneseKeyConfig: Codable, Equatable {
+    var hiraganaKeyCode: UInt16? = 0x61      // F6
+    var fullKatakanaKeyCode: UInt16? = 0x62  // F7
+    var halfKatakanaKeyCode: UInt16? = 0x64  // F8
+    var fullRomajiKeyCode: UInt16? = 0x65    // F9
+    var halfRomajiKeyCode: UInt16? = 0x6D    // F10
+
+    var capsLockAction: CapsLockAction = .capsLock
+    var shiftKeyAction: ShiftKeyAction = .none
+
+    /// Punctuation style: "japanese" → 。、  "western" → .,
+    var punctuationStyle: PunctuationStyle = .japanese
+    /// Whether / key produces ・ (nakaguro)
+    var slashToNakaguro: Bool = true
+    /// Whether ¥ key produces ¥ (yen sign)
+    var yenKeyToYen: Bool = true
+
+    static let `default` = JapaneseKeyConfig()
+}
+
+enum CapsLockAction: String, Codable, CaseIterable {
+    case capsLock = "capsLock"
+    case katakana = "katakana"
+    case romaji = "romaji"
+}
+
+enum ShiftKeyAction: String, Codable, CaseIterable {
+    case none = "none"
+    case katakana = "katakana"
+    case romaji = "romaji"
+}
+
+enum PunctuationStyle: String, Codable, CaseIterable {
+    case japanese = "japanese"          // 。、
+    case fullWidthWestern = "fullWidthWestern"  // ．，
 }
 
 /// Shortcut configuration — must match Settings.ShortcutConfig in the input method.

@@ -3,7 +3,7 @@ import InputMethodKit
 
 final class KoreanEngine: InputEngine {
     private let automata = HangulAutomata()
-    var hanjaConverter: HanjaConverter?
+    private var hanjaConverter: HanjaConverter?
 
     // The backspace key code
     private let backspaceKeyCode: UInt16 = 0x33
@@ -17,8 +17,6 @@ final class KoreanEngine: InputEngine {
 
     func handleEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
         guard event.type == .keyDown else { return false }
-
-        // Hanja shortcut is now handled by ShortcutHandler → NRIMEInputController.onAction
 
         // Ignore events with Command, Control, or Option modifiers (system shortcuts)
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || event.modifierFlags.contains(.option) {
@@ -35,18 +33,12 @@ final class KoreanEngine: InputEngine {
         let isShifted = event.modifierFlags.contains(.shift)
         if let jamo = JamoTable.jamo(forKeyCode: event.keyCode, shifted: isShifted) {
             let result = automata.input(jamo)
-            NSLog("NRIME: keyCode=0x%02X shift=%d → jamo=%@ committed='%@' composing='%@'",
-                  event.keyCode, isShifted ? 1 : 0,
-                  String(jamo.value),
-                  result.committed, result.composing)
             applyResult(result, client: client)
             return true
         }
 
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
         // Commit composing text and let the system handle the key
-        NSLog("NRIME: non-jamo keyCode=0x%02X shift=%d — flushing composing",
-              event.keyCode, isShifted ? 1 : 0)
         commitComposing(client: client)
         return false
     }
@@ -150,17 +142,22 @@ final class KoreanEngine: InputEngine {
     }
 
     private func showHanjaCandidates(for text: String, converter: HanjaConverter, client: any IMKTextInput, isSelectedText: Bool) -> Bool {
-        let candidates = converter.lookupCandidates(for: text)
-        if candidates.isEmpty { return true }
+        let results = converter.lookupCandidates(for: text)
+        if results.isEmpty { return true }
 
-        converter.currentCandidateStrings = candidates.map { "\($0.hanja) \($0.meaning)" }
-        converter.client = client
-        converter.isSelectedTextConversion = isSelectedText
-        converter.selectedTextRange = isSelectedText ? client.selectedRange() : NSRange(location: NSNotFound, length: NSNotFound)
+        let candidateStrings = results.map { "\($0.hanja) \($0.meaning)" }
 
-        if let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.candidatesWindow.update()
-            appDelegate.candidatesWindow.show(kIMKLocateCandidatesBelowHint)
+        if isSelectedText {
+            // Convert selected text to marked text so Enter commits as IME confirmation
+            // (not as app-level action like "Send" in Messages).
+            let selRange = client.selectedRange()
+            client.setMarkedText(text as NSString,
+                                 selectionRange: NSRange(location: text.count, length: 0),
+                                 replacementRange: selRange)
+        }
+
+        if let panel = (NSApp.delegate as? AppDelegate)?.candidatePanel {
+            panel.show(candidates: candidateStrings, client: client)
         }
 
         return true
@@ -169,4 +166,5 @@ final class KoreanEngine: InputEngine {
     private func replacementRange() -> NSRange {
         return NSRange(location: NSNotFound, length: NSNotFound)
     }
+
 }
