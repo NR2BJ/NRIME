@@ -90,9 +90,10 @@ final class JapaneseEngine: InputEngine {
         hideCandidateWindow()
     }
 
-    /// Process a MozcResult from an external action (e.g., number-key candidate selection in controller).
-    /// Updates preedit display and candidate panel based on Mozc output.
-    func processMozcResult(_ result: MozcResult, client: any IMKTextInput) {
+    /// Process a MozcResult: update preedit, candidate panel, and conversion state.
+    /// Returns true if the result was consumed (caller should swallow the key event).
+    @discardableResult
+    func processMozcResult(_ result: MozcResult, client: any IMKTextInput) -> Bool {
         // Handle committed text
         if let committed = result.committedText {
             client.insertText(committed as NSString, replacementRange: replacementRange())
@@ -112,18 +113,25 @@ final class JapaneseEngine: InputEngine {
                                      selectionRange: NSRange(location: 0, length: 0),
                                      replacementRange: replacementRange())
             }
-            return
+            return true
         }
 
         // Handle preedit update (segment navigation, candidate change)
         if let preedit = result.preedit {
             if preedit.segment.isEmpty {
-                // Mozc cleared the preedit
+                // Mozc cleared the preedit (e.g., arrow key in hiragana-revert state).
+                // Commit the original hiragana so the text isn't lost.
+                let hiragana = mozcConverter.originalHiragana
                 conversionState = .composing
                 composer.clear()
-                client.setMarkedText("" as NSString,
-                                     selectionRange: NSRange(location: 0, length: 0),
-                                     replacementRange: replacementRange())
+                mozcConverter.reset()
+                if !hiragana.isEmpty {
+                    client.insertText(hiragana as NSString, replacementRange: replacementRange())
+                } else {
+                    client.setMarkedText("" as NSString,
+                                         selectionRange: NSRange(location: 0, length: 0),
+                                         replacementRange: replacementRange())
+                }
                 hideCandidateWindow()
             } else {
                 renderPreedit(preedit, client: client)
@@ -133,15 +141,24 @@ final class JapaneseEngine: InputEngine {
                     hideCandidateWindow()
                 }
             }
-            return
+            return true
         }
 
-        // No preedit and no result — conversion probably ended
-        if !result.consumed {
-            conversionState = .composing
-            composer.clear()
-            hideCandidateWindow()
+        // No preedit and no committed text — Mozc dropped the conversion.
+        // Commit original hiragana so it isn't lost (e.g., Escape → arrow key).
+        let hiragana = mozcConverter.originalHiragana
+        conversionState = .composing
+        composer.clear()
+        mozcConverter.reset()
+        hideCandidateWindow()
+        if !hiragana.isEmpty {
+            client.insertText(hiragana as NSString, replacementRange: replacementRange())
+        } else {
+            client.setMarkedText("" as NSString,
+                                 selectionRange: NSRange(location: 0, length: 0),
+                                 replacementRange: replacementRange())
         }
+        return result.consumed
     }
 
     // MARK: - Flags Changed (Caps Lock)
@@ -320,59 +337,7 @@ final class JapaneseEngine: InputEngine {
 
         // Process Mozc's response
         let result = mozcConverter.updateFromOutput(output)
-
-        // Handle committed text
-        if let committed = result.committedText {
-            client.insertText(committed as NSString, replacementRange: replacementRange())
-            conversionState = .composing
-            composer.clear()
-            hideCandidateWindow()
-
-            // Check if Mozc started a new preedit after commit
-            if let preedit = result.preedit, !preedit.segment.isEmpty {
-                renderPreedit(preedit, client: client)
-                conversionState = .converting
-                if result.hasCandidates {
-                    showCandidateWindow(client: client)
-                }
-            } else {
-                client.setMarkedText("" as NSString,
-                                     selectionRange: NSRange(location: 0, length: 0),
-                                     replacementRange: replacementRange())
-            }
-            return true
-        }
-
-        // Handle preedit update (segment navigation, candidate change, etc.)
-        if let preedit = result.preedit {
-            if preedit.segment.isEmpty {
-                // Mozc cleared the preedit (e.g., Escape revert)
-                conversionState = .composing
-                composer.clear()
-                client.setMarkedText("" as NSString,
-                                     selectionRange: NSRange(location: 0, length: 0),
-                                     replacementRange: replacementRange())
-                hideCandidateWindow()
-            } else {
-                renderPreedit(preedit, client: client)
-                if result.hasCandidates {
-                    showCandidateWindow(client: client)
-                } else {
-                    hideCandidateWindow()
-                }
-            }
-            return true
-        }
-
-        // No preedit and no result — conversion probably ended
-        if !result.consumed {
-            conversionState = .composing
-            composer.clear()
-            hideCandidateWindow()
-            return false
-        }
-
-        return true
+        return processMozcResult(result, client: client)
     }
 
     // MARK: - Conversion Helpers

@@ -64,7 +64,7 @@ class NRIMEInputController: IMKInputController {
         ]
         if let offset = numberMap[event.keyCode],
            let panel = NSApp.candidatePanel, panel.isVisible() {
-            let pageStart = panel.currentPage * panel.pageSize
+            let pageStart = panel.currentPage * panel.effectivePageSize
             let candidateIndex = pageStart + offset
             if candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count {
                 if let output = japaneseEngine.mozcConverter.selectCandidateByIndex(candidateIndex) {
@@ -83,6 +83,46 @@ class NRIMEInputController: IMKInputController {
                 panel.hide()
             }
             return true
+        }
+
+        // Tab: toggle grid/list mode
+        if event.keyCode == 0x30, let panel = NSApp.candidatePanel, panel.isVisible() {
+            panel.toggleGridMode(client: client)
+            return true
+        }
+
+        // Grid mode: intercept arrow keys, Enter, and Escape before Mozc
+        if let panel = NSApp.candidatePanel, panel.isGridMode {
+            switch event.keyCode {
+            case 0x7E: // Up
+                panel.moveUpGrid()
+                return true
+            case 0x7D: // Down
+                panel.moveDownGrid()
+                return true
+            case 0x7B: // Left
+                panel.moveLeft()
+                return true
+            case 0x7C: // Right
+                panel.moveRight()
+                return true
+            case 0x24, 0x4C: // Enter — select via Mozc and commit
+                let candidateIndex = panel.selectedIndex
+                if candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count {
+                    if let output = japaneseEngine.mozcConverter.selectCandidateByIndex(candidateIndex) {
+                        let result = japaneseEngine.mozcConverter.updateFromOutput(output)
+                        japaneseEngine.processMozcResult(result, client: client)
+                    }
+                }
+                panel.hide()
+                return true
+            case 0x35: // Escape — forward to Mozc (cancel conversion) and hide panel
+                panel.hide()
+                _ = japaneseEngine.handleEvent(event, client: client)
+                return true
+            default:
+                break
+            }
         }
 
         // All other keys: forward to JapaneseEngine (which sends to Mozc)
@@ -110,19 +150,39 @@ class NRIMEInputController: IMKInputController {
 
         switch event.keyCode {
         case 0x7E: // Up
-            panel.moveUp()
+            if panel.isGridMode {
+                panel.moveUpGrid()
+            } else {
+                panel.moveUp()
+            }
             return true
 
         case 0x7D: // Down
-            panel.moveDown()
+            if panel.isGridMode {
+                panel.moveDownGrid()
+            } else {
+                panel.moveDown()
+            }
             return true
 
-        case 0x7B: // Left — previous page
-            panel.pageUp()
+        case 0x7B: // Left
+            if panel.isGridMode {
+                panel.moveLeft()
+            } else {
+                panel.pageUp()
+            }
             return true
 
-        case 0x7C: // Right — next page
-            panel.pageDown()
+        case 0x7C: // Right
+            if panel.isGridMode {
+                panel.moveRight()
+            } else {
+                panel.pageDown()
+            }
+            return true
+
+        case 0x30: // Tab — toggle grid/list mode
+            panel.toggleGridMode(client: client)
             return true
 
         case 0x24, 0x4C: // Return/Enter — select current candidate
@@ -139,7 +199,7 @@ class NRIMEInputController: IMKInputController {
                 0x16: 5, 0x1A: 6, 0x1C: 7, 0x19: 8
             ]
             if let offset = numberMap[event.keyCode] {
-                let pageStart = panel.currentPage * panel.pageSize
+                let pageStart = panel.currentPage * panel.effectivePageSize
                 let idx = pageStart + offset
                 if idx < panel.candidates.count {
                     panel.select(at: idx)

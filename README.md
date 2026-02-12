@@ -104,7 +104,7 @@ rm -rf ~/Library/Input\ Methods/NRIMESettings.app
 
 ## 호환성
 
-- **키 리매핑 프로그램**: Karabiner-Elements, BetterTouchTool 등과 충돌 없음 (CGEventTap 미사용)
+- **키 리매핑 프로그램**: Karabiner-Elements, BetterTouchTool 등과 충돌 없음 (키 입력 감시용 CGEventTap 미사용)
 - **원격 데스크톱**: 정상 동작
 - **비밀번호 필드**: 자동으로 감지하여 시스템에 위임
 
