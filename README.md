@@ -28,8 +28,15 @@ bash Tools/install.sh
 ### 제거
 
 ```bash
+# 입력기 및 설정 앱 삭제
 rm -rf ~/Library/Input\ Methods/NRIME.app
 rm -rf ~/Library/Input\ Methods/NRIMESettings.app
+
+# Mozc 엔진 데이터 삭제 (변환 학습, 사용자 사전 등)
+rm -rf ~/Library/Application\ Support/Mozc
+
+# NRIME 설정 삭제
+defaults delete group.com.nrime.inputmethod 2>/dev/null
 ```
 
 로그아웃/로그인하면 완전히 제거됩니다.

@@ -58,6 +58,8 @@ targets:
     platform: macOS
     sources:
       - path: NRIMESettings
+      - path: NRIME/Engine/Japanese/Proto/user_dictionary_storage.pb.swift
+        type: file
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nrime.settings
@@ -73,7 +75,8 @@ targets:
     postBuildScripts:
       - script: chmod +x "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
         name: "Fix executable permissions"
-    dependencies: []
+    dependencies:
+      - package: SwiftProtobuf
 
   NRIMETests:
     type: bundle.unit-test

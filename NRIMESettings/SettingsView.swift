@@ -11,6 +11,10 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Japanese", systemImage: "character.ja")
                 }
+            DictionaryTab()
+                .tabItem {
+                    Label("Dictionary", systemImage: "book")
+                }
             PerAppTab()
                 .tabItem {
                     Label("Per-App", systemImage: "app.badge.checkmark")

@@ -43,6 +43,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let restartItem = NSMenuItem(title: "Restart NRIME", action: #selector(restartApp), keyEquivalent: "")
+        restartItem.target = self
+        menu.addItem(restartItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "Quit NRIME", action: #selector(quitApp), keyEquivalent: "")
@@ -77,6 +81,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             NSLog("NRIME: Companion app not found at \(companionPath)")
         }
+    }
+
+    @objc private func restartApp() {
+        // Kill mozc_server
+        let mozcTask = Process()
+        mozcTask.launchPath = "/usr/bin/pkill"
+        mozcTask.arguments = ["-f", "mozc_server"]
+        try? mozcTask.run()
+        mozcTask.waitUntilExit()
+
+        // Kill NRIMESettings if running
+        let settingsTask = Process()
+        settingsTask.launchPath = "/usr/bin/pkill"
+        settingsTask.arguments = ["-f", "NRIMESettings"]
+        try? settingsTask.run()
+        settingsTask.waitUntilExit()
+
+        // Terminate self — macOS auto-restarts the IME
+        NSApp.terminate(nil)
     }
 
     @objc private func quitApp() {
