@@ -146,8 +146,9 @@ final class JapaneseEngine: InputEngine {
         // Handle preedit update (segment navigation, candidate change)
         if let preedit = result.preedit {
             if preedit.segment.isEmpty {
-                // Mozc cleared the preedit — revert to composing with original hiragana.
-                revertToComposing(client: client)
+                // Mozc cleared the preedit (e.g. user deleted all segments via Backspace).
+                // Don't restore original hiragana — the user intentionally deleted everything.
+                revertToComposing(client: client, restore: false)
             } else {
                 renderPreedit(preedit, client: client)
                 if result.hasCandidates {
@@ -160,8 +161,8 @@ final class JapaneseEngine: InputEngine {
         }
 
         // No preedit and no committed text — Mozc dropped the conversion.
-        // Revert to composing with original hiragana so text isn't lost.
-        revertToComposing(client: client)
+        // Don't restore original hiragana — Mozc decided to clear everything.
+        revertToComposing(client: client, restore: false)
         return result.consumed
     }
 
@@ -738,11 +739,12 @@ final class JapaneseEngine: InputEngine {
         return true
     }
 
-    /// Revert from converting state back to composing with the original hiragana.
-    /// Called when user presses Escape during conversion.
-    /// Restores hiragana to the composer so Backspace works naturally.
-    private func revertToComposing(client: any IMKTextInput) {
-        let hiragana = mozcConverter.originalHiragana
+    /// Revert from converting state back to composing.
+    /// - Parameter restore: If true (default), restores original hiragana into the composer
+    ///   so the user can continue editing. Used by Escape. If false, clears everything
+    ///   (used when Mozc itself cleared the preedit, e.g. user deleted all segments via Backspace).
+    private func revertToComposing(client: any IMKTextInput, restore: Bool = true) {
+        let hiragana = restore ? mozcConverter.originalHiragana : ""
         mozcConverter.cancel()
         mozcConverter.reset()
         conversionState = .composing

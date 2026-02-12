@@ -105,7 +105,13 @@ class NRIMEInputController: IMKInputController {
 
         // Tab: toggle grid/list mode
         if event.keyCode == 0x30, let panel = NSApp.candidatePanel, panel.isVisible() {
+            let wasGridMode = panel.isGridMode
             panel.toggleGridMode(client: client)
+
+            // When exiting grid → list, sync panel's selection to Mozc
+            if wasGridMode && !panel.isGridMode {
+                syncPanelSelectionToMozc(panel: panel, client: client)
+            }
             return true
         }
 
@@ -114,27 +120,34 @@ class NRIMEInputController: IMKInputController {
             switch event.keyCode {
             case 0x7E: // Up
                 panel.moveUpGrid()
+                syncPanelSelectionToMozc(panel: panel, client: client)
                 return true
             case 0x7D: // Down
                 panel.moveDownGrid()
+                syncPanelSelectionToMozc(panel: panel, client: client)
                 return true
             case 0x7B: // Left
                 panel.moveLeft()
+                syncPanelSelectionToMozc(panel: panel, client: client)
                 return true
             case 0x7C: // Right
                 panel.moveRight()
+                syncPanelSelectionToMozc(panel: panel, client: client)
                 return true
-            case 0x24, 0x4C: // Enter — select via Mozc and commit
+            case 0x24, 0x4C: // Enter — highlight selected candidate, then submit all
                 let candidateIndex = panel.selectedIndex
                 if candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count {
-                    if let output = japaneseEngine.mozcConverter.selectCandidateByIndex(candidateIndex) {
-                        let result = japaneseEngine.mozcConverter.updateFromOutput(output)
-                        japaneseEngine.processMozcResult(result, client: client)
-                    }
+                    // Sync highlight to Mozc first (so submit commits the right candidate)
+                    _ = japaneseEngine.mozcConverter.highlightCandidateByIndex(candidateIndex)
                 }
+                let replacementRange = NSRange(location: NSNotFound, length: NSNotFound)
+                if let text = japaneseEngine.mozcConverter.submit() {
+                    client.insertText(text as NSString, replacementRange: replacementRange)
+                }
+                japaneseEngine.exitConversionState()
                 panel.hide()
                 return true
-            case 0x35: // Escape — forward to Mozc (cancel conversion) and hide panel
+            case 0x35: // Escape — revert to composing
                 panel.hide()
                 _ = japaneseEngine.handleEvent(event, client: client)
                 return true
@@ -170,6 +183,7 @@ class NRIMEInputController: IMKInputController {
         case 0x7E: // Up
             if panel.isGridMode {
                 panel.moveUpGrid()
+                previewHanjaCandidate(panel: panel, client: client)
             } else {
                 panel.moveUp()
             }
@@ -178,6 +192,7 @@ class NRIMEInputController: IMKInputController {
         case 0x7D: // Down
             if panel.isGridMode {
                 panel.moveDownGrid()
+                previewHanjaCandidate(panel: panel, client: client)
             } else {
                 panel.moveDown()
             }
@@ -186,6 +201,7 @@ class NRIMEInputController: IMKInputController {
         case 0x7B: // Left
             if panel.isGridMode {
                 panel.moveLeft()
+                previewHanjaCandidate(panel: panel, client: client)
             } else {
                 panel.pageUp()
             }
@@ -194,6 +210,7 @@ class NRIMEInputController: IMKInputController {
         case 0x7C: // Right
             if panel.isGridMode {
                 panel.moveRight()
+                previewHanjaCandidate(panel: panel, client: client)
             } else {
                 panel.pageDown()
             }
@@ -316,6 +333,42 @@ class NRIMEInputController: IMKInputController {
 
         NSLog("NRIME: deactivateServer")
         super.deactivateServer(sender)
+    }
+
+    // MARK: - Grid/Mozc Sync
+
+    /// Sync the panel's selected candidate index to Mozc using HIGHLIGHT_CANDIDATE.
+    /// Called when transitioning from grid mode (panel-only selection) back to Mozc-driven mode.
+    /// Uses highlight (not select) to avoid committing the segment.
+    private func syncPanelSelectionToMozc(panel: CandidatePanel, client: any IMKTextInput) {
+        let candidateIndex = panel.selectedIndex
+        guard candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count else { return }
+
+        if let output = japaneseEngine.mozcConverter.highlightCandidateByIndex(candidateIndex) {
+            let result = japaneseEngine.mozcConverter.updateFromOutput(output)
+            // Update preedit display to reflect the highlighted candidate
+            japaneseEngine.processMozcResult(result, client: client)
+            // Update panel to show Mozc's synced state
+            if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty {
+                panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                           selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
+                           client: client)
+            }
+        }
+    }
+
+    /// Preview the currently highlighted hanja candidate in the text field.
+    /// Shows the hanja character as marked text so the user sees real-time preview in grid mode.
+    private func previewHanjaCandidate(panel: CandidatePanel, client: any IMKTextInput) {
+        guard StateManager.shared.currentMode == .korean,
+              let selectedText = panel.currentSelection() else { return }
+        let hanja = String(selectedText.prefix(while: { $0 != " " }))
+        let replacementRange = NSRange(location: NSNotFound, length: NSNotFound)
+        client.setMarkedText(
+            hanja as NSString,
+            selectionRange: NSRange(location: hanja.count, length: 0),
+            replacementRange: replacementRange
+        )
     }
 
     // MARK: - Event Routing

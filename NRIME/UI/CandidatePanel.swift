@@ -246,6 +246,14 @@ final class CandidatePanel {
         // Remove old views
         clearStackView()
 
+        let fontSize = Settings.shared.japaneseKeyConfig.candidateFontSize
+        let numberFontSize = max(8, fontSize - 2)
+        let pageFontSize = max(8, fontSize - 4)
+        let rowHeight = max(24, ceil(fontSize * 1.7))
+
+        // Update page label font size
+        pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: pageFontSize, weight: .regular)
+
         // Calculate current page items
         let pageStart = currentPage * pageSize
         let pageEnd = min(pageStart + pageSize, candidates.count)
@@ -253,7 +261,7 @@ final class CandidatePanel {
 
         // Determine width based on longest candidate
         var maxWidth: CGFloat = 160
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14)]
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: fontSize)]
         for item in pageItems {
             let size = (item as NSString).size(withAttributes: attrs)
             maxWidth = max(maxWidth, size.width + 50) // 50 for number label + padding
@@ -270,17 +278,19 @@ final class CandidatePanel {
                 number: number == 0 ? 0 : number,
                 text: item,
                 isSelected: isSelected,
-                width: maxWidth
+                width: maxWidth,
+                fontSize: fontSize,
+                numberFontSize: numberFontSize,
+                rowHeight: rowHeight
             )
             stackView.addArrangedSubview(row)
             rowViews.append(row)
         }
 
         // Layout calculations
-        let rowHeight: CGFloat = 24
         let topPadding: CGFloat = 4
         let bottomPadding: CGFloat = 4
-        let pageLabelHeight: CGFloat = 16
+        let pageLabelHeight = max(16, ceil(pageFontSize * 1.6))
         let pageLabelSpacing: CGFloat = 2
         let showPageLabel = totalPages > 1
         let pageIndicatorHeight: CGFloat = showPageLabel ? (pageLabelSpacing + pageLabelHeight) : 0
@@ -321,12 +331,19 @@ final class CandidatePanel {
         // Remove old views
         clearStackView()
 
+        let fontSize = Settings.shared.japaneseKeyConfig.candidateFontSize
+        let gridFontSize = max(8, fontSize - 1)
+        let pageFontSize = max(8, fontSize - 4)
+
+        // Update page label font size
+        pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: pageFontSize, weight: .regular)
+
         let pageStart = currentPage * gridPageSize
         let pageEnd = min(pageStart + gridPageSize, candidates.count)
         let pageItems = Array(candidates[pageStart..<pageEnd])
 
         // Calculate cell width based on longest candidate on this page
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13)]
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: gridFontSize)]
         var maxCellWidth: CGFloat = 60
         for item in pageItems {
             let size = (item as NSString).size(withAttributes: attrs)
@@ -334,7 +351,7 @@ final class CandidatePanel {
         }
         maxCellWidth = min(maxCellWidth, 120)
 
-        let cellHeight: CGFloat = 26
+        let cellHeight = max(26, ceil(fontSize * 1.85))
         let sidePadding: CGFloat = 4
         let panelWidth = maxCellWidth * CGFloat(gridColumns) + sidePadding * 2
 
@@ -355,7 +372,8 @@ final class CandidatePanel {
                     text: pageItems[idx],
                     isSelected: isSelected,
                     width: maxCellWidth,
-                    height: cellHeight
+                    height: cellHeight,
+                    fontSize: gridFontSize
                 )
                 rowStack.addArrangedSubview(cell)
             }
@@ -365,7 +383,7 @@ final class CandidatePanel {
         // Layout
         let topPadding: CGFloat = 4
         let bottomPadding: CGFloat = 4
-        let pageLabelHeight: CGFloat = 16
+        let pageLabelHeight = max(16, ceil(pageFontSize * 1.6))
         let pageLabelSpacing: CGFloat = 2
         let showPageLabel = totalPages > 1
         let pageIndicatorHeight: CGFloat = showPageLabel ? (pageLabelSpacing + pageLabelHeight) : 0
@@ -449,9 +467,9 @@ final class CandidatePanel {
 
 /// A single row in the candidate panel: [number] [text]
 private class CandidateRowView: NSView {
-    private let rowHeight: CGFloat = 24
 
-    init(number: Int, text: String, isSelected: Bool, width: CGFloat) {
+    init(number: Int, text: String, isSelected: Bool, width: CGFloat,
+         fontSize: CGFloat = 14, numberFontSize: CGFloat = 12, rowHeight: CGFloat = 24) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: rowHeight))
 
         wantsLayer = true
@@ -466,17 +484,19 @@ private class CandidateRowView: NSView {
         let secondaryColor: NSColor = isSelected ? .init(white: 1, alpha: 0.7) : .secondaryLabelColor
 
         // Number label
+        let numberWidth = max(22, ceil(numberFontSize * 1.8))
         let numberLabel = NSTextField(labelWithString: number > 0 ? "\(number)." : "")
-        numberLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        numberLabel.font = NSFont.monospacedDigitSystemFont(ofSize: numberFontSize, weight: .regular)
         numberLabel.textColor = secondaryColor
-        numberLabel.frame = NSRect(x: 6, y: 0, width: 22, height: rowHeight)
+        numberLabel.frame = NSRect(x: 6, y: 0, width: numberWidth, height: rowHeight)
 
         // Text label
+        let textX = 6 + numberWidth + 2
         let textLabel = NSTextField(labelWithString: text)
-        textLabel.font = NSFont.systemFont(ofSize: 14)
+        textLabel.font = NSFont.systemFont(ofSize: fontSize)
         textLabel.textColor = textColor
         textLabel.lineBreakMode = .byTruncatingTail
-        textLabel.frame = NSRect(x: 30, y: 0, width: width - 36, height: rowHeight)
+        textLabel.frame = NSRect(x: textX, y: 0, width: width - textX - 6, height: rowHeight)
 
         addSubview(numberLabel)
         addSubview(textLabel)
@@ -499,7 +519,7 @@ private class CandidateRowView: NSView {
 /// A single cell in the grid-mode candidate panel.
 private class CandidateGridCellView: NSView {
 
-    init(text: String, isSelected: Bool, width: CGFloat, height: CGFloat) {
+    init(text: String, isSelected: Bool, width: CGFloat, height: CGFloat, fontSize: CGFloat = 13) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
         wantsLayer = true
@@ -514,7 +534,7 @@ private class CandidateGridCellView: NSView {
         let textColor: NSColor = isSelected ? .white : .labelColor
 
         let textLabel = NSTextField(labelWithString: text)
-        textLabel.font = NSFont.systemFont(ofSize: 13)
+        textLabel.font = NSFont.systemFont(ofSize: fontSize)
         textLabel.textColor = textColor
         textLabel.lineBreakMode = .byTruncatingTail
         textLabel.alignment = .center

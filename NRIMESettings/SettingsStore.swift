@@ -133,6 +133,9 @@ struct JapaneseKeyConfig: Codable, Equatable {
     /// Prediction: show predicted next words after committing text
     var prediction: Bool = true
 
+    /// Candidate panel font size in points (default: 14)
+    var candidateFontSize: CGFloat = 14
+
     static let `default` = JapaneseKeyConfig()
 }
 

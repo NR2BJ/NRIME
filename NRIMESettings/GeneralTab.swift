@@ -50,6 +50,28 @@ struct GeneralTab: View {
 
             Section("Display") {
                 Toggle("Show inline indicator on mode switch", isOn: $store.inlineIndicatorEnabled)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Candidate Font Size")
+                        Spacer()
+                        Text("\(Int(store.japaneseKeyConfig.candidateFontSize))pt")
+                            .monospacedDigit()
+                            .frame(width: 32, alignment: .trailing)
+                        Slider(
+                            value: Binding(
+                                get: { store.japaneseKeyConfig.candidateFontSize },
+                                set: { store.japaneseKeyConfig.candidateFontSize = $0 }
+                            ),
+                            in: 12...24,
+                            step: 1
+                        )
+                        .frame(width: 150)
+                    }
+                    Text("Adjusts the text size in the candidate panel")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)

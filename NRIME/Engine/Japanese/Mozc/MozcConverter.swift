@@ -307,6 +307,20 @@ final class MozcConverter {
         return client.sendCommand(command)
     }
 
+    /// Highlight a candidate by its index using Mozc's HIGHLIGHT_CANDIDATE command.
+    /// Unlike selectCandidateByIndex, this does NOT commit — it only changes the focused candidate
+    /// and updates the preedit display. Used to sync panel selection back to Mozc.
+    func highlightCandidateByIndex(_ index: Int) -> Mozc_Commands_Output? {
+        guard index >= 0 && index < currentCandidates.count else { return nil }
+
+        let candidate = currentCandidates[index]
+        var command = Mozc_Commands_SessionCommand()
+        command.type = .highlightCandidate
+        command.id = candidate.id
+
+        return client.sendCommand(command)
+    }
+
     // MARK: - Private
 
     private func extractCandidates(from output: Mozc_Commands_Output) {
