@@ -128,6 +128,11 @@ struct JapaneseKeyConfig: Codable, Equatable {
     /// Whether Space inserts full-width space (U+3000) instead of half-width (U+0020)
     var fullWidthSpace: Bool = false
 
+    /// Live conversion: show conversion results in real-time as user types
+    var liveConversion: Bool = false
+    /// Prediction: show predicted next words after committing text
+    var prediction: Bool = true
+
     static let `default` = JapaneseKeyConfig()
 }
 

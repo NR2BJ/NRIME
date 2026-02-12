@@ -57,6 +57,24 @@ class NRIMEInputController: IMKInputController {
             return japaneseEngine.handleEvent(event, client: client)
         }
 
+        // Prediction state: let the engine handle all key events directly.
+        // The engine's handlePredictionEvent manages Tab (select), numbers, arrows, etc.
+        if japaneseEngine.showingPrediction {
+            let handled = japaneseEngine.handleEvent(event, client: client)
+            // Update candidate panel from engine's current state
+            if let panel = NSApp.candidatePanel {
+                if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty
+                    && japaneseEngine.isInConversionState {
+                    panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                               selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
+                               client: client)
+                } else if panel.isVisible() {
+                    panel.hide()
+                }
+            }
+            return handled
+        }
+
         // Number keys 1-9: select candidate and commit the segment
         let numberMap: [UInt16: Int] = [
             0x12: 0, 0x13: 1, 0x14: 2, 0x15: 3, 0x17: 4,

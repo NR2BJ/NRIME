@@ -11,6 +11,24 @@ final class MozcClient {
     private var sessionId: UInt64 = 0
     private var hasSession = false
 
+    /// Mozc config attached to every Input message.
+    /// Enables realtime conversion, history/dictionary suggest, etc.
+    private let mozcConfig: Mozc_Config_Config = {
+        var config = Mozc_Config_Config()
+        config.useRealtimeConversion = true
+        config.useHistorySuggest = true
+        config.useDictionarySuggest = true
+        config.suggestionsSize = 9
+        return config
+    }()
+
+    /// Mozc request flags (zero_query_suggestion for NWP, etc.)
+    private let mozcRequest: Mozc_Commands_Request = {
+        var request = Mozc_Commands_Request()
+        request.zeroQuerySuggestion = true
+        return request
+    }()
+
     // MARK: - Public API
 
     /// Create a new session with mozc_server.
@@ -23,6 +41,14 @@ final class MozcClient {
         if output.hasID {
             sessionId = output.id
             hasSession = true
+
+            // Send SET_REQUEST to configure the session with our Request flags
+            var setReqInput = Mozc_Commands_Input()
+            setReqInput.type = .setRequest
+            setReqInput.id = sessionId
+            setReqInput.request = mozcRequest
+            _ = call(setReqInput)
+
             return true
         }
         return false
@@ -36,18 +62,24 @@ final class MozcClient {
         input.type = .sendKey
         input.id = sessionId
         input.key = keyEvent
+        initInput(&input)
 
         return call(input)
     }
 
     /// Send a session command (SUBMIT, REVERT, SELECT_CANDIDATE, etc.)
-    func sendCommand(_ command: Mozc_Commands_SessionCommand) -> Mozc_Commands_Output? {
+    func sendCommand(_ command: Mozc_Commands_SessionCommand,
+                     context: Mozc_Commands_Context? = nil) -> Mozc_Commands_Output? {
         guard ensureSession() else { return nil }
 
         var input = Mozc_Commands_Input()
         input.type = .sendCommand
         input.id = sessionId
         input.command = command
+        initInput(&input)
+        if let context = context {
+            input.context = context
+        }
 
         return call(input)
     }
@@ -71,7 +103,35 @@ final class MozcClient {
         sessionId = 0
     }
 
+    /// Clear Mozc's learned user history (conversion preferences).
+    func clearUserHistory() {
+        guard ensureSession() else { return }
+
+        var input = Mozc_Commands_Input()
+        input.type = .clearUserHistory
+        input.id = sessionId
+
+        _ = call(input)
+    }
+
+    /// Clear Mozc's user prediction data.
+    func clearUserPrediction() {
+        guard ensureSession() else { return }
+
+        var input = Mozc_Commands_Input()
+        input.type = .clearUserPrediction
+        input.id = sessionId
+
+        _ = call(input)
+    }
+
     // MARK: - Private
+
+    /// Attach config and request to every Input message.
+    private func initInput(_ input: inout Mozc_Commands_Input) {
+        input.config = mozcConfig
+        input.request = mozcRequest
+    }
 
     private func ensureSession() -> Bool {
         if hasSession { return true }

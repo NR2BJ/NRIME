@@ -8,6 +8,7 @@ struct MozcResult {
     var hasCandidates: Bool = false
     var consumed: Bool = true
     var focusedCandidateIndex: Int = 0
+    var candidateCategory: Mozc_Commands_Category = .conversion
 }
 
 /// A candidate with its Mozc ID for SELECT_CANDIDATE commands.
@@ -42,6 +43,9 @@ final class MozcConverter {
     /// The currently focused candidate index from Mozc's candidate window.
     private(set) var currentFocusedIndex: Int = 0
 
+    /// The last Output returned by feedHiragana (for live conversion).
+    private(set) var lastFeedOutput: Mozc_Commands_Output? = nil
+
     // MARK: - Key Forwarding API
 
     /// Forward a key event to the active Mozc session.
@@ -56,12 +60,14 @@ final class MozcConverter {
 
     /// Feed hiragana characters to Mozc to build composition state (without triggering conversion).
     /// If IPC fails (stale server), automatically restarts mozc_server and retries once.
+    /// The last character's Output is stored in `lastFeedOutput` for live conversion.
     func feedHiragana(_ hiragana: String) -> Bool {
         guard serverManager.ensureServerRunning() else {
             isAvailable = false
             return false
         }
         isAvailable = true
+        lastFeedOutput = nil
 
         let chars = Array(hiragana)
         var retried = false
@@ -76,6 +82,7 @@ final class MozcConverter {
                     client.resetSession()
                     return false
                 }
+                lastFeedOutput = output
                 i += 1
             } else if !retried {
                 // IPC failure — restart server and retry from beginning
@@ -113,9 +120,15 @@ final class MozcConverter {
             isConverting = false
         }
 
-        // 3. Extract candidates
+        // 3. Extract candidates and category
         extractCandidates(from: output)
         result.hasCandidates = !currentCandidateStrings.isEmpty
+
+        if output.hasAllCandidateWords, output.allCandidateWords.hasCategory {
+            result.candidateCategory = output.allCandidateWords.category
+        } else if output.hasCandidateWindow, output.candidateWindow.hasCategory {
+            result.candidateCategory = output.candidateWindow.category
+        }
 
         // 4. Extract focused candidate index
         if output.hasAllCandidateWords, output.allCandidateWords.hasFocusedIndex {
@@ -191,6 +204,39 @@ final class MozcConverter {
         return result.hasCandidates || result.preedit != nil
     }
 
+    /// Convert hiragana already fed to Mozc by sending Space.
+    /// Used by live conversion when hiragana is already in Mozc's composition state.
+    func convertAlreadyFed() -> Bool {
+        var spaceKey = Mozc_Commands_KeyEvent()
+        spaceKey.specialKey = .space
+
+        guard let output = client.sendKey(spaceKey) else { return false }
+
+        let result = updateFromOutput(output)
+        return result.hasCandidates || result.preedit != nil
+    }
+
+    /// Peek at the conversion result without committing.
+    /// Sends Space to trigger conversion, reads the preedit (which now contains kanji segments).
+    /// After this call, the Mozc session is in CONVERSION state (not reverted).
+    /// The caller should call cancel() before the next feedHiragana() if needed.
+    func peekConversion() -> String? {
+        var spaceKey = Mozc_Commands_KeyEvent()
+        spaceKey.specialKey = .space
+
+        guard let output = client.sendKey(spaceKey) else { return nil }
+
+        if output.hasPreedit, !output.preedit.segment.isEmpty {
+            currentPreedit = output.preedit
+            isConverting = true
+            // Also extract candidates for when user presses Space to see full list
+            extractCandidates(from: output)
+            return output.preedit.segment.map { $0.value }.joined()
+        }
+
+        return nil
+    }
+
     /// Cancel the current conversion, reverting to hiragana.
     func cancel() {
         var command = Mozc_Commands_SessionCommand()
@@ -204,6 +250,12 @@ final class MozcConverter {
         isConverting = false
     }
 
+    /// Clear Mozc's learned user history and prediction data.
+    func clearUserHistory() {
+        client.clearUserHistory()
+        client.clearUserPrediction()
+    }
+
     /// Reset all state (e.g., on mode switch or deactivate).
     func reset() {
         if isConverting || !currentCandidateStrings.isEmpty {
@@ -215,6 +267,29 @@ final class MozcConverter {
         currentFocusedIndex = 0
         originalHiragana = ""
         isConverting = false
+        lastFeedOutput = nil
+    }
+
+    // MARK: - Prediction
+
+    /// Request next-word prediction from Mozc after committing text.
+    /// `precedingText` is the text before the cursor (up to ~20 chars), used by Mozc's NWP engine.
+    /// Returns a MozcResult with prediction candidates, or nil if none.
+    func requestPrediction(precedingText: String = "") -> MozcResult? {
+        var command = Mozc_Commands_SessionCommand()
+        command.type = .requestNwp
+
+        var context: Mozc_Commands_Context? = nil
+        if !precedingText.isEmpty {
+            var ctx = Mozc_Commands_Context()
+            ctx.precedingText = precedingText
+            context = ctx
+        }
+
+        guard let output = client.sendCommand(command, context: context) else { return nil }
+
+        let result = updateFromOutput(output)
+        return result.hasCandidates ? result : nil
     }
 
     // MARK: - Candidate Selection

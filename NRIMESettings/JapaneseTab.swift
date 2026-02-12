@@ -2,6 +2,8 @@ import SwiftUI
 
 struct JapaneseTab: View {
     @ObservedObject private var store = SettingsStore.shared
+    @State private var showingClearConfirmation = false
+    @State private var historyCleared = false
 
     var body: some View {
         Form {
@@ -119,6 +121,48 @@ struct JapaneseTab: View {
                 }
             }
 
+            Section("Input Features") {
+                Toggle(isOn: Binding(
+                    get: { store.japaneseKeyConfig.liveConversion },
+                    set: { store.japaneseKeyConfig.liveConversion = $0 }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Live Conversion")
+                        Text("Show conversion results in real-time as you type")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Toggle(isOn: Binding(
+                    get: { store.japaneseKeyConfig.prediction },
+                    set: { store.japaneseKeyConfig.prediction = $0 }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Predictive Input")
+                        Text("Show predicted next words after committing text")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Conversion History") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Clear Conversion History")
+                        Text("Reset learned conversion preferences and prediction data")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Clear") {
+                        showingClearConfirmation = true
+                    }
+                    .foregroundStyle(.red)
+                }
+            }
+
             Section("Conversion Shortcuts") {
                 VStack(alignment: .leading, spacing: 8) {
                     KeyboardHintRow(keys: "Space / ↓", description: "Start conversion")
@@ -127,10 +171,43 @@ struct JapaneseTab: View {
                     KeyboardHintRow(keys: "↑ / ↓", description: "Navigate candidates")
                     KeyboardHintRow(keys: "Enter", description: "Confirm conversion")
                     KeyboardHintRow(keys: "Escape", description: "Cancel conversion")
+                    KeyboardHintRow(keys: "Tab", description: "Select prediction / Toggle grid")
                 }
             }
         }
         .formStyle(.grouped)
+        .alert("Clear Conversion History?", isPresented: $showingClearConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear", role: .destructive) {
+                clearMozcHistory()
+            }
+        } message: {
+            Text("This will reset all learned conversion preferences. Mozc will start fresh with default dictionary data.")
+        }
+        .alert("History Cleared", isPresented: $historyCleared) {
+            Button("OK") { }
+        } message: {
+            Text("Conversion history has been cleared. Changes will take effect with the next conversion.")
+        }
+    }
+
+    private func clearMozcHistory() {
+        let mozcDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Mozc")
+
+        let historyFiles = ["segment.db", "boundary.db", ".history.db"]
+        for file in historyFiles {
+            let url = mozcDir.appendingPathComponent(file)
+            try? FileManager.default.removeItem(at: url)
+        }
+
+        // Kill mozc_server so it restarts with clean state
+        let task = Process()
+        task.launchPath = "/usr/bin/pkill"
+        task.arguments = ["-f", "mozc_server"]
+        try? task.run()
+
+        historyCleared = true
     }
 }
 

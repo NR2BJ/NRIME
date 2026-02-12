@@ -72,6 +72,13 @@ final class RomajiComposer {
         pendingRomaji = ""
     }
 
+    /// Restore composed kana from an existing hiragana string (e.g., after Escape from conversion).
+    /// pendingRomaji is left empty since the full kana is already resolved.
+    func restore(kana: String) {
+        composedKana = kana
+        pendingRomaji = ""
+    }
+
     // MARK: - Resolution
 
     private func resolve() {
