@@ -145,7 +145,7 @@ final class RomajiComposer {
 
     /// Consonants that can trigger sokuon (っ) when doubled
     private static let sokuonConsonants: Set<Character> = [
-        "k", "s", "t", "p", "g", "z", "d", "b", "f", "j", "v", "w", "r", "h", "m"
+        "k", "s", "t", "p", "g", "z", "d", "b", "c", "f", "j", "v", "w", "r", "h", "m"
     ]
 
     /// Complete romaji → hiragana mapping table

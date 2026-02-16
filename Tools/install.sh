@@ -97,6 +97,52 @@ for source in sources {
 }
 ' 2>&1 || true
 
+# Ensure NRIME is in AppleEnabledInputSources (persists across reboots)
+echo "Ensuring NRIME is registered in enabled input sources..."
+swift -e '
+import Foundation
+
+let domain = "com.apple.HIToolbox"
+let key = "AppleEnabledInputSources"
+let bundleId = "com.nrime.inputmethod.app"
+let modes = ["com.nrime.inputmethod.app.en", "com.nrime.inputmethod.app.ko", "com.nrime.inputmethod.app.ja"]
+
+guard var enabled = UserDefaults.standard.persistentDomain(forName: domain) else {
+    print("  Warning: Could not read HIToolbox defaults")
+    exit(0)
+}
+
+var sources = (enabled[key] as? [[String: Any]]) ?? []
+
+// Check which NRIME modes are already registered
+let existingModes = Set(sources.compactMap { dict -> String? in
+    guard (dict["Bundle ID"] as? String) == bundleId else { return nil }
+    return dict["Input Mode"] as? String
+})
+
+var added = false
+for mode in modes {
+    if !existingModes.contains(mode) {
+        sources.append([
+            "Bundle ID": bundleId,
+            "Input Mode": mode,
+            "InputSourceKind": "Input Mode"
+        ])
+        print("  Added to enabled: \(mode)")
+        added = true
+    }
+}
+
+if added {
+    enabled[key] = sources
+    UserDefaults.standard.setPersistentDomain(enabled, forName: domain)
+    UserDefaults.standard.synchronize()
+    print("  Saved to defaults")
+} else {
+    print("  Already registered in enabled input sources")
+}
+' 2>&1 || true
+
 echo ""
 echo "Installation complete!"
 echo "NRIME should now appear in your menu bar."

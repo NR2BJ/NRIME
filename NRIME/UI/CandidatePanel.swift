@@ -37,6 +37,28 @@ final class CandidatePanel {
     private var stackView: NSStackView?
     private var pageLabel: NSTextField?
     private var rowViews: [CandidateRowView] = []
+    private var gridCellViews: [CandidateGridCellView] = []
+    private var gridRowStacks: [NSStackView] = []
+
+    // MARK: - Cached Layout State (avoid re-reading Settings per keystroke)
+
+    /// Cached font size — read once per show() call from Settings.
+    private var cachedFontSize: CGFloat = 14
+
+    /// Cached max width for current candidate list in list mode.
+    private var cachedListMaxWidth: CGFloat = 160
+
+    /// Cached max cell width for current candidate list in grid mode.
+    private var cachedGridCellWidth: CGFloat = 60
+
+    /// The page that was last rendered (avoid re-rendering same page).
+    private var lastRenderedPage: Int = -1
+
+    /// The selected index when the page was last rendered (for highlight-only updates).
+    private var lastRenderedSelectedIndex: Int = -1
+
+    /// Whether last render was grid mode.
+    private var lastRenderedIsGrid: Bool = false
 
     // MARK: - Public API
 
@@ -55,6 +77,16 @@ final class CandidatePanel {
             isGridMode = false
         }
 
+        // Read font size ONCE per show() — avoids JSON decode on every navigation
+        cachedFontSize = Settings.shared.japaneseKeyConfig.candidateFontSize
+
+        // Invalidate cached layout so next updateDisplay() does a full rebuild
+        lastRenderedPage = -1
+        lastRenderedSelectedIndex = -1
+
+        // Pre-compute max widths for the entire candidate list
+        cacheTextWidths()
+
         buildPanel()
         updateDisplay()
 
@@ -69,6 +101,8 @@ final class CandidatePanel {
     func hide() {
         isGridMode = false
         panel?.orderOut(nil)
+        lastRenderedPage = -1
+        lastRenderedSelectedIndex = -1
     }
 
     /// Whether the panel is currently visible.
@@ -136,15 +170,18 @@ final class CandidatePanel {
     /// Toggle grid mode on/off, repositioning the panel.
     func toggleGridMode(client: (any IMKTextInput)? = nil) {
         isGridMode = !isGridMode
+        lastRenderedPage = -1 // force full rebuild on mode change
+        lastRenderedSelectedIndex = -1
         updateDisplay()
         repositionPanel(client: client)
     }
 
     /// Exit grid mode (return to list), keeping the panel visible.
-    /// Note: Tab toggles grid/list. Escape always hides the panel entirely.
     func exitGridMode(client: (any IMKTextInput)? = nil) {
         guard isGridMode else { return }
         isGridMode = false
+        lastRenderedPage = -1
+        lastRenderedSelectedIndex = -1
         updateDisplay()
         repositionPanel(client: client)
     }
@@ -230,6 +267,33 @@ final class CandidatePanel {
         self.pageLabel = pageLabel
     }
 
+    // MARK: - Private: Width Caching
+
+    /// Pre-compute max text widths for list and grid modes.
+    /// Called once per show() instead of on every navigation.
+    private func cacheTextWidths() {
+        let fontSize = cachedFontSize
+        let gridFontSize = max(8, fontSize - 1)
+
+        // List mode: measure all candidates to find the widest
+        let listAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: fontSize)]
+        var listMaxWidth: CGFloat = 160
+        for item in candidates {
+            let size = (item as NSString).size(withAttributes: listAttrs)
+            listMaxWidth = max(listMaxWidth, size.width + 50)
+        }
+        cachedListMaxWidth = min(listMaxWidth, 400)
+
+        // Grid mode: measure all candidates for cell width
+        let gridAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: gridFontSize)]
+        var gridMaxWidth: CGFloat = 60
+        for item in candidates {
+            let size = (item as NSString).size(withAttributes: gridAttrs)
+            gridMaxWidth = max(gridMaxWidth, size.width + 16)
+        }
+        cachedGridCellWidth = min(gridMaxWidth, 120)
+    }
+
     // MARK: - Private: Display Update
 
     private func updateDisplay() {
@@ -243,36 +307,33 @@ final class CandidatePanel {
     private func updateListDisplay() {
         guard let stackView = stackView, let pageLabel = pageLabel, let panel = panel else { return }
 
-        // Remove old views
-        clearStackView()
-
-        let fontSize = Settings.shared.japaneseKeyConfig.candidateFontSize
+        let fontSize = cachedFontSize
         let numberFontSize = max(8, fontSize - 2)
         let pageFontSize = max(8, fontSize - 4)
         let rowHeight = max(24, ceil(fontSize * 1.7))
+        let maxWidth = cachedListMaxWidth
 
-        // Update page label font size
-        pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: pageFontSize, weight: .regular)
-
-        // Calculate current page items
-        let pageStart = currentPage * pageSize
+        let page = currentPage
+        let pageStart = page * pageSize
         let pageEnd = min(pageStart + pageSize, candidates.count)
         let pageItems = Array(candidates[pageStart..<pageEnd])
 
-        // Determine width based on longest candidate
-        var maxWidth: CGFloat = 160
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: fontSize)]
-        for item in pageItems {
-            let size = (item as NSString).size(withAttributes: attrs)
-            maxWidth = max(maxWidth, size.width + 50) // 50 for number label + padding
+        // Fast path: same page, just update highlight
+        if page == lastRenderedPage && !lastRenderedIsGrid && rowViews.count == pageItems.count {
+            updateListHighlight(pageStart: pageStart, rowHeight: rowHeight)
+            lastRenderedSelectedIndex = selectedIndex
+            return
         }
-        maxWidth = min(maxWidth, 400) // cap
 
-        // Build rows
+        // Full rebuild needed (page change or first render)
+        clearStackView()
+
+        pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: pageFontSize, weight: .regular)
+
         for (i, item) in pageItems.enumerated() {
             let globalIndex = pageStart + i
             let isSelected = (globalIndex == selectedIndex)
-            let number = (i + 1) % 10 // 1-9, then 0
+            let number = (i + 1) % 10
 
             let row = CandidateRowView(
                 number: number == 0 ? 0 : number,
@@ -297,21 +358,17 @@ final class CandidatePanel {
         let stackHeight = CGFloat(pageItems.count) * rowHeight
         let totalHeight = topPadding + stackHeight + pageIndicatorHeight + bottomPadding
 
-        // Resize panel first (this also resizes contentView)
         var frame = panel.frame
         let oldHeight = frame.height
         frame.size = NSSize(width: maxWidth, height: totalHeight)
-        // Adjust origin so panel grows upward (keep bottom-left stable)
         frame.origin.y += (oldHeight - totalHeight)
         panel.setFrame(frame, display: true)
 
-        // Position stackView and pageLabel with manual frames (no Auto Layout conflicts)
         stackView.frame = NSRect(x: 0, y: bottomPadding + pageIndicatorHeight,
                                  width: maxWidth, height: stackHeight)
 
-        // Update page indicator
         if showPageLabel {
-            pageLabel.stringValue = "\(currentPage + 1)/\(totalPages)"
+            pageLabel.stringValue = "\(page + 1)/\(totalPages)"
             pageLabel.isHidden = false
             pageLabel.frame = NSRect(x: 0, y: bottomPadding,
                                      width: maxWidth, height: pageLabelHeight)
@@ -319,37 +376,48 @@ final class CandidatePanel {
             pageLabel.isHidden = true
         }
 
-        // Update container background for appearance changes
         if let container = panel.contentView {
             container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        }
+
+        lastRenderedPage = page
+        lastRenderedSelectedIndex = selectedIndex
+        lastRenderedIsGrid = false
+    }
+
+    /// Fast highlight-only update for list mode — just toggle background colors.
+    private func updateListHighlight(pageStart: Int, rowHeight: CGFloat) {
+        for (i, row) in rowViews.enumerated() {
+            let globalIndex = pageStart + i
+            let isSelected = (globalIndex == selectedIndex)
+            row.updateHighlight(isSelected: isSelected)
         }
     }
 
     private func updateGridDisplay() {
         guard let stackView = stackView, let pageLabel = pageLabel, let panel = panel else { return }
 
-        // Remove old views
-        clearStackView()
-
-        let fontSize = Settings.shared.japaneseKeyConfig.candidateFontSize
+        let fontSize = cachedFontSize
         let gridFontSize = max(8, fontSize - 1)
         let pageFontSize = max(8, fontSize - 4)
+        let maxCellWidth = cachedGridCellWidth
 
-        // Update page label font size
-        pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: pageFontSize, weight: .regular)
-
-        let pageStart = currentPage * gridPageSize
+        let page = currentPage
+        let pageStart = page * gridPageSize
         let pageEnd = min(pageStart + gridPageSize, candidates.count)
         let pageItems = Array(candidates[pageStart..<pageEnd])
 
-        // Calculate cell width based on longest candidate on this page
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: gridFontSize)]
-        var maxCellWidth: CGFloat = 60
-        for item in pageItems {
-            let size = (item as NSString).size(withAttributes: attrs)
-            maxCellWidth = max(maxCellWidth, size.width + 16)
+        // Fast path: same page, just update highlight
+        if page == lastRenderedPage && lastRenderedIsGrid && gridCellViews.count == pageItems.count {
+            updateGridHighlight(pageStart: pageStart)
+            lastRenderedSelectedIndex = selectedIndex
+            return
         }
-        maxCellWidth = min(maxCellWidth, 120)
+
+        // Full rebuild
+        clearStackView()
+
+        pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: pageFontSize, weight: .regular)
 
         let cellHeight = max(26, ceil(fontSize * 1.85))
         let sidePadding: CGFloat = 4
@@ -376,8 +444,10 @@ final class CandidatePanel {
                     fontSize: gridFontSize
                 )
                 rowStack.addArrangedSubview(cell)
+                gridCellViews.append(cell)
             }
             stackView.addArrangedSubview(rowStack)
+            gridRowStacks.append(rowStack)
         }
 
         // Layout
@@ -400,7 +470,7 @@ final class CandidatePanel {
                                  width: panelWidth - sidePadding * 2, height: gridHeight)
 
         if showPageLabel {
-            pageLabel.stringValue = "\(currentPage + 1)/\(totalPages)"
+            pageLabel.stringValue = "\(page + 1)/\(totalPages)"
             pageLabel.isHidden = false
             pageLabel.frame = NSRect(x: 0, y: bottomPadding,
                                      width: panelWidth, height: pageLabelHeight)
@@ -410,6 +480,19 @@ final class CandidatePanel {
 
         if let container = panel.contentView {
             container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        }
+
+        lastRenderedPage = page
+        lastRenderedSelectedIndex = selectedIndex
+        lastRenderedIsGrid = true
+    }
+
+    /// Fast highlight-only update for grid mode — just toggle background colors.
+    private func updateGridHighlight(pageStart: Int) {
+        for (i, cell) in gridCellViews.enumerated() {
+            let globalIdx = pageStart + i
+            let isSelected = globalIdx == selectedIndex
+            cell.updateHighlight(isSelected: isSelected)
         }
     }
 
@@ -421,7 +504,16 @@ final class CandidatePanel {
             view.removeFromSuperview()
         }
         rowViews.removeAll()
-        // Also remove any grid row stacks
+        for view in gridCellViews {
+            view.removeFromSuperview()
+        }
+        gridCellViews.removeAll()
+        for rowStack in gridRowStacks {
+            stackView.removeArrangedSubview(rowStack)
+            rowStack.removeFromSuperview()
+        }
+        gridRowStacks.removeAll()
+        // Also remove any remaining subviews
         for subview in stackView.arrangedSubviews {
             stackView.removeArrangedSubview(subview)
             subview.removeFromSuperview()
@@ -468,35 +560,27 @@ final class CandidatePanel {
 /// A single row in the candidate panel: [number] [text]
 private class CandidateRowView: NSView {
 
+    private let numberLabel: NSTextField
+    private let textLabel: NSTextField
+
     init(number: Int, text: String, isSelected: Bool, width: CGFloat,
          fontSize: CGFloat = 14, numberFontSize: CGFloat = 12, rowHeight: CGFloat = 24) {
+        let numberWidth = max(22, ceil(numberFontSize * 1.8))
+
+        numberLabel = NSTextField(labelWithString: number > 0 ? "\(number)." : "")
+        numberLabel.font = NSFont.monospacedDigitSystemFont(ofSize: numberFontSize, weight: .regular)
+        numberLabel.frame = NSRect(x: 6, y: 0, width: numberWidth, height: rowHeight)
+
+        let textX = 6 + numberWidth + 2
+        textLabel = NSTextField(labelWithString: text)
+        textLabel.font = NSFont.systemFont(ofSize: fontSize)
+        textLabel.lineBreakMode = .byTruncatingTail
+        textLabel.frame = NSRect(x: textX, y: 0, width: width - textX - 6, height: rowHeight)
+
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: rowHeight))
 
         wantsLayer = true
-
-        if isSelected {
-            layer?.backgroundColor = NSColor.selectedContentBackgroundColor.cgColor
-        } else {
-            layer?.backgroundColor = NSColor.clear.cgColor
-        }
-
-        let textColor: NSColor = isSelected ? .white : .labelColor
-        let secondaryColor: NSColor = isSelected ? .init(white: 1, alpha: 0.7) : .secondaryLabelColor
-
-        // Number label
-        let numberWidth = max(22, ceil(numberFontSize * 1.8))
-        let numberLabel = NSTextField(labelWithString: number > 0 ? "\(number)." : "")
-        numberLabel.font = NSFont.monospacedDigitSystemFont(ofSize: numberFontSize, weight: .regular)
-        numberLabel.textColor = secondaryColor
-        numberLabel.frame = NSRect(x: 6, y: 0, width: numberWidth, height: rowHeight)
-
-        // Text label
-        let textX = 6 + numberWidth + 2
-        let textLabel = NSTextField(labelWithString: text)
-        textLabel.font = NSFont.systemFont(ofSize: fontSize)
-        textLabel.textColor = textColor
-        textLabel.lineBreakMode = .byTruncatingTail
-        textLabel.frame = NSRect(x: textX, y: 0, width: width - textX - 6, height: rowHeight)
+        applyColors(isSelected: isSelected)
 
         addSubview(numberLabel)
         addSubview(textLabel)
@@ -512,6 +596,23 @@ private class CandidateRowView: NSView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    /// Update only the highlight state without recreating the view.
+    func updateHighlight(isSelected: Bool) {
+        applyColors(isSelected: isSelected)
+    }
+
+    private func applyColors(isSelected: Bool) {
+        if isSelected {
+            layer?.backgroundColor = NSColor.selectedContentBackgroundColor.cgColor
+        } else {
+            layer?.backgroundColor = NSColor.clear.cgColor
+        }
+        let textColor: NSColor = isSelected ? .white : .labelColor
+        let secondaryColor: NSColor = isSelected ? .init(white: 1, alpha: 0.7) : .secondaryLabelColor
+        numberLabel.textColor = secondaryColor
+        textLabel.textColor = textColor
+    }
 }
 
 // MARK: - CandidateGridCellView
@@ -519,26 +620,20 @@ private class CandidateRowView: NSView {
 /// A single cell in the grid-mode candidate panel.
 private class CandidateGridCellView: NSView {
 
+    private let textLabel: NSTextField
+
     init(text: String, isSelected: Bool, width: CGFloat, height: CGFloat, fontSize: CGFloat = 13) {
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
-
-        wantsLayer = true
-
-        if isSelected {
-            layer?.backgroundColor = NSColor.selectedContentBackgroundColor.cgColor
-            layer?.cornerRadius = 3
-        } else {
-            layer?.backgroundColor = NSColor.clear.cgColor
-        }
-
-        let textColor: NSColor = isSelected ? .white : .labelColor
-
-        let textLabel = NSTextField(labelWithString: text)
+        textLabel = NSTextField(labelWithString: text)
         textLabel.font = NSFont.systemFont(ofSize: fontSize)
-        textLabel.textColor = textColor
         textLabel.lineBreakMode = .byTruncatingTail
         textLabel.alignment = .center
         textLabel.frame = NSRect(x: 2, y: 0, width: width - 4, height: height)
+
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
+
+        wantsLayer = true
+        applyColors(isSelected: isSelected)
+
         addSubview(textLabel)
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -550,5 +645,21 @@ private class CandidateGridCellView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Update only the highlight state without recreating the view.
+    func updateHighlight(isSelected: Bool) {
+        applyColors(isSelected: isSelected)
+    }
+
+    private func applyColors(isSelected: Bool) {
+        if isSelected {
+            layer?.backgroundColor = NSColor.selectedContentBackgroundColor.cgColor
+            layer?.cornerRadius = 3
+        } else {
+            layer?.backgroundColor = NSColor.clear.cgColor
+            layer?.cornerRadius = 0
+        }
+        textLabel.textColor = isSelected ? .white : .labelColor
     }
 }
