@@ -65,17 +65,32 @@ codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" && echo "
 cp "$SCRIPTS_DIR/postinstall" "$PKG_DIR/scripts/postinstall"
 chmod +x "$PKG_DIR/scripts/postinstall"
 
-# 4. Build component PKG
+# 4. Generate component plist and disable relocation
+#    Without this, the installer searches the entire filesystem for existing
+#    copies of the bundles, triggering TCC prompts (e.g., Documents folder access).
+echo "Generating component plist..."
+pkgbuild --analyze --root "$PKG_DIR/payload" "$PKG_DIR/component.plist"
+# Set BundleIsRelocatable=false for all components
+/usr/libexec/PlistBuddy -c "Print" "$PKG_DIR/component.plist" > /dev/null 2>&1
+INDEX=0
+while /usr/libexec/PlistBuddy -c "Print :${INDEX}:BundleIsRelocatable" "$PKG_DIR/component.plist" > /dev/null 2>&1; do
+    /usr/libexec/PlistBuddy -c "Set :${INDEX}:BundleIsRelocatable false" "$PKG_DIR/component.plist"
+    INDEX=$((INDEX + 1))
+done
+echo "  Disabled relocation for $INDEX components"
+
+# 5. Build component PKG
 echo "Building component package..."
 pkgbuild \
     --root "$PKG_DIR/payload" \
     --scripts "$PKG_DIR/scripts" \
+    --component-plist "$PKG_DIR/component.plist" \
     --identifier "com.nrime.inputmethod.pkg" \
     --version "$VERSION" \
     --install-location "/" \
     "$PKG_DIR/NRIME-component.pkg"
 
-# 5. Build distribution PKG (final installer)
+# 6. Build distribution PKG (final installer)
 echo "Building distribution package..."
 productbuild \
     --distribution "$SCRIPTS_DIR/distribution.xml" \
