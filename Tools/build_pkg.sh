@@ -46,15 +46,20 @@ rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR/payload/Library/Input Methods"
 mkdir -p "$PKG_DIR/scripts"
 
-cp -R "$NRIME_APP" "$PKG_DIR/payload/Library/Input Methods/"
+# Use ditto to avoid ._* resource fork files in payload
+ditto "$NRIME_APP" "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
 if [ -d "$SETTINGS_APP" ]; then
-    cp -R "$SETTINGS_APP" "$PKG_DIR/payload/Library/Input Methods/"
+    ditto "$SETTINGS_APP" "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app"
 fi
 
-# Ad-hoc code sign (so macOS allows launch without Developer ID)
+# Ad-hoc code sign (inside-out to avoid broken nested signatures)
 echo "Ad-hoc signing apps..."
-codesign -s - --force --deep "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
-codesign -s - --force --deep "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+find "$PKG_DIR/payload" -name "*.bundle" -exec codesign -s - --force {} \;
+codesign -s - --force "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
+codesign -s - --force "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+echo "Verifying signatures..."
+codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIME.app" && echo "  NRIME.app: OK" || echo "  NRIME.app: FAILED"
+codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" && echo "  NRIMESettings.app: OK" || echo "  NRIMESettings.app: FAILED"
 
 # Copy postinstall script
 cp "$SCRIPTS_DIR/postinstall" "$PKG_DIR/scripts/postinstall"
