@@ -98,6 +98,7 @@ for source in sources {
 ' 2>&1 || true
 
 # Ensure NRIME is in AppleEnabledInputSources (persists across reboots)
+# Only register the .en mode — NRIME switches modes internally via a single input source.
 echo "Ensuring NRIME is registered in enabled input sources..."
 swift -e '
 import Foundation
@@ -105,7 +106,7 @@ import Foundation
 let domain = "com.apple.HIToolbox"
 let key = "AppleEnabledInputSources"
 let bundleId = "com.nrime.inputmethod.app"
-let modes = ["com.nrime.inputmethod.app.en", "com.nrime.inputmethod.app.ko", "com.nrime.inputmethod.app.ja"]
+let keepMode = "com.nrime.inputmethod.app.en"
 
 guard var enabled = UserDefaults.standard.persistentDomain(forName: domain) else {
     print("  Warning: Could not read HIToolbox defaults")
@@ -113,33 +114,41 @@ guard var enabled = UserDefaults.standard.persistentDomain(forName: domain) else
 }
 
 var sources = (enabled[key] as? [[String: Any]]) ?? []
+var changed = false
 
-// Check which NRIME modes are already registered
-let existingModes = Set(sources.compactMap { dict -> String? in
-    guard (dict["Bundle ID"] as? String) == bundleId else { return nil }
-    return dict["Input Mode"] as? String
-})
+// Remove stale .ko / .ja entries (they cause duplicate input sources in System Settings)
+let before = sources.count
+sources.removeAll { dict in
+    guard (dict["Bundle ID"] as? String) == bundleId,
+          let mode = dict["Input Mode"] as? String,
+          mode != keepMode else { return false }
+    print("  Removed stale: \(mode)")
+    return true
+}
+if sources.count != before { changed = true }
 
-var added = false
-for mode in modes {
-    if !existingModes.contains(mode) {
-        sources.append([
-            "Bundle ID": bundleId,
-            "Input Mode": mode,
-            "InputSourceKind": "Input Mode"
-        ])
-        print("  Added to enabled: \(mode)")
-        added = true
-    }
+// Add .en if missing
+let hasEn = sources.contains { dict in
+    (dict["Bundle ID"] as? String) == bundleId &&
+    (dict["Input Mode"] as? String) == keepMode
+}
+if !hasEn {
+    sources.append([
+        "Bundle ID": bundleId,
+        "Input Mode": keepMode,
+        "InputSourceKind": "Input Mode"
+    ])
+    print("  Added: \(keepMode)")
+    changed = true
 }
 
-if added {
+if changed {
     enabled[key] = sources
     UserDefaults.standard.setPersistentDomain(enabled, forName: domain)
     UserDefaults.standard.synchronize()
     print("  Saved to defaults")
 } else {
-    print("  Already registered in enabled input sources")
+    print("  Already registered correctly")
 }
 ' 2>&1 || true
 

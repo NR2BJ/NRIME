@@ -269,11 +269,11 @@ final class CandidatePanel {
 
     // MARK: - Private: Width Caching
 
-    /// Pre-compute max text widths for list and grid modes.
+    /// Pre-compute max text widths for the current mode.
     /// Called once per show() instead of on every navigation.
+    /// Grid widths are computed lazily when toggling to grid mode.
     private func cacheTextWidths() {
         let fontSize = cachedFontSize
-        let gridFontSize = max(8, fontSize - 1)
 
         // List mode: measure all candidates to find the widest
         let listAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: fontSize)]
@@ -284,7 +284,14 @@ final class CandidatePanel {
         }
         cachedListMaxWidth = min(listMaxWidth, 400)
 
-        // Grid mode: measure all candidates for cell width
+        // Reset grid cache — will be computed on first grid display
+        cachedGridCellWidth = 0
+    }
+
+    /// Compute grid cell width lazily (only when grid mode is first entered).
+    private func ensureGridWidthsCached() {
+        guard cachedGridCellWidth == 0 else { return }
+        let gridFontSize = max(8, cachedFontSize - 1)
         let gridAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: gridFontSize)]
         var gridMaxWidth: CGFloat = 60
         for item in candidates {
@@ -396,6 +403,8 @@ final class CandidatePanel {
 
     private func updateGridDisplay() {
         guard let stackView = stackView, let pageLabel = pageLabel, let panel = panel else { return }
+
+        ensureGridWidthsCached()
 
         let fontSize = cachedFontSize
         let gridFontSize = max(8, fontSize - 1)

@@ -52,6 +52,13 @@ struct GeneralTab: View {
                 Toggle("Show inline indicator on mode switch", isOn: $store.inlineIndicatorEnabled)
 
                 VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Prevent switching to ABC", isOn: $store.preventABCSwitch)
+                    Text("Automatically switch back to NRIME when another input source is selected")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Candidate Font Size")
                         Spacer()

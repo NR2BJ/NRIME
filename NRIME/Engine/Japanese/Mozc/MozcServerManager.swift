@@ -23,9 +23,9 @@ final class MozcServerManager {
             return false
         }
 
-        // Wait for server to register its Mach port (up to 3 seconds)
-        for _ in 0..<30 {
-            Thread.sleep(forTimeInterval: 0.1)
+        // Wait for server to register its Mach port (up to 1 second with shorter intervals)
+        for _ in 0..<20 {
+            Thread.sleep(forTimeInterval: 0.05)
             if isServerReachable() {
                 NSLog("NRIME: mozc_server is ready")
                 return true
@@ -51,7 +51,7 @@ final class MozcServerManager {
         serverProcess = nil
 
         // Brief wait for Mach port to be deregistered
-        Thread.sleep(forTimeInterval: 0.2)
+        Thread.sleep(forTimeInterval: 0.1)
 
         return ensureServerRunning()
     }
@@ -81,7 +81,7 @@ final class MozcServerManager {
         serverProcess = nil
 
         // Brief wait for Mach port to be deregistered
-        Thread.sleep(forTimeInterval: 0.3)
+        Thread.sleep(forTimeInterval: 0.1)
     }
 
     private func isServerReachable() -> Bool {
@@ -111,7 +111,9 @@ final class MozcServerManager {
 
         process.terminationHandler = { [weak self] proc in
             NSLog("NRIME: mozc_server terminated with status \(proc.terminationStatus)")
-            self?.serverProcess = nil
+            DispatchQueue.main.async {
+                self?.serverProcess = nil
+            }
         }
 
         do {

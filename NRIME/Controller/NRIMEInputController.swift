@@ -6,9 +6,9 @@ class NRIMEInputController: IMKInputController {
 
     private let secureInputDetector = SecureInputDetector()
     private let shortcutHandler = ShortcutHandler()
-    private let englishEngine = EnglishEngine()
-    private let koreanEngine = KoreanEngine()
-    private let japaneseEngine = JapaneseEngine()
+    private lazy var englishEngine = EnglishEngine()
+    private lazy var koreanEngine = KoreanEngine()
+    private lazy var japaneseEngine = JapaneseEngine()
 
     // MARK: - IMKInputController Overrides
 
@@ -315,17 +315,26 @@ class NRIMEInputController: IMKInputController {
         }
     }
 
+    override func commitComposition(_ sender: Any!) {
+        guard let client = sender as? (any IMKTextInput) else { return }
+        koreanEngine.forceCommit(client: client)
+        japaneseEngine.forceCommit(client: client)
+        super.commitComposition(sender)
+    }
+
     override func deactivateServer(_ sender: Any!) {
+        // Mark as user-initiated so InputSourceRecovery doesn't fight it
+        InputSourceRecovery.shared.userInitiatedSwitch = true
+
         // Save per-app mode if enabled
         if let client = sender as? (any IMKTextInput) {
             let bundleId = client.bundleIdentifier() ?? "unknown"
             StateManager.shared.deactivateApp(bundleId)
         }
 
-        // Force commit any composing text
-        let client = self.client() as? (any IMKTextInput)
-        koreanEngine.forceCommit(client: client)
-        japaneseEngine.forceCommit(client: client)
+        // Commit composing text — use sender (the client) since self.client()
+        // may already be nil during deactivation
+        commitComposition(sender)
         shortcutHandler.reset()
 
         // Hide candidate panel

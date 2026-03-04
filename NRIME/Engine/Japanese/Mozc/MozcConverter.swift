@@ -8,7 +8,6 @@ struct MozcResult {
     var hasCandidates: Bool = false
     var consumed: Bool = true
     var focusedCandidateIndex: Int = 0
-    var candidateCategory: Mozc_Commands_Category = .conversion
 }
 
 /// A candidate with its Mozc ID for SELECT_CANDIDATE commands.
@@ -124,12 +123,6 @@ final class MozcConverter {
         extractCandidates(from: output)
         result.hasCandidates = !currentCandidateStrings.isEmpty
 
-        if output.hasAllCandidateWords, output.allCandidateWords.hasCategory {
-            result.candidateCategory = output.allCandidateWords.category
-        } else if output.hasCandidateWindow, output.candidateWindow.hasCategory {
-            result.candidateCategory = output.candidateWindow.category
-        }
-
         // 4. Extract focused candidate index
         if output.hasAllCandidateWords, output.allCandidateWords.hasFocusedIndex {
             currentFocusedIndex = Int(output.allCandidateWords.focusedIndex)
@@ -201,18 +194,6 @@ final class MozcConverter {
         }
 
         let result = updateFromOutput(output!)
-        return result.hasCandidates || result.preedit != nil
-    }
-
-    /// Convert hiragana already fed to Mozc by sending Space.
-    /// Used by live conversion when hiragana is already in Mozc's composition state.
-    func convertAlreadyFed() -> Bool {
-        var spaceKey = Mozc_Commands_KeyEvent()
-        spaceKey.specialKey = .space
-
-        guard let output = client.sendKey(spaceKey) else { return false }
-
-        let result = updateFromOutput(output)
         return result.hasCandidates || result.preedit != nil
     }
 

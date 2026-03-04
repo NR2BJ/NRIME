@@ -95,6 +95,9 @@ final class JapaneseEngine: InputEngine {
 
         mozcConverter.reset()
         liveConversionActive = false
+        liveConvertedText = nil
+        shiftKatakanaActive = false
+        capsLockKatakanaActive = false
         guard composer.isComposing else { return }
         let text = composer.flush()
         if !text.isEmpty {
@@ -109,6 +112,8 @@ final class JapaneseEngine: InputEngine {
         composer.clear()
         liveConversionActive = false
         liveConvertedText = nil
+        shiftKatakanaActive = false
+        capsLockKatakanaActive = false
         showingPrediction = false
         hideCandidateWindow()
     }
@@ -773,6 +778,9 @@ final class JapaneseEngine: InputEngine {
         conversionState = .composing
         composer.clear()
         liveConversionActive = false
+        liveConvertedText = nil
+        shiftKatakanaActive = false
+        capsLockKatakanaActive = false
         hideCandidateWindow()
 
         // Trigger prediction after commit

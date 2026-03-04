@@ -5,6 +5,7 @@ final class InlineIndicator {
     static let shared = InlineIndicator()
 
     private var panel: NSPanel?
+    private var textField: NSTextField?
     private var fadeTimer: Timer?
     private let displayDuration: TimeInterval = 0.5
     private let fadeDuration: TimeInterval = 0.3
@@ -15,43 +16,48 @@ final class InlineIndicator {
     /// `client` is used to obtain the caret rect from IMKTextInput.
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
         fadeTimer?.invalidate()
-        panel?.orderOut(nil)
 
-        let label = mode.label
         let panelSize = NSSize(width: 36, height: 28)
 
-        let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .floating
-        panel.ignoresMouseEvents = true
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
+        // Build panel once, reuse thereafter
+        if panel == nil {
+            let p = NSPanel(
+                contentRect: NSRect(origin: .zero, size: panelSize),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            p.level = .floating
+            p.ignoresMouseEvents = true
+            p.isOpaque = false
+            p.backgroundColor = .clear
+            p.hasShadow = true
 
-        let textField = NSTextField(labelWithString: label)
-        textField.font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        textField.textColor = .white
-        textField.alignment = .center
-        textField.frame = NSRect(origin: .zero, size: panelSize)
+            let backgroundView = NSView(frame: NSRect(origin: .zero, size: panelSize))
+            backgroundView.wantsLayer = true
+            backgroundView.layer?.backgroundColor = NSColor(white: 0.15, alpha: 0.85).cgColor
+            backgroundView.layer?.cornerRadius = 6
 
-        let backgroundView = NSView(frame: NSRect(origin: .zero, size: panelSize))
-        backgroundView.wantsLayer = true
-        backgroundView.layer?.backgroundColor = NSColor(white: 0.15, alpha: 0.85).cgColor
-        backgroundView.layer?.cornerRadius = 6
+            let tf = NSTextField(labelWithString: "")
+            tf.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+            tf.textColor = .white
+            tf.alignment = .center
+            tf.frame = NSRect(origin: .zero, size: panelSize)
+            backgroundView.addSubview(tf)
 
-        backgroundView.addSubview(textField)
-        panel.contentView = backgroundView
+            p.contentView = backgroundView
+            self.panel = p
+            self.textField = tf
+        }
 
-        // Position near caret
+        guard let panel = panel, let textField = textField else { return }
+
+        // Update label and show
+        textField.stringValue = mode.label
         let origin = caretOrigin(from: client, panelSize: panelSize)
         panel.setFrameOrigin(origin)
         panel.alphaValue = 1.0
         panel.orderFront(nil)
-        self.panel = panel
 
         // Fade out after delay
         fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in

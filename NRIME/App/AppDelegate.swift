@@ -86,15 +86,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func restartApp() {
         // Kill mozc_server
         let mozcTask = Process()
-        mozcTask.launchPath = "/usr/bin/pkill"
-        mozcTask.arguments = ["-f", "mozc_server"]
+        mozcTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        mozcTask.arguments = ["mozc_server"]
         try? mozcTask.run()
         mozcTask.waitUntilExit()
 
         // Kill NRIMESettings if running
         let settingsTask = Process()
-        settingsTask.launchPath = "/usr/bin/pkill"
-        settingsTask.arguments = ["-f", "NRIMESettings"]
+        settingsTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        settingsTask.arguments = ["NRIMESettings"]
         try? settingsTask.run()
         settingsTask.waitUntilExit()
 

@@ -9,8 +9,23 @@ final class Settings {
 
     private let defaults: UserDefaults
 
+    /// Cached JapaneseKeyConfig to avoid JSON decode on every keystroke.
+    /// Invalidated by `reloadJapaneseKeyConfig()` (called when settings change).
+    private var _cachedJapaneseKeyConfig: JapaneseKeyConfig?
+
+    private var defaultsObserver: NSObjectProtocol?
+
     private init() {
         defaults = UserDefaults(suiteName: Settings.suiteName) ?? UserDefaults.standard
+
+        // Invalidate cache when UserDefaults change (e.g., companion app saved settings)
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: defaults,
+            queue: .main
+        ) { [weak self] _ in
+            self?._cachedJapaneseKeyConfig = nil
+        }
     }
 
     // MARK: - Shortcut Keys
@@ -119,6 +134,13 @@ final class Settings {
         set { defaults.set(newValue, forKey: "tapThreshold") }
     }
 
+    // MARK: - Input Source Recovery
+
+    var preventABCSwitch: Bool {
+        get { defaults.bool(forKey: "preventABCSwitch") }
+        set { defaults.set(newValue, forKey: "preventABCSwitch") }
+    }
+
     // MARK: - Inline Indicator
 
     var inlineIndicatorEnabled: Bool {
@@ -218,17 +240,30 @@ final class Settings {
 
     var japaneseKeyConfig: JapaneseKeyConfig {
         get {
+            if let cached = _cachedJapaneseKeyConfig {
+                return cached
+            }
             guard let data = defaults.data(forKey: "japaneseKeyConfig"),
                   let config = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
-                return .default
+                let defaultConfig = JapaneseKeyConfig.default
+                _cachedJapaneseKeyConfig = defaultConfig
+                return defaultConfig
             }
+            _cachedJapaneseKeyConfig = config
             return config
         }
         set {
+            _cachedJapaneseKeyConfig = newValue
             if let data = try? JSONEncoder().encode(newValue) {
                 defaults.set(data, forKey: "japaneseKeyConfig")
             }
         }
+    }
+
+    /// Reload cached JapaneseKeyConfig from UserDefaults.
+    /// Call this when the companion settings app changes config.
+    func reloadJapaneseKeyConfig() {
+        _cachedJapaneseKeyConfig = nil
     }
 
     // MARK: - Sync
