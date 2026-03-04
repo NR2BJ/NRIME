@@ -51,6 +51,11 @@ if [ -d "$SETTINGS_APP" ]; then
     cp -R "$SETTINGS_APP" "$PKG_DIR/payload/Library/Input Methods/"
 fi
 
+# Ad-hoc code sign (so macOS allows launch without Developer ID)
+echo "Ad-hoc signing apps..."
+codesign -s - --force --deep "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
+codesign -s - --force --deep "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+
 # Copy postinstall script
 cp "$SCRIPTS_DIR/postinstall" "$PKG_DIR/scripts/postinstall"
 chmod +x "$PKG_DIR/scripts/postinstall"

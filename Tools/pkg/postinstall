@@ -17,40 +17,36 @@ sleep 1
 xattr -cr "$APP_PATH" 2>/dev/null || true
 xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
 
-# 3. Set executable permissions
-chmod +x "$APP_PATH/Contents/MacOS/NRIME" 2>/dev/null || true
-chmod +x "$APP_PATH/Contents/Resources/mozc_server" 2>/dev/null || true
-chmod +x "$SETTINGS_PATH/Contents/MacOS/NRIMESettings" 2>/dev/null || true
-
-# 4. Ad-hoc code sign (allows macOS to launch unsigned apps as input methods)
-codesign -s - --force --deep "$APP_PATH" 2>/dev/null || true
-codesign -s - --force --deep "$SETTINGS_PATH" 2>/dev/null || true
-
-# 5. Register with LaunchServices
+# 3. Register with LaunchServices
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
 
-# 6. Enable and select via TIS API (only if swift is available)
+# 4. Enable input source via TIS API
+#    Try swift first, fall back to osascript (JXA)
 if command -v swift >/dev/null 2>&1; then
     swift -e '
 import Carbon
 import Foundation
-
 let bundleId = "com.nrime.inputmethod.app"
 let conditions = [kTISPropertyBundleID: bundleId] as CFDictionary
 guard let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource] else { exit(0) }
-
-for source in sources {
-    TISEnableInputSource(source)
-}
-
-let selectConditions = [
-    kTISPropertyBundleID: bundleId,
-    kTISPropertyInputSourceID: "com.nrime.inputmethod.app.en"
-] as CFDictionary
-if let selectSources = TISCreateInputSourceList(selectConditions, false)?.takeRetainedValue() as? [TISInputSource],
-   let nrime = selectSources.first {
-    TISSelectInputSource(nrime)
+for source in sources { TISEnableInputSource(source) }
+let sel = [kTISPropertyBundleID: bundleId, kTISPropertyInputSourceID: "com.nrime.inputmethod.app.en"] as CFDictionary
+if let ss = TISCreateInputSourceList(sel, false)?.takeRetainedValue() as? [TISInputSource], let s = ss.first { TISSelectInputSource(s) }
+' 2>/dev/null || true
+else
+    # JXA fallback — available on all Macs without developer tools
+    osascript -l JavaScript -e '
+ObjC.import("Carbon");
+var bundleId = "com.nrime.inputmethod.app";
+var cond = $.CFDictionaryCreate(null, [$.kTISPropertyBundleID], [$(bundleId)], 1, $.kCFTypeDictionaryKeyCallBacks, $.kCFTypeDictionaryValueCallBacks);
+var list = $.TISCreateInputSourceList(cond, true);
+if (list) {
+    var count = $.CFArrayGetCount(list);
+    for (var i = 0; i < count; i++) {
+        var src = $.CFArrayGetValueAtIndex(list, i);
+        $.TISEnableInputSource(src);
+    }
 }
 ' 2>/dev/null || true
 fi
