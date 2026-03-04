@@ -1,54 +1,23 @@
 #!/bin/bash
 # NRIME PKG postinstall script
-# Runs after PKG installs files to /Library/Input Methods/
 
 INSTALL_DIR="/Library/Input Methods"
 APP_PATH="$INSTALL_DIR/NRIME.app"
 SETTINGS_PATH="$INSTALL_DIR/NRIMESettings.app"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
-# 1. Kill existing processes
+# Kill existing processes
 killall NRIME 2>/dev/null || true
 killall NRIMESettings 2>/dev/null || true
 killall mozc_server 2>/dev/null || true
 sleep 1
 
-# 2. Remove quarantine attributes
+# Remove quarantine
 xattr -cr "$APP_PATH" 2>/dev/null || true
 xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
 
-# 3. Register with LaunchServices
+# Register with LaunchServices
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
-
-# 4. Enable input source via TIS API
-#    Try swift first, fall back to osascript (JXA)
-if command -v swift >/dev/null 2>&1; then
-    swift -e '
-import Carbon
-import Foundation
-let bundleId = "com.nrime.inputmethod.app"
-let conditions = [kTISPropertyBundleID: bundleId] as CFDictionary
-guard let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource] else { exit(0) }
-for source in sources { TISEnableInputSource(source) }
-let sel = [kTISPropertyBundleID: bundleId, kTISPropertyInputSourceID: "com.nrime.inputmethod.app.en"] as CFDictionary
-if let ss = TISCreateInputSourceList(sel, false)?.takeRetainedValue() as? [TISInputSource], let s = ss.first { TISSelectInputSource(s) }
-' 2>/dev/null || true
-else
-    # JXA fallback — available on all Macs without developer tools
-    osascript -l JavaScript -e '
-ObjC.import("Carbon");
-var bundleId = "com.nrime.inputmethod.app";
-var cond = $.CFDictionaryCreate(null, [$.kTISPropertyBundleID], [$(bundleId)], 1, $.kCFTypeDictionaryKeyCallBacks, $.kCFTypeDictionaryValueCallBacks);
-var list = $.TISCreateInputSourceList(cond, true);
-if (list) {
-    var count = $.CFArrayGetCount(list);
-    for (var i = 0; i < count; i++) {
-        var src = $.CFArrayGetValueAtIndex(list, i);
-        $.TISEnableInputSource(src);
-    }
-}
-' 2>/dev/null || true
-fi
 
 exit 0

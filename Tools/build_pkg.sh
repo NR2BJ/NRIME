@@ -75,7 +75,6 @@ echo "Building distribution package..."
 productbuild \
     --distribution "$SCRIPTS_DIR/distribution.xml" \
     --package-path "$PKG_DIR" \
-    --resources "$SCRIPTS_DIR" \
     "$BUILD_DIR/NRIME-$VERSION.pkg"
 
 # Cleanup intermediate files
