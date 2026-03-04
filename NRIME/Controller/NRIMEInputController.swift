@@ -10,6 +10,16 @@ class NRIMEInputController: IMKInputController {
     private lazy var koreanEngine = KoreanEngine()
     private lazy var japaneseEngine = JapaneseEngine()
 
+    /// Active controller instance for global mouse monitor callback.
+    private static weak var activeController: NRIMEInputController?
+    /// Global mouse monitor to commit composing text on click.
+    /// IMKit doesn't deliver leftMouseDown through handle(), so we use a global monitor.
+    private static var mouseMonitor: Any?
+    /// Cached client from the last handle() call. Used by the mouse monitor
+    /// because self.client() may be nil by the time the callback fires.
+    private var cachedClient: AnyObject?
+
+
     // MARK: - IMKInputController Overrides
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -23,6 +33,9 @@ class NRIMEInputController: IMKInputController {
               let client = sender as? (any IMKTextInput) else {
             return false
         }
+
+        // Cache client for the global mouse monitor callback.
+        cachedClient = client as AnyObject
 
         let mode = StateManager.shared.currentMode
 
@@ -295,6 +308,25 @@ class NRIMEInputController: IMKInputController {
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
 
+        NRIMEInputController.activeController = self
+
+        // Global mouse monitor: commit composing text on click.
+        // Electron apps (Claude Desktop, KakaoTalk) don't reliably call
+        // commitComposition/deactivateServer on focus change, so we commit proactively.
+        if NRIMEInputController.mouseMonitor == nil {
+            NRIMEInputController.mouseMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown]
+            ) { _ in
+                NRIMEInputController.activeController?.commitOnMouseClick()
+            }
+        }
+
+        // Clear any orphaned composing state from previous session.
+        // Do NOT use forceCommit here — the previous client may be gone and
+        // inserting text into the new client causes duplication ("사과" → "사과과").
+        koreanEngine.clearAutomataState()
+        japaneseEngine.clearState()
+
         wireUpShortcutHandler()
 
         // Wire up mode change callback for inline indicator
@@ -309,16 +341,15 @@ class NRIMEInputController: IMKInputController {
         if let client = sender as? (any IMKTextInput) {
             let bundleId = client.bundleIdentifier() ?? "unknown"
             StateManager.shared.activateApp(bundleId)
-            NSLog("NRIME: activateServer — mode: \(StateManager.shared.currentMode.label), app: \(bundleId)")
-        } else {
-            NSLog("NRIME: activateServer — mode: \(StateManager.shared.currentMode.label)")
         }
     }
 
     override func commitComposition(_ sender: Any!) {
-        guard let client = sender as? (any IMKTextInput) else { return }
-        koreanEngine.forceCommit(client: client)
-        japaneseEngine.forceCommit(client: client)
+        if let client = (sender as? (any IMKTextInput))
+            ?? (self.client() as? (any IMKTextInput)) {
+            koreanEngine.forceCommit(client: client)
+            japaneseEngine.forceCommit(client: client)
+        }
         super.commitComposition(sender)
     }
 
@@ -340,7 +371,6 @@ class NRIMEInputController: IMKInputController {
         // Hide candidate panel
         NSApp.candidatePanel?.hide()
 
-        NSLog("NRIME: deactivateServer")
         super.deactivateServer(sender)
     }
 
@@ -378,6 +408,24 @@ class NRIMEInputController: IMKInputController {
             selectionRange: NSRange(location: hanja.count, length: 0),
             replacementRange: replacementRange
         )
+    }
+
+    // MARK: - Mouse Click Commit
+
+    /// Called by the global mouse monitor when a click is detected in any app.
+    /// Commits composing text before the click changes focus.
+    private func commitOnMouseClick() {
+        // Use cached client because self.client() may be nil by the time
+        // the async global monitor callback fires.
+        guard let client = (cachedClient as? (any IMKTextInput))
+                ?? (self.client() as? (any IMKTextInput)) else { return }
+        let mode = StateManager.shared.currentMode
+        if mode == .korean && koreanEngine.isCurrentlyComposing {
+            koreanEngine.forceCommit(client: client)
+        } else if mode == .japanese
+                    && (japaneseEngine.isCurrentlyComposing || japaneseEngine.isInConversionState) {
+            japaneseEngine.forceCommit(client: client)
+        }
     }
 
     // MARK: - Event Routing

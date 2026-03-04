@@ -23,5 +23,5 @@ After installation, NRIME will appear in your menu bar.]]></welcome>
     <choice id="com.nrime.inputmethod.pkg" visible="false">
         <pkg-ref id="com.nrime.inputmethod.pkg"/>
     </choice>
-    <pkg-ref id="com.nrime.inputmethod.pkg" version="1.0.1" onConclusion="none">NRIME-component.pkg</pkg-ref>
+    <pkg-ref id="com.nrime.inputmethod.pkg" version="1.0.2" onConclusion="none">NRIME-component.pkg</pkg-ref>
 </installer-gui-script>

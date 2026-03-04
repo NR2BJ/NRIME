@@ -35,6 +35,8 @@ final class JapaneseEngine: InputEngine {
         conversionState == .converting || showingPrediction
     }
 
+    var isCurrentlyComposing: Bool { composer.isComposing }
+
     // MARK: - InputEngine
 
     func handleEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
@@ -103,6 +105,22 @@ final class JapaneseEngine: InputEngine {
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
+    }
+
+    /// Clear all engine state without inserting text.
+    /// Used when the previous client is gone (e.g., activateServer after Electron focus change).
+    func clearState() {
+        if showingPrediction { dismissPrediction() }
+        conversionState = .composing
+        mozcConverter.reset()
+        mozcConverter.currentCandidateStrings = []
+        liveConversionActive = false
+        liveConvertedText = nil
+        shiftKatakanaActive = false
+        capsLockKatakanaActive = false
+        showingPrediction = false
+        composer.clear()
+        hideCandidateWindow()
     }
 
     /// Exit conversion state (used by controller after candidate selection).

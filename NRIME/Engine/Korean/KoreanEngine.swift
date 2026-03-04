@@ -39,28 +39,41 @@ final class KoreanEngine: InputEngine {
 
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
 
-        // Shift+Enter while composing: commit then re-post via CGEvent.
-        // Returning false directly causes Electron apps to lose the committed text.
-        // The re-posted CGEvent arrives when isComposing is already false,
-        // so it falls through to return false naturally (no infinite loop).
+        // Shift+Enter while composing: commit, then re-post the key event
+        // at cgAnnotatedSessionEventTap to bypass IMKit entirely.
+        // (insertText + return false doesn't forward the key in Electron apps.)
         let isEnter = event.keyCode == 0x24 || event.keyCode == 0x4C
         if automata.isComposing && isEnter && isShifted {
-            commitComposing(client: client)
+            let text = automata.flush()
             let kc = event.keyCode
+            let repRange = replacementRange()
+            // Clear marked text immediately so no visual artifact remains.
+            client.setMarkedText("" as NSString,
+                                 selectionRange: NSRange(location: 0, length: 0),
+                                 replacementRange: repRange)
+            // Commit + Shift+Enter outside handle() — insertText called inside
+            // handle() with return true gets rolled back by IMKit in some apps.
+            // Must be in SEPARATE async blocks: insertText interferes with CGEvent
+            // when in the same block.
             DispatchQueue.main.async {
-                let src = CGEventSource(stateID: .hidSystemState)
+                if !text.isEmpty {
+                    client.insertText(text as NSString, replacementRange: repRange)
+                }
+            }
+            DispatchQueue.main.async {
+                let src = CGEventSource(stateID: .privateState)
                 if let down = CGEvent(keyboardEventSource: src, virtualKey: kc, keyDown: true),
                    let up = CGEvent(keyboardEventSource: src, virtualKey: kc, keyDown: false) {
                     down.flags = .maskShift
                     up.flags = .maskShift
-                    down.post(tap: .cghidEventTap)
-                    up.post(tap: .cghidEventTap)
+                    down.post(tap: .cgAnnotatedSessionEventTap)
+                    up.post(tap: .cgAnnotatedSessionEventTap)
                 }
             }
             return true
         }
 
-        // All other non-jamo keys: commit and let the system handle the key
+        // All other non-jamo keys: commit and let the system handle the key.
         commitComposing(client: client)
         return false
     }
@@ -68,6 +81,9 @@ final class KoreanEngine: InputEngine {
     func reset(client: any IMKTextInput) {
         commitComposing(client: client)
     }
+
+    /// Whether the automata is currently composing a character.
+    var isCurrentlyComposing: Bool { automata.isComposing }
 
     /// Clear automata state without committing (used when hanja candidate replaces composing text).
     func clearAutomataState() {
