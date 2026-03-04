@@ -2,8 +2,6 @@
 # NRIME PKG postinstall script
 # Runs after PKG installs files to /Library/Input Methods/
 
-set -e
-
 INSTALL_DIR="/Library/Input Methods"
 APP_PATH="$INSTALL_DIR/NRIME.app"
 SETTINGS_PATH="$INSTALL_DIR/NRIMESettings.app"
@@ -16,20 +14,17 @@ killall mozc_server 2>/dev/null || true
 sleep 1
 
 # 2. Set executable permissions
-chmod +x "$APP_PATH/Contents/MacOS/NRIME"
-chmod +x "$APP_PATH/Contents/Resources/mozc_server"
-if [ -f "$SETTINGS_PATH/Contents/MacOS/NRIMESettings" ]; then
-    chmod +x "$SETTINGS_PATH/Contents/MacOS/NRIMESettings"
-fi
+chmod +x "$APP_PATH/Contents/MacOS/NRIME" 2>/dev/null || true
+chmod +x "$APP_PATH/Contents/Resources/mozc_server" 2>/dev/null || true
+chmod +x "$SETTINGS_PATH/Contents/MacOS/NRIMESettings" 2>/dev/null || true
 
 # 3. Register with LaunchServices
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
-if [ -d "$SETTINGS_PATH" ]; then
-    "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
-fi
+"$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
 
-# 4. Enable and select NRIME input source
-swift -e '
+# 4. Enable and select NRIME input source (requires swift CLI)
+if command -v swift >/dev/null 2>&1; then
+    swift -e '
 import Carbon
 import Foundation
 
@@ -41,7 +36,6 @@ for source in sources {
     TISEnableInputSource(source)
 }
 
-// Select the .en mode
 let selectConditions = [
     kTISPropertyBundleID: bundleId,
     kTISPropertyInputSourceID: "com.nrime.inputmethod.app.en"
@@ -50,10 +44,10 @@ if let selectSources = TISCreateInputSourceList(selectConditions, false)?.takeRe
    let nrime = selectSources.first {
     TISSelectInputSource(nrime)
 }
-' 2>&1 || true
+' 2>/dev/null || true
 
-# 5. Register in AppleEnabledInputSources for reboot persistence
-swift -e '
+    # 5. Register in AppleEnabledInputSources for reboot persistence
+    swift -e '
 import Foundation
 
 let domain = "com.apple.HIToolbox"
@@ -64,7 +58,6 @@ let keepMode = "com.nrime.inputmethod.app.en"
 guard var enabled = UserDefaults.standard.persistentDomain(forName: domain) else { exit(0) }
 var sources = (enabled[key] as? [[String: Any]]) ?? []
 
-// Remove stale entries
 sources.removeAll { dict in
     guard (dict["Bundle ID"] as? String) == bundleId,
           let mode = dict["Input Mode"] as? String,
@@ -72,7 +65,6 @@ sources.removeAll { dict in
     return true
 }
 
-// Add .en if missing
 let hasEn = sources.contains { dict in
     (dict["Bundle ID"] as? String) == bundleId &&
     (dict["Input Mode"] as? String) == keepMode
@@ -88,6 +80,7 @@ if !hasEn {
 enabled[key] = sources
 UserDefaults.standard.setPersistentDomain(enabled, forName: domain)
 UserDefaults.standard.synchronize()
-' 2>&1 || true
+' 2>/dev/null || true
+fi
 
 exit 0
