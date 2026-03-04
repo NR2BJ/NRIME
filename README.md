@@ -8,13 +8,22 @@ macOS용 올인원 입력기. 한국어, 영어, 일본어를 **하나의 입력
 
 ## 설치
 
-### 요구 사항
+### PKG 설치 (권장)
 
+[Releases](https://github.com/NR2BJ/NRIME/releases) 페이지에서 최신 `.pkg` 파일을 다운로드하여 더블클릭으로 설치합니다.
+
+설치 후 NRIME이 메뉴바에 나타납니다.
+나타나지 않으면 로그아웃/로그인 후 **시스템 설정 → 키보드 → 입력 소스 → 편집 → +** 에서 NRIME을 추가하세요.
+
+### 소스 빌드 설치
+
+<details>
+<summary>개발자용</summary>
+
+**요구 사항:**
 - macOS 13.0 (Ventura) 이상
 - Xcode 15+
 - [xcodegen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
-
-### 빌드 및 설치
 
 ```bash
 git clone https://github.com/NR2BJ/NRIME.git
@@ -22,8 +31,13 @@ cd NRIME
 bash Tools/install.sh
 ```
 
-설치 후 NRIME이 메뉴바에 나타납니다.
-나타나지 않으면 로그아웃/로그인 후 **시스템 설정 → 키보드 → 입력 소스 → 편집 → +** 에서 NRIME을 추가하세요.
+PKG 빌드:
+```bash
+bash Tools/build_pkg.sh
+# 결과: build/NRIME-<version>.pkg
+```
+
+</details>
 
 ### 제거
 
