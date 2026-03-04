@@ -14,7 +14,7 @@ struct AboutTab: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
-            Text("v1.0.0")
+            Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
                 .font(.body.monospacedDigit())
                 .foregroundStyle(.tertiary)
 

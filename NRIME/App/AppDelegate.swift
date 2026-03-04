@@ -72,15 +72,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
+        // If NRIMESettings is already running, just activate it
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.nrime.settings")
+        if let app = running.first {
+            app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            return
+        }
+
         let bundlePath = Bundle.main.bundlePath
         let appDir = (bundlePath as NSString).deletingLastPathComponent
         let companionPath = (appDir as NSString).appendingPathComponent("NRIMESettings.app")
 
-        if FileManager.default.fileExists(atPath: companionPath) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: companionPath))
-        } else {
+        guard FileManager.default.fileExists(atPath: companionPath) else {
             NSLog("NRIME: Companion app not found at \(companionPath)")
+            return
         }
+
+        let url = URL(fileURLWithPath: companionPath)
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config)
     }
 
     @objc private func restartApp() {
