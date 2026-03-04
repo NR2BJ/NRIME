@@ -72,13 +72,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        // If NRIMESettings is already running, just activate it
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.nrime.settings")
-        if let app = running.first {
-            app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-            return
-        }
-
         let bundlePath = Bundle.main.bundlePath
         let appDir = (bundlePath as NSString).deletingLastPathComponent
         let companionPath = (appDir as NSString).appendingPathComponent("NRIMESettings.app")
@@ -88,10 +81,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let url = URL(fileURLWithPath: companionPath)
-        let config = NSWorkspace.OpenConfiguration()
-        config.activates = true
-        NSWorkspace.shared.openApplication(at: url, configuration: config)
+        // Use /usr/bin/open — most reliable way to launch and activate
+        // from a background IMKit app.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = ["-a", companionPath]
+        try? task.run()
     }
 
     @objc private func restartApp() {
