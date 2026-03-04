@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>NRIME</title>
+    <welcome language="en" mime-type="text/plain"><![CDATA[NRIME — All-in-one input method for Korean, English, and Japanese.
+
+This installer will place NRIME in /Library/Input Methods and activate it as your input source.
+
+After installation, NRIME will appear in your menu bar.]]></welcome>
+    <welcome language="ko" mime-type="text/plain"><![CDATA[NRIME — 한국어, 영어, 일본어 올인원 입력기.
+
+이 설치 프로그램은 NRIME을 /Library/Input Methods에 설치하고 입력 소스로 활성화합니다.
+
+설치 후 NRIME이 메뉴바에 나타납니다.]]></welcome>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <os-version min="13.0"/>
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.nrime.inputmethod.pkg"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.nrime.inputmethod.pkg" visible="false">
+        <pkg-ref id="com.nrime.inputmethod.pkg"/>
+    </choice>
+    <pkg-ref id="com.nrime.inputmethod.pkg" version="1.0.1" onConclusion="none">NRIME-component.pkg</pkg-ref>
+</installer-gui-script>

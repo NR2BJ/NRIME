@@ -27,19 +27,41 @@ bash Tools/install.sh
 
 ### 제거
 
+언인스톨 스크립트로 모든 흔적을 완전히 제거합니다:
+
 ```bash
-# 입력기 및 설정 앱 삭제
-rm -rf ~/Library/Input\ Methods/NRIME.app
-rm -rf ~/Library/Input\ Methods/NRIMESettings.app
-
-# Mozc 엔진 데이터 삭제 (변환 학습, 사용자 사전 등)
-rm -rf ~/Library/Application\ Support/Mozc
-
-# NRIME 설정 삭제
-defaults delete group.com.nrime.inputmethod 2>/dev/null
+bash Tools/uninstall.sh
 ```
 
 로그아웃/로그인하면 완전히 제거됩니다.
+
+<details>
+<summary>수동 제거</summary>
+
+```bash
+# 프로세스 종료
+killall NRIME NRIMESettings mozc_server 2>/dev/null
+
+# 앱 삭제
+rm -rf ~/Library/Input\ Methods/NRIME.app
+rm -rf ~/Library/Input\ Methods/NRIMESettings.app
+sudo rm -rf /Library/Input\ Methods/NRIME.app       # PKG 설치한 경우
+sudo rm -rf /Library/Input\ Methods/NRIMESettings.app
+
+# 설정 삭제
+defaults delete com.nrime.inputmethod.app 2>/dev/null
+defaults delete com.nrime.settings 2>/dev/null
+defaults delete group.com.nrime.inputmethod 2>/dev/null
+
+# Mozc 데이터 삭제 (사용자 사전 포함)
+rm -rf ~/Library/Application\ Support/Mozc
+
+# 캐시 삭제
+rm -rf ~/Library/Caches/com.nrime.inputmethod.app
+rm -rf ~/Library/Caches/com.nrime.settings
+```
+
+</details>
 
 ## 기본 단축키
 

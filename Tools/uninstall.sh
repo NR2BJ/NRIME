@@ -1,47 +1,82 @@
 #!/bin/bash
-# NRIME Complete Uninstall Script
-# Removes ALL traces of NRIME from the system with zero leftovers
+# NRIME Complete Uninstaller
+# Removes ALL traces of NRIME from the system
 
 set -e
 
 echo "=== NRIME Complete Uninstaller ==="
 echo ""
 
-# 1. Kill running process
-echo "[1/6] Stopping NRIME process..."
+# 1. Kill running processes
+echo "[1/7] Stopping processes..."
 killall NRIME 2>/dev/null || true
+killall NRIMESettings 2>/dev/null || true
+killall mozc_server 2>/dev/null || true
 sleep 1
 
-# 2. Remove from Input Methods (both user and system level)
-echo "[2/6] Removing NRIME.app..."
+# 2. Remove apps (user-level and system-level)
+echo "[2/7] Removing NRIME.app and NRIMESettings.app..."
 rm -rf "$HOME/Library/Input Methods/NRIME.app"
+rm -rf "$HOME/Library/Input Methods/NRIMESettings.app"
 sudo rm -rf "/Library/Input Methods/NRIME.app" 2>/dev/null || true
+sudo rm -rf "/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
 
-# 3. Remove UserDefaults / preferences
-echo "[3/6] Removing preferences..."
+# 3. Remove all preferences and UserDefaults
+echo "[3/7] Removing preferences..."
 defaults delete com.nrime.inputmethod.app 2>/dev/null || true
+defaults delete com.nrime.settings 2>/dev/null || true
+defaults delete group.com.nrime.inputmethod 2>/dev/null || true
 rm -f "$HOME/Library/Preferences/com.nrime.inputmethod.app.plist"
 rm -f "$HOME/Library/Preferences/com.nrime.inputmethod.app.plist.lockfile"
+rm -f "$HOME/Library/Preferences/com.nrime.settings.plist"
+rm -f "$HOME/Library/Preferences/com.nrime.settings.plist.lockfile"
+rm -f "$HOME/Library/Preferences/group.com.nrime.inputmethod.plist"
+rm -f "$HOME/Library/Preferences/group.com.nrime.inputmethod.plist.lockfile"
 
-# 4. Remove App Group shared container (if any)
+# 4. Remove Mozc engine data (user dictionary, conversion learning)
+echo "[4/7] Removing Mozc data..."
+rm -rf "$HOME/Library/Application Support/Mozc"
+
+# 5. Remove caches and containers
+echo "[5/7] Removing caches..."
+rm -rf "$HOME/Library/Caches/com.nrime.inputmethod.app"
+rm -rf "$HOME/Library/Caches/com.nrime.settings"
 rm -rf "$HOME/Library/Group Containers/group.com.nrime" 2>/dev/null || true
 
-# 5. Remove cached/derived data
-echo "[4/6] Removing caches and derived data..."
-rm -rf "$HOME/Library/Caches/com.nrime.inputmethod.app"
-# Remove from LaunchServices database
-/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -u "$HOME/Library/Input Methods/NRIME.app" 2>/dev/null || true
-/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -u "/Library/Input Methods/NRIME.app" 2>/dev/null || true
+# 6. Unregister from LaunchServices
+echo "[6/7] Unregistering from LaunchServices..."
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
+"$LSREGISTER" -u "$HOME/Library/Input Methods/NRIME.app" 2>/dev/null || true
+"$LSREGISTER" -u "$HOME/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+"$LSREGISTER" -u "/Library/Input Methods/NRIME.app" 2>/dev/null || true
+"$LSREGISTER" -u "/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
 
-# 6. Remove input source registration from TIS
-echo "[5/6] Deregistering input source..."
-# The input source deregisters automatically when the .app is removed,
-# but we force a cache refresh
+# 7. Remove NRIME from AppleEnabledInputSources
+echo "[7/7] Removing input source registration..."
+swift -e '
+import Foundation
+
+let domain = "com.apple.HIToolbox"
+let key = "AppleEnabledInputSources"
+
+guard var enabled = UserDefaults.standard.persistentDomain(forName: domain) else { exit(0) }
+guard var sources = enabled[key] as? [[String: Any]] else { exit(0) }
+
+let before = sources.count
+sources.removeAll { dict in
+    (dict["Bundle ID"] as? String) == "com.nrime.inputmethod.app"
+}
+
+if sources.count != before {
+    enabled[key] = sources
+    UserDefaults.standard.setPersistentDomain(enabled, forName: domain)
+    UserDefaults.standard.synchronize()
+}
+' 2>&1 || true
+
+# Refresh menu bar
 killall SystemUIServer 2>/dev/null || true
 
-echo "[6/6] Cleanup complete!"
 echo ""
-echo "NRIME has been completely removed from your system."
-echo "You may need to log out and log back in for the menu bar to update."
-echo ""
-echo "No hidden files, caches, or registry entries remain."
+echo "=== NRIME has been completely removed ==="
+echo "Log out and log back in for the menu bar to fully update."
