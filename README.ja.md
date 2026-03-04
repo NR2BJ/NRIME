@@ -51,33 +51,11 @@ bash Tools/uninstall.sh
 
 ログアウト/ログインで完全に削除されます。
 
-<details>
-<summary>手動アンインストール</summary>
+スクリプトなしでターミナルから直接削除する場合:
 
 ```bash
-# プロセス終了
-killall NRIME NRIMESettings mozc_server 2>/dev/null
-
-# アプリ削除
-rm -rf ~/Library/Input\ Methods/NRIME.app
-rm -rf ~/Library/Input\ Methods/NRIMESettings.app
-sudo rm -rf /Library/Input\ Methods/NRIME.app       # PKGでインストールした場合
-sudo rm -rf /Library/Input\ Methods/NRIMESettings.app
-
-# 設定削除
-defaults delete com.nrime.inputmethod.app 2>/dev/null
-defaults delete com.nrime.settings 2>/dev/null
-defaults delete group.com.nrime.inputmethod 2>/dev/null
-
-# Mozcデータ削除（ユーザー辞書を含む）
-rm -rf ~/Library/Application\ Support/Mozc
-
-# キャッシュ削除
-rm -rf ~/Library/Caches/com.nrime.inputmethod.app
-rm -rf ~/Library/Caches/com.nrime.settings
+killall NRIME NRIMESettings mozc_server 2>/dev/null; sudo rm -rf ~/Library/Input\ Methods/NRIME.app ~/Library/Input\ Methods/NRIMESettings.app /Library/Input\ Methods/NRIME.app /Library/Input\ Methods/NRIMESettings.app; defaults delete com.nrime.inputmethod.app 2>/dev/null; defaults delete com.nrime.settings 2>/dev/null; defaults delete group.com.nrime.inputmethod 2>/dev/null; rm -rf ~/Library/Application\ Support/Mozc ~/Library/Caches/com.nrime.inputmethod.app ~/Library/Caches/com.nrime.settings
 ```
-
-</details>
 
 ## デフォルトショートカット
 

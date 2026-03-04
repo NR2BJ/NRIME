@@ -51,33 +51,11 @@ bash Tools/uninstall.sh
 
 Log out/in to complete the removal.
 
-<details>
-<summary>Manual uninstall</summary>
+To uninstall directly from Terminal without the script:
 
 ```bash
-# Kill processes
-killall NRIME NRIMESettings mozc_server 2>/dev/null
-
-# Remove apps
-rm -rf ~/Library/Input\ Methods/NRIME.app
-rm -rf ~/Library/Input\ Methods/NRIMESettings.app
-sudo rm -rf /Library/Input\ Methods/NRIME.app       # If installed via PKG
-sudo rm -rf /Library/Input\ Methods/NRIMESettings.app
-
-# Remove preferences
-defaults delete com.nrime.inputmethod.app 2>/dev/null
-defaults delete com.nrime.settings 2>/dev/null
-defaults delete group.com.nrime.inputmethod 2>/dev/null
-
-# Remove Mozc data (includes user dictionary)
-rm -rf ~/Library/Application\ Support/Mozc
-
-# Remove caches
-rm -rf ~/Library/Caches/com.nrime.inputmethod.app
-rm -rf ~/Library/Caches/com.nrime.settings
+killall NRIME NRIMESettings mozc_server 2>/dev/null; sudo rm -rf ~/Library/Input\ Methods/NRIME.app ~/Library/Input\ Methods/NRIMESettings.app /Library/Input\ Methods/NRIME.app /Library/Input\ Methods/NRIMESettings.app; defaults delete com.nrime.inputmethod.app 2>/dev/null; defaults delete com.nrime.settings 2>/dev/null; defaults delete group.com.nrime.inputmethod 2>/dev/null; rm -rf ~/Library/Application\ Support/Mozc ~/Library/Caches/com.nrime.inputmethod.app ~/Library/Caches/com.nrime.settings
 ```
-
-</details>
 
 ## Default Shortcuts
 
