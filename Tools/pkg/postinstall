@@ -6,6 +6,7 @@ INSTALL_DIR="/Library/Input Methods"
 APP_PATH="$INSTALL_DIR/NRIME.app"
 SETTINGS_PATH="$INSTALL_DIR/NRIMESettings.app"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
+PLISTBUDDY="/usr/libexec/PlistBuddy"
 
 # 1. Kill existing processes
 killall NRIME 2>/dev/null || true
@@ -13,16 +14,56 @@ killall NRIMESettings 2>/dev/null || true
 killall mozc_server 2>/dev/null || true
 sleep 1
 
-# 2. Set executable permissions
+# 2. Remove quarantine attributes (critical for unsigned apps)
+xattr -cr "$APP_PATH" 2>/dev/null || true
+xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
+
+# 3. Set executable permissions
 chmod +x "$APP_PATH/Contents/MacOS/NRIME" 2>/dev/null || true
 chmod +x "$APP_PATH/Contents/Resources/mozc_server" 2>/dev/null || true
 chmod +x "$SETTINGS_PATH/Contents/MacOS/NRIMESettings" 2>/dev/null || true
 
-# 3. Register with LaunchServices
+# 4. Register with LaunchServices
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
 
-# 4. Enable and select NRIME input source (requires swift CLI)
+# 5. Get console user for per-user input source registration
+CONSOLE_USER=$(/usr/bin/stat -f%Su /dev/console 2>/dev/null)
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = "root" ]; then
+    CONSOLE_USER=$(/usr/bin/who 2>/dev/null | grep console | head -1 | awk '{print $1}')
+fi
+
+# 6. Register NRIME in AppleEnabledInputSources (works without swift)
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+    USER_HOME=$(/usr/bin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+    USER_PLIST="$USER_HOME/Library/Preferences/com.apple.HIToolbox.plist"
+
+    if [ -f "$USER_PLIST" ]; then
+        # Check if NRIME.en is already registered
+        FOUND=false
+        INDEX=0
+        while true; do
+            BID=$("$PLISTBUDDY" -c "Print :AppleEnabledInputSources:${INDEX}:Bundle\ ID" "$USER_PLIST" 2>/dev/null)
+            [ $? -ne 0 ] && break
+            MODE=$("$PLISTBUDDY" -c "Print :AppleEnabledInputSources:${INDEX}:Input\ Mode" "$USER_PLIST" 2>/dev/null)
+            if [ "$BID" = "com.nrime.inputmethod.app" ] && [ "$MODE" = "com.nrime.inputmethod.app.en" ]; then
+                FOUND=true
+                break
+            fi
+            INDEX=$((INDEX + 1))
+        done
+
+        # Add NRIME.en entry if not found
+        if [ "$FOUND" = false ]; then
+            "$PLISTBUDDY" -c "Add :AppleEnabledInputSources:${INDEX} dict" "$USER_PLIST" 2>/dev/null || true
+            "$PLISTBUDDY" -c "Add :AppleEnabledInputSources:${INDEX}:Bundle\ ID string com.nrime.inputmethod.app" "$USER_PLIST" 2>/dev/null || true
+            "$PLISTBUDDY" -c "Add :AppleEnabledInputSources:${INDEX}:Input\ Mode string com.nrime.inputmethod.app.en" "$USER_PLIST" 2>/dev/null || true
+            "$PLISTBUDDY" -c "Add :AppleEnabledInputSources:${INDEX}:InputSourceKind string Input\ Mode" "$USER_PLIST" 2>/dev/null || true
+        fi
+    fi
+fi
+
+# 7. Enable and select via TIS API (only if swift is available)
 if command -v swift >/dev/null 2>&1; then
     swift -e '
 import Carbon
@@ -44,42 +85,6 @@ if let selectSources = TISCreateInputSourceList(selectConditions, false)?.takeRe
    let nrime = selectSources.first {
     TISSelectInputSource(nrime)
 }
-' 2>/dev/null || true
-
-    # 5. Register in AppleEnabledInputSources for reboot persistence
-    swift -e '
-import Foundation
-
-let domain = "com.apple.HIToolbox"
-let key = "AppleEnabledInputSources"
-let bundleId = "com.nrime.inputmethod.app"
-let keepMode = "com.nrime.inputmethod.app.en"
-
-guard var enabled = UserDefaults.standard.persistentDomain(forName: domain) else { exit(0) }
-var sources = (enabled[key] as? [[String: Any]]) ?? []
-
-sources.removeAll { dict in
-    guard (dict["Bundle ID"] as? String) == bundleId,
-          let mode = dict["Input Mode"] as? String,
-          mode != keepMode else { return false }
-    return true
-}
-
-let hasEn = sources.contains { dict in
-    (dict["Bundle ID"] as? String) == bundleId &&
-    (dict["Input Mode"] as? String) == keepMode
-}
-if !hasEn {
-    sources.append([
-        "Bundle ID": bundleId,
-        "Input Mode": keepMode,
-        "InputSourceKind": "Input Mode"
-    ])
-}
-
-enabled[key] = sources
-UserDefaults.standard.setPersistentDomain(enabled, forName: domain)
-UserDefaults.standard.synchronize()
 ' 2>/dev/null || true
 fi
 
