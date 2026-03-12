@@ -10,9 +10,7 @@
     </array>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/open</string>
-        <string>-gnj</string>
-        <string>/Library/Input Methods/NRIMERestoreHelper.app</string>
+        <string>/Library/Input Methods/NRIMERestoreHelper.app/Contents/MacOS/NRIMERestoreHelper</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

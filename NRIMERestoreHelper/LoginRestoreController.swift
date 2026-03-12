@@ -21,6 +21,8 @@ final class LoginRestoreController {
             return
         }
 
+        attemptRestore(after: 0)
+
         for delay in Constants.startupRecoveryDelays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.attemptRestore(after: delay)

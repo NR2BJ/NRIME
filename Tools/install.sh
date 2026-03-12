@@ -80,9 +80,7 @@ cat > "$LAUNCH_AGENT_PATH" <<EOF
     </array>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/open</string>
-        <string>-gnj</string>
-        <string>$INSTALL_DIR/$RESTORE_HELPER_APP</string>
+        <string>$INSTALL_DIR/$RESTORE_HELPER_APP/Contents/MacOS/NRIMERestoreHelper</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
