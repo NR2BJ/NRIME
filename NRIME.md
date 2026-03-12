@@ -332,7 +332,7 @@ SwiftUI 기반 Companion App. 입력기와 별도 프로세스.
 | General | 4개 단축키 레코더, 탭 임계값 슬라이더, 인라인 표시 토글 |
 | Japanese | F6-F10 키 설정, Caps Lock/Shift 동작, 구두점 스타일, 기호 토글 |
 | Per-App | 앱별 모드 기억 ON/OFF, 화이트리스트/블랙리스트, 앱 목록 관리 |
-| About | 버전 정보 (v1.0.2), GitHub 링크 |
+| About | 버전 정보 (v1.0.3), GitHub 링크 |
 
 ---
 

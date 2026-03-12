@@ -4,7 +4,7 @@ final class StateManager {
     static let shared = StateManager()
 
     private(set) var currentMode: InputMode = .english
-    private var previousNonEnglishMode: InputMode = .korean
+    private var previousNonEnglishMode: InputMode
     private var currentAppBundleId: String?
 
     /// Callback invoked when mode changes. Set by NRIMEInputController.
@@ -13,7 +13,9 @@ final class StateManager {
     /// Callback for updating the menu bar status icon. Set by AppDelegate.
     var onStatusIconUpdate: ((InputMode) -> Void)?
 
-    private init() {}
+    private init() {
+        previousNonEnglishMode = Settings.shared.lastNonEnglishMode
+    }
 
     /// Toggle between English and the previous non-English mode.
     func toggleEnglish() {
@@ -28,11 +30,14 @@ final class StateManager {
     func switchTo(_ mode: InputMode) {
         guard mode != currentMode else { return }
 
-        if currentMode != .english {
-            previousNonEnglishMode = currentMode
+        if mode == .english, currentMode != .english {
+            rememberNonEnglishMode(currentMode)
         }
 
         currentMode = mode
+        if mode != .english {
+            rememberNonEnglishMode(mode)
+        }
         NSLog("NRIME: Mode changed to \(mode.label)")
         DeveloperLogger.shared.log("StateManager", "Mode changed", metadata: [
             "app": currentAppBundleId ?? "unknown",
@@ -58,7 +63,7 @@ final class StateManager {
             if mode != currentMode {
                 currentMode = mode
                 if currentMode != .english {
-                    previousNonEnglishMode = currentMode
+                    rememberNonEnglishMode(currentMode)
                 }
                 NSLog("NRIME: Restored mode \(mode.label) for app \(bundleId)")
                 DeveloperLogger.shared.log("StateManager", "Restored per-app mode", metadata: [
@@ -94,5 +99,15 @@ final class StateManager {
         default:
             return false
         }
+    }
+
+    private func rememberNonEnglishMode(_ mode: InputMode) {
+        guard mode != .english else { return }
+        previousNonEnglishMode = mode
+        Settings.shared.lastNonEnglishMode = mode
+    }
+
+    func reloadPersistedModePreferences() {
+        previousNonEnglishMode = Settings.shared.lastNonEnglishMode
     }
 }

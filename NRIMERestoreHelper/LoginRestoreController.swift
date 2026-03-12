@@ -1,19 +1,23 @@
 import AppKit
+import Carbon
 import Foundation
 
 final class LoginRestoreController {
     private enum Constants {
         static let suiteName = "group.com.nrime.inputmethod"
         static let preventABCSwitchKey = "preventABCSwitch"
-        static let startupRecoveryDelays: [TimeInterval] = [0.5, 2.0, 5.0]
     }
 
     private let defaults = UserDefaults(suiteName: Constants.suiteName) ?? .standard
+    private var scheduledAttempts: [DispatchWorkItem] = []
+    private var hasStartedMonitoring = false
 
     func start() {
         let shouldRestore = defaults.bool(forKey: Constants.preventABCSwitchKey)
         RestoreHelperLogger.log("Login restore helper started", metadata: [
-            "preventABCSwitch": String(shouldRestore)
+            "preventABCSwitch": String(shouldRestore),
+            "pollInterval": Self.delayString(LoginRestorePolicy.pollInterval),
+            "stabilizationDuration": Self.delayString(LoginRestorePolicy.stabilizationDuration)
         ])
 
         guard shouldRestore else {
@@ -21,63 +25,144 @@ final class LoginRestoreController {
             return
         }
 
-        attemptRestore(after: 0)
+        startMonitoring()
 
-        for delay in Constants.startupRecoveryDelays {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.attemptRestore(after: delay)
-            }
+        for delay in LoginRestorePolicy.attemptDelays() {
+            scheduleAttempt(after: delay, trigger: "scheduled")
         }
 
-        terminate(after: (Constants.startupRecoveryDelays.max() ?? 0) + 1.0)
+        terminate(after: LoginRestorePolicy.stabilizationDuration + LoginRestorePolicy.terminationGracePeriod)
     }
 
-    private func attemptRestore(after delay: TimeInterval) {
+    private func scheduleAttempt(after delay: TimeInterval, trigger: String, bundleID: String? = nil) {
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.attemptRestore(after: delay, trigger: trigger, bundleID: bundleID)
+        }
+        scheduledAttempts.append(workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func startMonitoring() {
+        guard !hasStartedMonitoring else { return }
+        hasStartedMonitoring = true
+
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(inputSourceChanged(_:)),
+            name: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil
+        )
+
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(applicationLaunched(_:)),
+            name: NSWorkspace.didLaunchApplicationNotification,
+            object: nil
+        )
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(applicationActivated(_:)),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+    }
+
+    @objc private func inputSourceChanged(_ notification: Notification) {
+        attemptRestore(after: 0, trigger: "input_source_changed")
+    }
+
+    @objc private func applicationLaunched(_ notification: Notification) {
+        let bundleID = bundleID(from: notification)
+        scheduleAttempt(after: 0.1, trigger: "application_launched", bundleID: bundleID)
+    }
+
+    @objc private func applicationActivated(_ notification: Notification) {
+        let bundleID = bundleID(from: notification)
+        scheduleAttempt(after: 0.1, trigger: "application_activated", bundleID: bundleID)
+    }
+
+    private func bundleID(from notification: Notification) -> String? {
+        (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
+    }
+
+    private func attemptRestore(after delay: TimeInterval, trigger: String, bundleID: String? = nil) {
         let currentSourceID = InputSourceSelector.currentInputSourceID() ?? "unknown"
         guard InputSourceSelector.currentSourceIsNonNRIME() else {
-            RestoreHelperLogger.log("Login restore skipped", metadata: [
-                "delay": Self.delayString(delay),
-                "currentSourceID": currentSourceID
-            ])
+            if trigger != "scheduled" || delay == 0 || delay == LoginRestorePolicy.stabilizationDuration {
+                var metadata = [
+                    "delay": Self.delayString(delay),
+                    "currentSourceID": currentSourceID,
+                    "trigger": trigger
+                ]
+                if let bundleID {
+                    metadata["bundleID"] = bundleID
+                }
+                RestoreHelperLogger.log("Login restore skipped", metadata: metadata)
+            }
             return
         }
 
         let result = InputSourceSelector.selectVisibleNRIME()
         switch result {
         case let .success(targetSourceID):
-            RestoreHelperLogger.log("Login restore succeeded", metadata: [
+            var metadata = [
                 "delay": Self.delayString(delay),
                 "currentSourceID": currentSourceID,
-                "targetSourceID": targetSourceID
-            ])
+                "targetSourceID": targetSourceID,
+                "trigger": trigger
+            ]
+            if let bundleID {
+                metadata["bundleID"] = bundleID
+            }
+            RestoreHelperLogger.log("Login restore succeeded", metadata: metadata)
         case let .inputSourceNotFound(targetSourceID):
-            RestoreHelperLogger.log("Login restore failed", metadata: [
+            var metadata = [
                 "delay": Self.delayString(delay),
                 "currentSourceID": currentSourceID,
                 "reason": "input_source_not_found",
-                "targetSourceID": targetSourceID
-            ])
+                "targetSourceID": targetSourceID,
+                "trigger": trigger
+            ]
+            if let bundleID {
+                metadata["bundleID"] = bundleID
+            }
+            RestoreHelperLogger.log("Login restore failed", metadata: metadata)
         case let .enableFailed(targetSourceID, status):
-            RestoreHelperLogger.log("Login restore failed", metadata: [
+            var metadata = [
                 "delay": Self.delayString(delay),
                 "currentSourceID": currentSourceID,
                 "reason": "enable_failed",
                 "status": String(status),
-                "targetSourceID": targetSourceID
-            ])
+                "targetSourceID": targetSourceID,
+                "trigger": trigger
+            ]
+            if let bundleID {
+                metadata["bundleID"] = bundleID
+            }
+            RestoreHelperLogger.log("Login restore failed", metadata: metadata)
         case let .selectFailed(targetSourceID, status):
-            RestoreHelperLogger.log("Login restore failed", metadata: [
+            var metadata = [
                 "delay": Self.delayString(delay),
                 "currentSourceID": currentSourceID,
                 "reason": "select_failed",
                 "status": String(status),
-                "targetSourceID": targetSourceID
-            ])
+                "targetSourceID": targetSourceID,
+                "trigger": trigger
+            ]
+            if let bundleID {
+                metadata["bundleID"] = bundleID
+            }
+            RestoreHelperLogger.log("Login restore failed", metadata: metadata)
         }
     }
 
     private func terminate(after delay: TimeInterval) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.scheduledAttempts.forEach { $0.cancel() }
+            self.scheduledAttempts.removeAll()
+            DistributedNotificationCenter.default().removeObserver(self)
+            NSWorkspace.shared.notificationCenter.removeObserver(self)
             NSApp.terminate(nil)
         }
     }

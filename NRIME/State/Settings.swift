@@ -146,6 +146,21 @@ final class Settings {
         set { defaults.set(newValue, forKey: "developerModeEnabled") }
     }
 
+    var lastNonEnglishMode: InputMode {
+        get {
+            guard let rawValue = defaults.string(forKey: "lastNonEnglishMode"),
+                  let mode = InputMode(rawValue: rawValue),
+                  mode != .english else {
+                return .korean
+            }
+            return mode
+        }
+        set {
+            guard newValue != .english else { return }
+            defaults.set(newValue.rawValue, forKey: "lastNonEnglishMode")
+        }
+    }
+
     // MARK: - Inline Indicator
 
     var inlineIndicatorEnabled: Bool {

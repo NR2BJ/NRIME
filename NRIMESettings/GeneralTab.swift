@@ -53,7 +53,7 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("Prevent switching to ABC", isOn: $store.preventABCSwitch)
-                    Text("Automatically switch back to NRIME when another input source is selected, try to restore NRIME after login or wake, and use a lightweight login helper so the restore still works before the input method has launched.")
+                    Text("Automatically switch back to NRIME when another input source is selected, keep trying during the first ~15 seconds after login or wake, and rely on NRIME's internal EN/KO/JA shortcuts afterward so system input-source switching is rarely needed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
