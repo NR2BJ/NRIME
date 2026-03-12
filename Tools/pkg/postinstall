@@ -4,20 +4,36 @@
 INSTALL_DIR="/Library/Input Methods"
 APP_PATH="$INSTALL_DIR/NRIME.app"
 SETTINGS_PATH="$INSTALL_DIR/NRIMESettings.app"
+RESTORE_HELPER_PATH="$INSTALL_DIR/NRIMERestoreHelper.app"
+LAUNCH_AGENT_PATH="/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
 # Kill existing processes
 killall NRIME 2>/dev/null || true
 killall NRIMESettings 2>/dev/null || true
+killall NRIMERestoreHelper 2>/dev/null || true
 killall mozc_server 2>/dev/null || true
 sleep 1
 
 # Remove quarantine
 xattr -cr "$APP_PATH" 2>/dev/null || true
 xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
+xattr -cr "$RESTORE_HELPER_PATH" 2>/dev/null || true
 
 # Register with LaunchServices
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
+"$LSREGISTER" "$RESTORE_HELPER_PATH" 2>/dev/null || true
+
+# Reload login restore agent for the current console user so the next login
+# and immediate post-install session both use the latest helper.
+CONSOLE_USER="$(stat -f "%Su" /dev/console 2>/dev/null || true)"
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -f "$LAUNCH_AGENT_PATH" ]; then
+    CONSOLE_UID="$(id -u "$CONSOLE_USER" 2>/dev/null || true)"
+    if [ -n "$CONSOLE_UID" ]; then
+        launchctl bootout "gui/$CONSOLE_UID" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
+        launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
+    fi
+fi
 
 exit 0

@@ -11,15 +11,18 @@ echo ""
 echo "[1/7] Stopping processes..."
 killall NRIME 2>/dev/null || true
 killall NRIMESettings 2>/dev/null || true
+killall NRIMERestoreHelper 2>/dev/null || true
 killall mozc_server 2>/dev/null || true
 sleep 1
 
 # 2. Remove apps (user-level and system-level)
-echo "[2/7] Removing NRIME.app and NRIMESettings.app..."
+echo "[2/7] Removing NRIME apps..."
 rm -rf "$HOME/Library/Input Methods/NRIME.app"
 rm -rf "$HOME/Library/Input Methods/NRIMESettings.app"
+rm -rf "$HOME/Library/Input Methods/NRIMERestoreHelper.app"
 sudo rm -rf "/Library/Input Methods/NRIME.app" 2>/dev/null || true
 sudo rm -rf "/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+sudo rm -rf "/Library/Input Methods/NRIMERestoreHelper.app" 2>/dev/null || true
 
 # 3. Remove all preferences and UserDefaults
 echo "[3/7] Removing preferences..."
@@ -48,8 +51,18 @@ echo "[6/7] Unregistering from LaunchServices..."
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 "$LSREGISTER" -u "$HOME/Library/Input Methods/NRIME.app" 2>/dev/null || true
 "$LSREGISTER" -u "$HOME/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+"$LSREGISTER" -u "$HOME/Library/Input Methods/NRIMERestoreHelper.app" 2>/dev/null || true
 "$LSREGISTER" -u "/Library/Input Methods/NRIME.app" 2>/dev/null || true
 "$LSREGISTER" -u "/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+"$LSREGISTER" -u "/Library/Input Methods/NRIMERestoreHelper.app" 2>/dev/null || true
+
+LAUNCH_AGENT_LABEL="com.nrime.inputmethod.loginrestore"
+LAUNCH_AGENT_USER="$HOME/Library/LaunchAgents/$LAUNCH_AGENT_LABEL.plist"
+LAUNCH_AGENT_SYSTEM="/Library/LaunchAgents/$LAUNCH_AGENT_LABEL.plist"
+launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_USER" 2>/dev/null || true
+rm -f "$LAUNCH_AGENT_USER"
+sudo launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_SYSTEM" 2>/dev/null || true
+sudo rm -f "$LAUNCH_AGENT_SYSTEM"
 
 # 7. Remove NRIME from AppleEnabledInputSources
 echo "[7/7] Removing input source registration..."

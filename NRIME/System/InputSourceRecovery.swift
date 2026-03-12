@@ -3,8 +3,6 @@ import Cocoa
 
 final class InputSourceRecovery {
     static let shared = InputSourceRecovery()
-    static let bundleID = "com.nrime.inputmethod.app"
-    static let visibleInputSourceID = "com.nrime.inputmethod.app.en"
 
     private var consecutiveRecoveries = 0
     private let maxConsecutiveRecoveries = 3
@@ -178,14 +176,7 @@ final class InputSourceRecovery {
     }
 
     private func isCurrentSourceNonNRIME() -> Bool {
-        guard let currentSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
-            return false
-        }
-        guard let sourceIDPtr = TISGetInputSourceProperty(currentSource, kTISPropertyInputSourceID) else {
-            return false
-        }
-        let currentID = Unmanaged<CFString>.fromOpaque(sourceIDPtr).takeUnretainedValue() as String
-        return !currentID.hasPrefix(Self.bundleID)
+        InputSourceSelector.currentSourceIsNonNRIME()
     }
 
     private func recoverInputSource() {
@@ -212,51 +203,31 @@ final class InputSourceRecovery {
 
         lastRecoveryTime = now
 
-        let conditions = [
-            kTISPropertyInputSourceID: Self.visibleInputSourceID
-        ] as CFDictionary
-
-        guard let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource],
-              let nrimeSource = sources.first else {
+        switch InputSourceSelector.selectVisibleNRIME() {
+        case let .success(targetSourceID):
+            NSLog("NRIME: Input source recovered successfully")
+            DeveloperLogger.shared.log("InputSourceRecovery", "Recovered input source", metadata: [
+                "targetSourceID": targetSourceID
+            ])
+        case let .inputSourceNotFound(targetSourceID):
             NSLog("NRIME: InputSourceRecovery could not find NRIME input source")
             DeveloperLogger.shared.log("InputSourceRecovery", "Recovery failed", metadata: [
                 "reason": "input_source_not_found",
-                "targetSourceID": Self.visibleInputSourceID
+                "targetSourceID": targetSourceID
             ])
-            return
-        }
-
-        if let enabledPtr = TISGetInputSourceProperty(nrimeSource, kTISPropertyInputSourceIsEnabled) {
-            let enabled = Unmanaged<CFBoolean>.fromOpaque(enabledPtr).takeUnretainedValue()
-            if !CFBooleanGetValue(enabled) {
-                let enableStatus = TISEnableInputSource(nrimeSource)
-                if enableStatus != noErr {
-                    NSLog("NRIME: Failed to enable NRIME input source during recovery: \(enableStatus)")
-                    DeveloperLogger.shared.log("InputSourceRecovery", "Recovery failed", metadata: [
-                        "reason": "enable_failed",
-                        "status": String(enableStatus),
-                        "targetSourceID": Self.visibleInputSourceID
-                    ])
-                    return
-                }
-                DeveloperLogger.shared.log("InputSourceRecovery", "Enabled input source during recovery", metadata: [
-                    "targetSourceID": Self.visibleInputSourceID
-                ])
-            }
-        }
-
-        let status = TISSelectInputSource(nrimeSource)
-        if status == noErr {
-            NSLog("NRIME: Input source recovered successfully")
-            DeveloperLogger.shared.log("InputSourceRecovery", "Recovered input source", metadata: [
-                "targetSourceID": Self.visibleInputSourceID
+        case let .enableFailed(targetSourceID, status):
+            NSLog("NRIME: Failed to enable NRIME input source during recovery: \(status)")
+            DeveloperLogger.shared.log("InputSourceRecovery", "Recovery failed", metadata: [
+                "reason": "enable_failed",
+                "status": String(status),
+                "targetSourceID": targetSourceID
             ])
-        } else {
+        case let .selectFailed(targetSourceID, status):
             NSLog("NRIME: Input source recovery failed with status: \(status)")
             DeveloperLogger.shared.log("InputSourceRecovery", "Recovery failed", metadata: [
                 "reason": "select_failed",
                 "status": String(status),
-                "targetSourceID": Self.visibleInputSourceID
+                "targetSourceID": targetSourceID
             ])
         }
     }

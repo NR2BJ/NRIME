@@ -2,13 +2,17 @@
 # NRIME Install Script
 # Builds and installs NRIME input method to user-level Input Methods directory
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build/Debug"
 INSTALL_DIR="$HOME/Library/Input Methods"
 APP_NAME="NRIME.app"
+SETTINGS_APP="NRIMESettings.app"
+RESTORE_HELPER_APP="NRIMERestoreHelper.app"
+LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+LAUNCH_AGENT_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.loginrestore.plist"
 
 echo "=== NRIME Installer ==="
 
@@ -19,11 +23,15 @@ xcodegen generate
 
 echo "Building NRIME..."
 xcodebuild -project NRIME.xcodeproj -scheme NRIME -configuration Debug \
-    SYMROOT="$PROJECT_DIR/build" build 2>&1 | tail -3
+    SYMROOT="$PROJECT_DIR/build" build
 
 echo "Building NRIMESettings..."
 xcodebuild -project NRIME.xcodeproj -scheme NRIMESettings -configuration Debug \
-    SYMROOT="$PROJECT_DIR/build" build 2>&1 | tail -3
+    SYMROOT="$PROJECT_DIR/build" build
+
+echo "Building NRIMERestoreHelper..."
+xcodebuild -project NRIME.xcodeproj -scheme NRIMERestoreHelper -configuration Debug \
+    SYMROOT="$PROJECT_DIR/build" build
 
 # Install FIRST (before kill, so macOS restarts with the NEW binary)
 echo "Installing to $INSTALL_DIR..."
@@ -32,24 +40,57 @@ rm -rf "$INSTALL_DIR/$APP_NAME"
 cp -R "$BUILD_DIR/$APP_NAME" "$INSTALL_DIR/"
 
 # Install companion app next to input method
-SETTINGS_APP="NRIMESettings.app"
 rm -rf "$INSTALL_DIR/$SETTINGS_APP"
 cp -R "$BUILD_DIR/$SETTINGS_APP" "$INSTALL_DIR/"
+rm -rf "$INSTALL_DIR/$RESTORE_HELPER_APP"
+cp -R "$BUILD_DIR/$RESTORE_HELPER_APP" "$INSTALL_DIR/"
 
 # Ensure executables have execute permissions
 chmod +x "$INSTALL_DIR/$APP_NAME/Contents/MacOS/NRIME"
 chmod +x "$INSTALL_DIR/$SETTINGS_APP/Contents/MacOS/NRIMESettings"
+chmod +x "$INSTALL_DIR/$RESTORE_HELPER_APP/Contents/MacOS/NRIMERestoreHelper"
 chmod +x "$INSTALL_DIR/$APP_NAME/Contents/Resources/mozc_server" 2>/dev/null || true
 
 # Kill AFTER install — macOS auto-restarts the IME with the new binary
 echo "Restarting NRIME process..."
 killall NRIME 2>/dev/null || true
+killall NRIMESettings 2>/dev/null || true
+killall NRIMERestoreHelper 2>/dev/null || true
 sleep 1
 
 # Register with LaunchServices (ensures macOS knows about the new location)
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 echo "Registering with LaunchServices..."
 "$LSREGISTER" -f "$INSTALL_DIR/$APP_NAME"
+"$LSREGISTER" -f "$INSTALL_DIR/$SETTINGS_APP"
+"$LSREGISTER" -f "$INSTALL_DIR/$RESTORE_HELPER_APP"
+
+echo "Installing login restore LaunchAgent..."
+mkdir -p "$LAUNCH_AGENTS_DIR"
+cat > "$LAUNCH_AGENT_PATH" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nrime.inputmethod.loginrestore</string>
+    <key>LimitLoadToSessionType</key>
+    <array>
+        <string>Aqua</string>
+    </array>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/open</string>
+        <string>-gnj</string>
+        <string>$INSTALL_DIR/$RESTORE_HELPER_APP</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+EOF
+launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
 
 # Enable and select NRIME input source via TIS API
 echo "Activating NRIME input source..."
