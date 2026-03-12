@@ -1,16 +1,42 @@
+import Cocoa
 import XCTest
 @testable import NRIME
 
 final class ShortcutHandlerTests: XCTestCase {
 
     private var handler: ShortcutHandler!
+    private var originalToggleEnglish: Settings.ShortcutConfig!
+    private var originalSwitchKorean: Settings.ShortcutConfig!
+    private var originalSwitchJapanese: Settings.ShortcutConfig!
+    private var originalHanjaConvert: Settings.ShortcutConfig!
+    private var originalTapThreshold: TimeInterval = 0
 
     override func setUp() {
         super.setUp()
         handler = ShortcutHandler()
+        originalToggleEnglish = Settings.shared.shortcut(for: "toggleEnglish")
+        originalSwitchKorean = Settings.shared.shortcut(for: "switchKorean")
+        originalSwitchJapanese = Settings.shared.shortcut(for: "switchJapanese")
+        originalHanjaConvert = Settings.shared.shortcut(for: "hanjaConvert")
+        originalTapThreshold = Settings.shared.tapThreshold
         Settings.shared.tapThreshold = 0.2
+        Settings.shared.setShortcut(.defaultToggleEnglish, for: "toggleEnglish")
+        Settings.shared.setShortcut(.defaultSwitchKorean, for: "switchKorean")
+        Settings.shared.setShortcut(.defaultSwitchJapanese, for: "switchJapanese")
+        Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
         // Reset StateManager to known state
+        StateManager.shared.switchTo(.korean)
         StateManager.shared.switchTo(.english)
+    }
+
+    override func tearDown() {
+        Settings.shared.setShortcut(originalToggleEnglish, for: "toggleEnglish")
+        Settings.shared.setShortcut(originalSwitchKorean, for: "switchKorean")
+        Settings.shared.setShortcut(originalSwitchJapanese, for: "switchJapanese")
+        Settings.shared.setShortcut(originalHanjaConvert, for: "hanjaConvert")
+        Settings.shared.tapThreshold = originalTapThreshold
+        handler = nil
+        super.tearDown()
     }
 
     // MARK: - Note: NSEvent creation in tests
@@ -61,8 +87,102 @@ final class ShortcutHandlerTests: XCTestCase {
     }
 
     func testResetHandler() {
+        XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
+            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            modifiers: [.shift]
+        )))
         handler.reset()
-        // After reset, handler should not have any pending state
-        // This is primarily to ensure no crash
+        XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
+            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            modifiers: []
+        )))
+        XCTAssertEqual(StateManager.shared.currentMode, .english)
+    }
+
+    func testModifierOnlyTapTriggersToggleEnglish() {
+        XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
+            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            modifiers: [.shift]
+        )))
+        XCTAssertTrue(handler.handleEvent(flagsChangedEvent(
+            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            modifiers: []
+        )))
+        XCTAssertEqual(StateManager.shared.currentMode, .korean)
+    }
+
+    func testModifierComboSwitchesJapanese() {
+        XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
+            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            modifiers: [.shift]
+        )))
+        XCTAssertTrue(handler.handleEvent(keyEvent(
+            keyCode: 0x13,
+            characters: "2",
+            modifiers: [.shift]
+        )))
+        XCTAssertEqual(StateManager.shared.currentMode, .japanese)
+    }
+
+    func testModifierComboSuppressesTapActionOnRelease() {
+        XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
+            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            modifiers: [.shift]
+        )))
+        XCTAssertTrue(handler.handleEvent(keyEvent(
+            keyCode: 0x13,
+            characters: "2",
+            modifiers: [.shift]
+        )))
+        XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
+            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            modifiers: []
+        )))
+        XCTAssertEqual(StateManager.shared.currentMode, .japanese)
+    }
+
+    private func keyEvent(
+        keyCode: UInt16,
+        characters: String = "",
+        modifiers: NSEvent.ModifierFlags = []
+    ) -> NSEvent {
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ) else {
+            XCTFail("Failed to create NSEvent")
+            fatalError("Failed to create NSEvent")
+        }
+        return event
+    }
+
+    private func flagsChangedEvent(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags
+    ) -> NSEvent {
+        guard let event = NSEvent.keyEvent(
+            with: .flagsChanged,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: keyCode
+        ) else {
+            XCTFail("Failed to create flagsChanged NSEvent")
+            fatalError("Failed to create flagsChanged NSEvent")
+        }
+        return event
     }
 }

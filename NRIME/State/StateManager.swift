@@ -34,6 +34,11 @@ final class StateManager {
 
         currentMode = mode
         NSLog("NRIME: Mode changed to \(mode.label)")
+        DeveloperLogger.shared.log("StateManager", "Mode changed", metadata: [
+            "app": currentAppBundleId ?? "unknown",
+            "mode": mode.label,
+            "sourceID": mode.rawValue
+        ])
 
         onModeChanged?(mode)
         onStatusIconUpdate?(mode)
@@ -56,6 +61,11 @@ final class StateManager {
                     previousNonEnglishMode = currentMode
                 }
                 NSLog("NRIME: Restored mode \(mode.label) for app \(bundleId)")
+                DeveloperLogger.shared.log("StateManager", "Restored per-app mode", metadata: [
+                    "app": bundleId,
+                    "mode": mode.label,
+                    "sourceID": mode.rawValue
+                ])
                 onModeChanged?(mode)
                 onStatusIconUpdate?(mode)
             }

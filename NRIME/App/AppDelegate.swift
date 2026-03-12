@@ -17,11 +17,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         candidatePanel = CandidatePanel()
+        MozcServerManager.shared.prewarmServer()
 
         InputSourceRecovery.shared.startMonitoring()
         setupStatusItem()
 
         NSLog("NRIME: Server started with connection name: \(connectionName)")
+        DeveloperLogger.shared.log("App", "Server started", metadata: [
+            "bundleID": Bundle.main.bundleIdentifier ?? "unknown",
+            "connection": connectionName
+        ])
     }
 
     // MARK: - Menu Bar Status Item
@@ -90,6 +95,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func restartApp() {
+        DeveloperLogger.shared.log("App", "Restart requested")
         // Kill mozc_server
         let mozcTask = Process()
         mozcTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
@@ -109,6 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quitApp() {
+        DeveloperLogger.shared.log("App", "Quit requested")
         NSApp.terminate(nil)
     }
 }

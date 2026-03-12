@@ -88,7 +88,11 @@ final class JapaneseEngine: InputEngine {
         }
 
         if conversionState == .converting {
-            if let text = mozcConverter.submit() {
+            if let text = mozcConverter.submit()
+                ?? Self.conversionFallbackText(
+                    preedit: mozcConverter.currentPreedit,
+                    originalHiragana: mozcConverter.originalHiragana
+                ) {
                 client.insertText(text as NSString, replacementRange: replacementRange())
             }
             conversionState = .composing
@@ -390,7 +394,7 @@ final class JapaneseEngine: InputEngine {
 
         // Tab — select the current prediction candidate and commit
         if keyCode == 0x30 {
-            let idx = mozcConverter.currentFocusedIndex
+            let idx = currentPredictionSelectionIndex()
             if idx < mozcConverter.currentCandidates.count {
                 if let output = mozcConverter.selectCandidateByIndex(idx) {
                     let result = mozcConverter.updateFromOutput(output)
@@ -483,6 +487,16 @@ final class JapaneseEngine: InputEngine {
         hideCandidateWindow()
     }
 
+    private func currentPredictionSelectionIndex() -> Int {
+        guard let panel = NSApp.candidatePanel,
+              panel.isVisible(),
+              panel.selectedIndex >= 0,
+              panel.selectedIndex < mozcConverter.currentCandidates.count else {
+            return mozcConverter.currentFocusedIndex
+        }
+        return panel.selectedIndex
+    }
+
     /// Trigger prediction after a commit, if the setting is enabled.
     private func triggerPredictionIfEnabled(client: any IMKTextInput) {
         guard Settings.shared.japaneseKeyConfig.prediction else { return }
@@ -570,31 +584,20 @@ final class JapaneseEngine: InputEngine {
     private func commitLiveConversion(client: any IMKTextInput) {
         guard composer.isComposing else { return }
 
+        let composedKana = composer.composedKana
+        var text = composer.flush()
         if liveConversionActive {
-            // Use the stored peeked conversion text
-            let commitText = liveConvertedText
-            if let text = commitText, !text.isEmpty {
-                client.insertText(text as NSString, replacementRange: replacementRange())
-            } else {
-                var text = composer.flush()
-                if shiftKatakanaActive || capsLockKatakanaActive {
-                    text = hiraganaToKatakana(text)
-                    shiftKatakanaActive = false
-                }
-                if !text.isEmpty {
-                    client.insertText(text as NSString, replacementRange: replacementRange())
-                }
-            }
-        } else {
-            // Not live converting — commit hiragana normally
-            var text = composer.flush()
-            if shiftKatakanaActive || capsLockKatakanaActive {
-                text = hiraganaToKatakana(text)
-                shiftKatakanaActive = false
-            }
-            if !text.isEmpty {
-                client.insertText(text as NSString, replacementRange: replacementRange())
-            }
+            text = Self.liveConversionCommitText(
+                convertedText: liveConvertedText,
+                composedKana: composedKana,
+                flushedText: text
+            )
+        } else if shiftKatakanaActive || capsLockKatakanaActive {
+            text = hiraganaToKatakana(text)
+            shiftKatakanaActive = false
+        }
+        if !text.isEmpty {
+            client.insertText(text as NSString, replacementRange: replacementRange())
         }
 
         composer.clear()
@@ -715,6 +718,7 @@ final class JapaneseEngine: InputEngine {
                                        client: any IMKTextInput) -> Bool {
         let hiragana = composer.flush()
         guard !hiragana.isEmpty else { return false }
+        mozcConverter.prepareForConversion(hiragana: hiragana)
 
         // If live conversion is active, Mozc is in CONVERSION state from peekConversion.
         // Cancel and re-feed so the function key works from SUGGESTION state.
@@ -723,11 +727,13 @@ final class JapaneseEngine: InputEngine {
             liveConvertedText = nil
             mozcConverter.cancel()
             guard mozcConverter.feedHiragana(hiragana) else {
+                mozcConverter.reset()
                 client.insertText(hiragana as NSString, replacementRange: replacementRange())
                 return true
             }
         } else {
             guard mozcConverter.feedHiragana(hiragana) else {
+                mozcConverter.reset()
                 client.insertText(hiragana as NSString, replacementRange: replacementRange())
                 return true
             }
@@ -737,6 +743,7 @@ final class JapaneseEngine: InputEngine {
         keyEvent.specialKey = specialKey
 
         guard let output = mozcConverter.sendKeyEvent(keyEvent) else {
+            mozcConverter.reset()
             client.insertText(hiragana as NSString, replacementRange: replacementRange())
             return true
         }
@@ -744,6 +751,7 @@ final class JapaneseEngine: InputEngine {
         let result = mozcConverter.updateFromOutput(output)
 
         if let committed = result.committedText {
+            mozcConverter.reset()
             client.insertText(committed as NSString, replacementRange: replacementRange())
             return true
         }
@@ -756,6 +764,7 @@ final class JapaneseEngine: InputEngine {
             }
         } else {
             // F-key didn't produce preedit — commit hiragana as fallback
+            mozcConverter.reset()
             client.insertText(hiragana as NSString, replacementRange: replacementRange())
         }
 
@@ -790,8 +799,16 @@ final class JapaneseEngine: InputEngine {
     }
 
     private func commitConversion(client: any IMKTextInput) {
-        if let text = mozcConverter.submit() {
+        let submittedText = mozcConverter.submit()
+        if let text = submittedText
+            ?? Self.conversionFallbackText(
+                preedit: mozcConverter.currentPreedit,
+                originalHiragana: mozcConverter.originalHiragana
+            ) {
             client.insertText(text as NSString, replacementRange: replacementRange())
+        }
+        if submittedText == nil {
+            mozcConverter.reset()
         }
         conversionState = .composing
         composer.clear()
@@ -821,6 +838,34 @@ final class JapaneseEngine: InputEngine {
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
+    }
+
+    static func conversionFallbackText(
+        preedit: Mozc_Commands_Preedit?,
+        originalHiragana: String
+    ) -> String? {
+        if let preedit, !preedit.segment.isEmpty {
+            let text = preedit.segment.map(\.value).joined()
+            if !text.isEmpty {
+                return text
+            }
+        }
+        return originalHiragana.isEmpty ? nil : originalHiragana
+    }
+
+    static func liveConversionCommitText(
+        convertedText: String?,
+        composedKana: String,
+        flushedText: String
+    ) -> String {
+        guard let convertedText, !convertedText.isEmpty else {
+            return flushedText
+        }
+        guard !composedKana.isEmpty, flushedText.hasPrefix(composedKana) else {
+            return convertedText
+        }
+        let suffix = String(flushedText.dropFirst(composedKana.count))
+        return convertedText + suffix
     }
 
     private func handleBackspace(client: any IMKTextInput) -> Bool {

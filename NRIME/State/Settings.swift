@@ -141,6 +141,11 @@ final class Settings {
         set { defaults.set(newValue, forKey: "preventABCSwitch") }
     }
 
+    var developerModeEnabled: Bool {
+        get { defaults.bool(forKey: "developerModeEnabled") }
+        set { defaults.set(newValue, forKey: "developerModeEnabled") }
+    }
+
     // MARK: - Inline Indicator
 
     var inlineIndicatorEnabled: Bool {

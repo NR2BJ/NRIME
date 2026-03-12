@@ -324,6 +324,36 @@ final class CandidatePanel {
         let pageStart = page * pageSize
         let pageEnd = min(pageStart + pageSize, candidates.count)
         let pageItems = Array(candidates[pageStart..<pageEnd])
+        let topPadding: CGFloat = 4
+        let bottomPadding: CGFloat = 4
+        let pageLabelHeight = max(16, ceil(pageFontSize * 1.6))
+        let pageLabelSpacing: CGFloat = 2
+        let showPageLabel = totalPages > 1
+        let pageIndicatorHeight: CGFloat = showPageLabel ? (pageLabelSpacing + pageLabelHeight) : 0
+        let stackHeight = CGFloat(pageItems.count) * rowHeight
+        let totalHeight = topPadding + stackHeight + pageIndicatorHeight + bottomPadding
+
+        var frame = panel.frame
+        let oldHeight = frame.height
+        frame.size = NSSize(width: maxWidth, height: totalHeight)
+        frame.origin.y += (oldHeight - totalHeight)
+        panel.setFrame(frame, display: true)
+
+        stackView.frame = NSRect(
+            x: 0,
+            y: bottomPadding + pageIndicatorHeight,
+            width: maxWidth,
+            height: stackHeight
+        )
+
+        if showPageLabel {
+            pageLabel.stringValue = "\(page + 1)/\(totalPages)"
+            pageLabel.isHidden = false
+            pageLabel.frame = NSRect(x: 0, y: bottomPadding,
+                                     width: maxWidth, height: pageLabelHeight)
+        } else {
+            pageLabel.isHidden = true
+        }
 
         // Fast path: same page, just update highlight
         if page == lastRenderedPage && !lastRenderedIsGrid && rowViews.count == pageItems.count {
@@ -353,34 +383,6 @@ final class CandidatePanel {
             )
             stackView.addArrangedSubview(row)
             rowViews.append(row)
-        }
-
-        // Layout calculations
-        let topPadding: CGFloat = 4
-        let bottomPadding: CGFloat = 4
-        let pageLabelHeight = max(16, ceil(pageFontSize * 1.6))
-        let pageLabelSpacing: CGFloat = 2
-        let showPageLabel = totalPages > 1
-        let pageIndicatorHeight: CGFloat = showPageLabel ? (pageLabelSpacing + pageLabelHeight) : 0
-        let stackHeight = CGFloat(pageItems.count) * rowHeight
-        let totalHeight = topPadding + stackHeight + pageIndicatorHeight + bottomPadding
-
-        var frame = panel.frame
-        let oldHeight = frame.height
-        frame.size = NSSize(width: maxWidth, height: totalHeight)
-        frame.origin.y += (oldHeight - totalHeight)
-        panel.setFrame(frame, display: true)
-
-        stackView.frame = NSRect(x: 0, y: bottomPadding + pageIndicatorHeight,
-                                 width: maxWidth, height: stackHeight)
-
-        if showPageLabel {
-            pageLabel.stringValue = "\(page + 1)/\(totalPages)"
-            pageLabel.isHidden = false
-            pageLabel.frame = NSRect(x: 0, y: bottomPadding,
-                                     width: maxWidth, height: pageLabelHeight)
-        } else {
-            pageLabel.isHidden = true
         }
 
         if let container = panel.contentView {
@@ -415,6 +417,40 @@ final class CandidatePanel {
         let pageStart = page * gridPageSize
         let pageEnd = min(pageStart + gridPageSize, candidates.count)
         let pageItems = Array(candidates[pageStart..<pageEnd])
+        let cellHeight = max(26, ceil(fontSize * 1.85))
+        let sidePadding: CGFloat = 4
+        let panelWidth = maxCellWidth * CGFloat(gridColumns) + sidePadding * 2
+        let actualRows = (pageItems.count + gridColumns - 1) / gridColumns
+        let topPadding: CGFloat = 4
+        let bottomPadding: CGFloat = 4
+        let pageLabelHeight = max(16, ceil(pageFontSize * 1.6))
+        let pageLabelSpacing: CGFloat = 2
+        let showPageLabel = totalPages > 1
+        let pageIndicatorHeight: CGFloat = showPageLabel ? (pageLabelSpacing + pageLabelHeight) : 0
+        let gridHeight = CGFloat(actualRows) * cellHeight
+        let totalHeight = topPadding + gridHeight + pageIndicatorHeight + bottomPadding
+
+        var frame = panel.frame
+        let oldHeight = frame.height
+        frame.size = NSSize(width: panelWidth, height: totalHeight)
+        frame.origin.y += (oldHeight - totalHeight)
+        panel.setFrame(frame, display: true)
+
+        stackView.frame = NSRect(
+            x: sidePadding,
+            y: bottomPadding + pageIndicatorHeight,
+            width: panelWidth - sidePadding * 2,
+            height: gridHeight
+        )
+
+        if showPageLabel {
+            pageLabel.stringValue = "\(page + 1)/\(totalPages)"
+            pageLabel.isHidden = false
+            pageLabel.frame = NSRect(x: 0, y: bottomPadding,
+                                     width: panelWidth, height: pageLabelHeight)
+        } else {
+            pageLabel.isHidden = true
+        }
 
         // Fast path: same page, just update highlight
         if page == lastRenderedPage && lastRenderedIsGrid && gridCellViews.count == pageItems.count {
@@ -428,11 +464,6 @@ final class CandidatePanel {
 
         pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: pageFontSize, weight: .regular)
 
-        let cellHeight = max(26, ceil(fontSize * 1.85))
-        let sidePadding: CGFloat = 4
-        let panelWidth = maxCellWidth * CGFloat(gridColumns) + sidePadding * 2
-
-        let actualRows = (pageItems.count + gridColumns - 1) / gridColumns
         for row in 0..<actualRows {
             let rowStack = NSStackView()
             rowStack.orientation = .horizontal
@@ -457,34 +488,6 @@ final class CandidatePanel {
             }
             stackView.addArrangedSubview(rowStack)
             gridRowStacks.append(rowStack)
-        }
-
-        // Layout
-        let topPadding: CGFloat = 4
-        let bottomPadding: CGFloat = 4
-        let pageLabelHeight = max(16, ceil(pageFontSize * 1.6))
-        let pageLabelSpacing: CGFloat = 2
-        let showPageLabel = totalPages > 1
-        let pageIndicatorHeight: CGFloat = showPageLabel ? (pageLabelSpacing + pageLabelHeight) : 0
-        let gridHeight = CGFloat(actualRows) * cellHeight
-        let totalHeight = topPadding + gridHeight + pageIndicatorHeight + bottomPadding
-
-        var frame = panel.frame
-        let oldHeight = frame.height
-        frame.size = NSSize(width: panelWidth, height: totalHeight)
-        frame.origin.y += (oldHeight - totalHeight)
-        panel.setFrame(frame, display: true)
-
-        stackView.frame = NSRect(x: sidePadding, y: bottomPadding + pageIndicatorHeight,
-                                 width: panelWidth - sidePadding * 2, height: gridHeight)
-
-        if showPageLabel {
-            pageLabel.stringValue = "\(page + 1)/\(totalPages)"
-            pageLabel.isHidden = false
-            pageLabel.frame = NSRect(x: 0, y: bottomPadding,
-                                     width: panelWidth, height: pageLabelHeight)
-        } else {
-            pageLabel.isHidden = true
         }
 
         if let container = panel.contentView {
@@ -539,23 +542,18 @@ final class CandidatePanel {
     // MARK: - Private: Positioning
 
     private func caretOrigin(from client: (any IMKTextInput)?, panelWidth: CGFloat) -> NSPoint {
-        if let client = client {
-            var lineHeightRect = NSRect.zero
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineHeightRect)
+        if let lineHeightRect = TextInputGeometry.caretRect(for: client) {
+            let x = lineHeightRect.origin.x
+            // Position below the caret
+            let y = lineHeightRect.origin.y - (panel?.frame.height ?? 200) - 2
 
-            if lineHeightRect != .zero {
-                let x = lineHeightRect.origin.x
-                // Position below the caret
-                let y = lineHeightRect.origin.y - (panel?.frame.height ?? 200) - 2
-
-                // Ensure panel stays on screen
-                if let screen = NSScreen.main {
-                    let clampedX = min(x, screen.visibleFrame.maxX - panelWidth)
-                    let clampedY = max(y, screen.visibleFrame.minY)
-                    return NSPoint(x: max(clampedX, screen.visibleFrame.minX), y: clampedY)
-                }
-                return NSPoint(x: x, y: y)
+            // Ensure panel stays on screen
+            if let screen = NSScreen.main {
+                let clampedX = min(x, screen.visibleFrame.maxX - panelWidth)
+                let clampedY = max(y, screen.visibleFrame.minY)
+                return NSPoint(x: max(clampedX, screen.visibleFrame.minX), y: clampedY)
             }
+            return NSPoint(x: x, y: y)
         }
 
         // Fallback: near mouse

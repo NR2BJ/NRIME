@@ -19,6 +19,11 @@ class NRIMEInputController: IMKInputController {
     /// because self.client() may be nil by the time the callback fires.
     private var cachedClient: AnyObject?
 
+#if DEBUG
+    /// Test seam for controller-level unit tests that run without a real IMK client proxy.
+    var testingClientOverride: (any IMKTextInput)?
+#endif
+
 
     // MARK: - IMKInputController Overrides
 
@@ -230,7 +235,11 @@ class NRIMEInputController: IMKInputController {
             return true
 
         case 0x30: // Tab — toggle grid/list mode
+            let wasGridMode = panel.isGridMode
             panel.toggleGridMode(client: client)
+            if wasGridMode && !panel.isGridMode {
+                previewHanjaSourceIfNeeded(client: client)
+            }
             return true
 
         case 0x24, 0x4C: // Return/Enter — select current candidate
@@ -238,6 +247,8 @@ class NRIMEInputController: IMKInputController {
             return true
 
         case 0x35: // Escape — dismiss
+            previewHanjaSourceIfNeeded(client: client)
+            koreanEngine.clearHanjaSession()
             panel.hide()
             return true
 
@@ -257,11 +268,18 @@ class NRIMEInputController: IMKInputController {
             return true
 
         case 0x31: // Space — dismiss and pass through for Korean hanja
+            let shouldPassThrough = koreanEngine.isCurrentlyComposing
+            previewHanjaSourceIfNeeded(client: client)
+            koreanEngine.clearHanjaSession()
             panel.hide()
+            if shouldPassThrough {
+                return routeEvent(event, client: client)
+            }
             return false
 
         default:
             // Dismiss panel and route event through normal handling
+            koreanEngine.clearHanjaSession()
             panel.hide()
             return routeEvent(event, client: client)
         }
@@ -332,7 +350,7 @@ class NRIMEInputController: IMKInputController {
         // Wire up mode change callback for inline indicator
         StateManager.shared.onModeChanged = { [weak self] mode in
             if Settings.shared.inlineIndicatorEnabled {
-                let client = self?.client() as? (any IMKTextInput)
+                let client = self?.resolvedClient()
                 InlineIndicator.shared.show(for: mode, client: client)
             }
         }
@@ -341,19 +359,34 @@ class NRIMEInputController: IMKInputController {
         if let client = sender as? (any IMKTextInput) {
             let bundleId = client.bundleIdentifier() ?? "unknown"
             StateManager.shared.activateApp(bundleId)
+            logControllerEvent("activateServer", client: client, extra: [
+                "bundleID": bundleId
+            ])
+        } else {
+            logControllerEvent("activateServer", client: nil)
         }
     }
 
     override func commitComposition(_ sender: Any!) {
-        if let client = (sender as? (any IMKTextInput))
-            ?? (self.client() as? (any IMKTextInput)) {
-            koreanEngine.forceCommit(client: client)
-            japaneseEngine.forceCommit(client: client)
-        }
+        handleCommitComposition(sender)
         super.commitComposition(sender)
     }
 
     override func deactivateServer(_ sender: Any!) {
+        handleDeactivateServer(sender)
+        super.deactivateServer(sender)
+    }
+
+    private func handleCommitComposition(_ sender: Any?) {
+        if let client = (sender as? (any IMKTextInput))
+            ?? resolvedClient() {
+            logControllerEvent("commitComposition", client: client)
+            koreanEngine.forceCommit(client: client)
+            japaneseEngine.forceCommit(client: client)
+        }
+    }
+
+    private func handleDeactivateServer(_ sender: Any?) {
         // Mark as user-initiated so InputSourceRecovery doesn't fight it
         InputSourceRecovery.shared.userInitiatedSwitch = true
 
@@ -361,17 +394,20 @@ class NRIMEInputController: IMKInputController {
         if let client = sender as? (any IMKTextInput) {
             let bundleId = client.bundleIdentifier() ?? "unknown"
             StateManager.shared.deactivateApp(bundleId)
+            logControllerEvent("deactivateServer", client: client, extra: [
+                "bundleID": bundleId
+            ])
+        } else {
+            logControllerEvent("deactivateServer", client: nil)
         }
 
         // Commit composing text — use sender (the client) since self.client()
         // may already be nil during deactivation
-        commitComposition(sender)
+        handleCommitComposition(sender)
         shortcutHandler.reset()
 
         // Hide candidate panel
         NSApp.candidatePanel?.hide()
-
-        super.deactivateServer(sender)
     }
 
     // MARK: - Grid/Mozc Sync
@@ -410,6 +446,11 @@ class NRIMEInputController: IMKInputController {
         )
     }
 
+    private func previewHanjaSourceIfNeeded(client: any IMKTextInput) {
+        guard StateManager.shared.currentMode == .korean else { return }
+        koreanEngine.restoreHanjaSource(client: client)
+    }
+
     // MARK: - Mouse Click Commit
 
     /// Called by the global mouse monitor when a click is detected in any app.
@@ -418,12 +459,18 @@ class NRIMEInputController: IMKInputController {
         // Use cached client because self.client() may be nil by the time
         // the async global monitor callback fires.
         guard let client = (cachedClient as? (any IMKTextInput))
-                ?? (self.client() as? (any IMKTextInput)) else { return }
+                ?? resolvedClient() else { return }
         let mode = StateManager.shared.currentMode
         if mode == .korean && koreanEngine.isCurrentlyComposing {
+            logControllerEvent("mouseClickCommit", client: client, extra: [
+                "reason": "korean_composition"
+            ])
             koreanEngine.forceCommit(client: client)
         } else if mode == .japanese
                     && (japaneseEngine.isCurrentlyComposing || japaneseEngine.isInConversionState) {
+            logControllerEvent("mouseClickCommit", client: client, extra: [
+                "reason": japaneseEngine.isInConversionState ? "japanese_conversion" : "japanese_composition"
+            ])
             japaneseEngine.forceCommit(client: client)
         }
     }
@@ -454,7 +501,7 @@ class NRIMEInputController: IMKInputController {
     private func wireUpShortcutHandler() {
         shortcutHandler.onAction = { [weak self] action in
             guard let self = self,
-                  let client = self.client() as? (any IMKTextInput) else {
+                  let client = self.resolvedClient() else {
                 return false
             }
             let previousMode = StateManager.shared.currentMode
@@ -472,6 +519,11 @@ class NRIMEInputController: IMKInputController {
                 case .switchJapanese: StateManager.shared.switchTo(.japanese)
                 default: break
                 }
+                self.logControllerEvent("shortcutAction", client: client, extra: [
+                    "action": String(describing: action),
+                    "previousMode": previousMode.label,
+                    "currentMode": StateManager.shared.currentMode.label
+                ])
                 return true
 
             case .hanjaConvert:
@@ -482,5 +534,39 @@ class NRIMEInputController: IMKInputController {
             }
         }
     }
+
+    private func logControllerEvent(
+        _ event: String,
+        client: (any IMKTextInput)?,
+        extra: [String: String] = [:]
+    ) {
+        var metadata = extra
+        metadata["bundleID"] = metadata["bundleID"] ?? client?.bundleIdentifier() ?? "unknown"
+        metadata["mode"] = StateManager.shared.currentMode.label
+        DeveloperLogger.shared.log("Controller", event, metadata: metadata)
+    }
+
+    private func resolvedClient() -> (any IMKTextInput)? {
+#if DEBUG
+        if let testingClientOverride {
+            return testingClientOverride
+        }
+#endif
+        return self.client()
+    }
+
+#if DEBUG
+    func commitCompositionForTesting(sender: Any?) {
+        handleCommitComposition(sender)
+    }
+
+    func deactivateServerForTesting(sender: Any?) {
+        handleDeactivateServer(sender)
+    }
+
+    func commitOnMouseClickForTesting() {
+        commitOnMouseClick()
+    }
+#endif
 
 }

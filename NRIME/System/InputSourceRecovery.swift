@@ -3,12 +3,16 @@ import Cocoa
 
 final class InputSourceRecovery {
     static let shared = InputSourceRecovery()
+    static let bundleID = "com.nrime.inputmethod.app"
+    static let visibleInputSourceID = "com.nrime.inputmethod.app.en"
 
     private var consecutiveRecoveries = 0
     private let maxConsecutiveRecoveries = 3
     private var lastRecoveryTime: Date?
     private var isMonitoring = false
     private var pollTimer: Timer?
+    private let secureInputDetector = SecureInputDetector()
+    private let startupRecoveryDelays: [TimeInterval] = [0.5, 2.0, 5.0]
 
     /// Set to true when the user intentionally deactivates NRIME
     /// (e.g., via deactivateServer). Recovery is suppressed while true.
@@ -41,6 +45,8 @@ final class InputSourceRecovery {
         )
 
         NSLog("NRIME: InputSourceRecovery monitoring started")
+        DeveloperLogger.shared.log("InputSourceRecovery", "Monitoring started")
+        scheduleStartupRecoveryChecks()
     }
 
     func stopMonitoring() {
@@ -61,6 +67,7 @@ final class InputSourceRecovery {
         pollTimer = nil
 
         NSLog("NRIME: InputSourceRecovery monitoring stopped")
+        DeveloperLogger.shared.log("InputSourceRecovery", "Monitoring stopped")
     }
 
     @objc private func didWake(_ notification: Notification) {
@@ -74,23 +81,100 @@ final class InputSourceRecovery {
         }
     }
 
-    private func pollInputSource() {
+    private func scheduleStartupRecoveryChecks() {
         guard Settings.shared.preventABCSwitch else { return }
-        guard isCurrentSourceNonNRIME() else { return }
+
+        for delay in startupRecoveryDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.attemptStartupRecovery(after: delay)
+            }
+        }
+    }
+
+    private func attemptStartupRecovery(after delay: TimeInterval) {
+        let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
+        let secureInputActive = secureInputDetector.isSecureInputActive()
+        let shouldRecover = Self.shouldRecoverInputSource(
+            preventABCSwitch: Settings.shared.preventABCSwitch,
+            userInitiatedSwitch: false,
+            currentSourceIsNonNRIME: currentSourceIsNonNRIME,
+            secureInputActive: secureInputActive
+        )
+
+        guard shouldRecover else {
+            if currentSourceIsNonNRIME || secureInputActive {
+                DeveloperLogger.shared.log("InputSourceRecovery", "Startup recovery skipped", metadata: [
+                    "delay": String(format: "%.1f", delay),
+                    "preventABCSwitch": String(Settings.shared.preventABCSwitch),
+                    "secureInput": String(secureInputActive),
+                    "sourceIsNonNRIME": String(currentSourceIsNonNRIME)
+                ])
+            }
+            return
+        }
+
+        DeveloperLogger.shared.log("InputSourceRecovery", "Startup recovery triggered", metadata: [
+            "delay": String(format: "%.1f", delay),
+            "sourceIsNonNRIME": String(currentSourceIsNonNRIME)
+        ])
+        recoverInputSource()
+    }
+
+    private func pollInputSource() {
+        let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
+        let secureInputActive = secureInputDetector.isSecureInputActive()
+        let shouldRecover = Self.shouldRecoverInputSource(
+            preventABCSwitch: Settings.shared.preventABCSwitch,
+            userInitiatedSwitch: false,
+            currentSourceIsNonNRIME: currentSourceIsNonNRIME,
+            secureInputActive: secureInputActive
+        )
+        guard shouldRecover else { return }
+
+        DeveloperLogger.shared.log("InputSourceRecovery", "Polling triggered recovery", metadata: [
+            "preventABCSwitch": String(Settings.shared.preventABCSwitch),
+            "secureInput": String(secureInputActive),
+            "sourceIsNonNRIME": String(currentSourceIsNonNRIME)
+        ])
         recoverInputSource()
     }
 
     @objc private func inputSourceChanged(_ notification: Notification) {
-        // If "Prevent ABC switch" is off, respect user-initiated switches
-        if !Settings.shared.preventABCSwitch && userInitiatedSwitch {
-            userInitiatedSwitch = false
-            return
+        let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
+        let secureInputActive = secureInputDetector.isSecureInputActive()
+        let shouldRecover = Self.shouldRecoverInputSource(
+            preventABCSwitch: Settings.shared.preventABCSwitch,
+            userInitiatedSwitch: userInitiatedSwitch,
+            currentSourceIsNonNRIME: currentSourceIsNonNRIME,
+            secureInputActive: secureInputActive
+        )
+
+        if shouldRecover || currentSourceIsNonNRIME || userInitiatedSwitch || secureInputActive {
+            DeveloperLogger.shared.log("InputSourceRecovery", "Input source changed", metadata: [
+                "preventABCSwitch": String(Settings.shared.preventABCSwitch),
+                "secureInput": String(secureInputActive),
+                "shouldRecover": String(shouldRecover),
+                "sourceIsNonNRIME": String(currentSourceIsNonNRIME),
+                "userInitiatedSwitch": String(userInitiatedSwitch)
+            ])
         }
         userInitiatedSwitch = false
 
-        if isCurrentSourceNonNRIME() {
+        if shouldRecover {
             recoverInputSource()
         }
+    }
+
+    static func shouldRecoverInputSource(
+        preventABCSwitch: Bool,
+        userInitiatedSwitch: Bool,
+        currentSourceIsNonNRIME: Bool,
+        secureInputActive: Bool
+    ) -> Bool {
+        guard !userInitiatedSwitch else { return false }
+        guard preventABCSwitch else { return false }
+        guard !secureInputActive else { return false }
+        return currentSourceIsNonNRIME
     }
 
     private func isCurrentSourceNonNRIME() -> Bool {
@@ -101,7 +185,7 @@ final class InputSourceRecovery {
             return false
         }
         let currentID = Unmanaged<CFString>.fromOpaque(sourceIDPtr).takeUnretainedValue() as String
-        return !currentID.hasPrefix("com.nrime.inputmethod")
+        return !currentID.hasPrefix(Self.bundleID)
     }
 
     private func recoverInputSource() {
@@ -115,6 +199,9 @@ final class InputSourceRecovery {
 
         guard consecutiveRecoveries < maxConsecutiveRecoveries else {
             NSLog("NRIME: InputSourceRecovery halted — too many consecutive recoveries (\(consecutiveRecoveries))")
+            DeveloperLogger.shared.log("InputSourceRecovery", "Recovery halted", metadata: [
+                "consecutiveRecoveries": String(consecutiveRecoveries)
+            ])
             // Reset after halt so polling can retry later
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
                 self?.consecutiveRecoveries = 0
@@ -126,20 +213,51 @@ final class InputSourceRecovery {
         lastRecoveryTime = now
 
         let conditions = [
-            kTISPropertyBundleID: "com.nrime.inputmethod.app"
+            kTISPropertyInputSourceID: Self.visibleInputSourceID
         ] as CFDictionary
 
-        guard let sources = TISCreateInputSourceList(conditions, false)?.takeRetainedValue() as? [TISInputSource],
+        guard let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource],
               let nrimeSource = sources.first else {
             NSLog("NRIME: InputSourceRecovery could not find NRIME input source")
+            DeveloperLogger.shared.log("InputSourceRecovery", "Recovery failed", metadata: [
+                "reason": "input_source_not_found",
+                "targetSourceID": Self.visibleInputSourceID
+            ])
             return
+        }
+
+        if let enabledPtr = TISGetInputSourceProperty(nrimeSource, kTISPropertyInputSourceIsEnabled) {
+            let enabled = Unmanaged<CFBoolean>.fromOpaque(enabledPtr).takeUnretainedValue()
+            if !CFBooleanGetValue(enabled) {
+                let enableStatus = TISEnableInputSource(nrimeSource)
+                if enableStatus != noErr {
+                    NSLog("NRIME: Failed to enable NRIME input source during recovery: \(enableStatus)")
+                    DeveloperLogger.shared.log("InputSourceRecovery", "Recovery failed", metadata: [
+                        "reason": "enable_failed",
+                        "status": String(enableStatus),
+                        "targetSourceID": Self.visibleInputSourceID
+                    ])
+                    return
+                }
+                DeveloperLogger.shared.log("InputSourceRecovery", "Enabled input source during recovery", metadata: [
+                    "targetSourceID": Self.visibleInputSourceID
+                ])
+            }
         }
 
         let status = TISSelectInputSource(nrimeSource)
         if status == noErr {
             NSLog("NRIME: Input source recovered successfully")
+            DeveloperLogger.shared.log("InputSourceRecovery", "Recovered input source", metadata: [
+                "targetSourceID": Self.visibleInputSourceID
+            ])
         } else {
             NSLog("NRIME: Input source recovery failed with status: \(status)")
+            DeveloperLogger.shared.log("InputSourceRecovery", "Recovery failed", metadata: [
+                "reason": "select_failed",
+                "status": String(status),
+                "targetSourceID": Self.visibleInputSourceID
+            ])
         }
     }
 }

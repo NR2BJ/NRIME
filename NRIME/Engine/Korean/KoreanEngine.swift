@@ -4,9 +4,25 @@ import InputMethodKit
 final class KoreanEngine: InputEngine {
     private let automata = HangulAutomata()
     private var hanjaConverter: HanjaConverter?
+    private var hanjaSource: HanjaSource = .none
 
     // The backspace key code
     private let backspaceKeyCode: UInt16 = 0x33
+
+    private enum HanjaSource {
+        case none
+        case composing(String)
+        case selectedText(String)
+
+        var text: String? {
+            switch self {
+            case .none:
+                return nil
+            case .composing(let text), .selectedText(let text):
+                return text
+            }
+        }
+    }
 
     init() {
         self.hanjaConverter = HanjaConverter()
@@ -88,12 +104,30 @@ final class KoreanEngine: InputEngine {
     /// Clear automata state without committing (used when hanja candidate replaces composing text).
     func clearAutomataState() {
         _ = automata.flush()
+        clearHanjaSession()
+    }
+
+    /// Restore the original text that was used to open the hanja candidate panel.
+    /// This is used when dismissing preview-only UI states (escape, leaving grid mode).
+    func restoreHanjaSource(client: any IMKTextInput) {
+        guard let text = hanjaSource.text, !text.isEmpty else { return }
+        client.setMarkedText(
+            text as NSString,
+            selectionRange: NSRange(location: text.count, length: 0),
+            replacementRange: replacementRange()
+        )
+    }
+
+    /// Clears only the temporary hanja conversion session state.
+    func clearHanjaSession() {
+        hanjaSource = .none
     }
 
     /// Force commit any composing text (called from deactivateServer).
     func forceCommit(client: (any IMKTextInput)?) {
         guard let client = client, automata.isComposing else { return }
         let text = automata.flush()
+        clearHanjaSession()
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
@@ -153,6 +187,7 @@ final class KoreanEngine: InputEngine {
     private func commitComposing(client: any IMKTextInput) {
         guard automata.isComposing else { return }
         let text = automata.flush()
+        clearHanjaSession()
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
@@ -181,9 +216,13 @@ final class KoreanEngine: InputEngine {
 
     private func showHanjaCandidates(for text: String, converter: HanjaConverter, client: any IMKTextInput, isSelectedText: Bool) -> Bool {
         let results = converter.lookupCandidates(for: text)
-        if results.isEmpty { return true }
+        if results.isEmpty {
+            clearHanjaSession()
+            return true
+        }
 
         let candidateStrings = results.map { "\($0.hanja) \($0.meaning)" }
+        hanjaSource = isSelectedText ? .selectedText(text) : .composing(text)
 
         if isSelectedText {
             // Convert selected text to marked text so Enter commits as IME confirmation

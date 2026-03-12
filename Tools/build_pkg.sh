@@ -4,7 +4,7 @@
 #
 # Output: build/NRIME-<version>.pkg
 
-set -e
+set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
@@ -23,13 +23,13 @@ echo "Building NRIME (Release)..."
 xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
     -scheme NRIME -configuration Release \
     SYMROOT="$BUILD_DIR" \
-    build 2>&1 | grep -E "(BUILD|error:)" || true
+    build
 
 echo "Building NRIMESettings (Release)..."
 xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
     -scheme NRIMESettings -configuration Release \
     SYMROOT="$BUILD_DIR" \
-    build 2>&1 | grep -E "(BUILD|error:)" || true
+    build
 
 # Verify build products exist
 NRIME_APP="$BUILD_DIR/Release/NRIME.app"

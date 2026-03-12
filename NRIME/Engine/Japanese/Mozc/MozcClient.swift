@@ -6,7 +6,7 @@ import SwiftProtobuf
 final class MozcClient {
     private let portName = "org.mozc.inputmethod.Japanese.Converter.session"
     private let protocolVersion: mach_msg_id_t = 3  // IPC_PROTOCOL_VERSION
-    private let timeout: mach_msg_timeout_t = 1000  // 1 second
+    private let timeout: mach_msg_timeout_t = 250  // fail fast to avoid blocking app key handling
 
     private var sessionId: UInt64 = 0
     private var hasSession = false

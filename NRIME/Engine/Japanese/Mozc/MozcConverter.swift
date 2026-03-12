@@ -19,7 +19,7 @@ struct MozcCandidate {
 /// Manages Mozc conversion state and candidate display.
 final class MozcConverter {
     private let client = MozcClient()
-    private let serverManager = MozcServerManager()
+    private let serverManager = MozcServerManager.shared
 
     /// Current candidate strings for CandidatePanel display.
     var currentCandidateStrings: [String] = []
@@ -128,6 +128,8 @@ final class MozcConverter {
             currentFocusedIndex = Int(output.allCandidateWords.focusedIndex)
         } else if output.hasCandidateWindow, output.candidateWindow.hasFocusedIndex {
             currentFocusedIndex = Int(output.candidateWindow.focusedIndex)
+        } else {
+            currentFocusedIndex = 0
         }
         result.focusedCandidateIndex = currentFocusedIndex
 
@@ -167,10 +169,7 @@ final class MozcConverter {
     /// Returns true if conversion produced a preedit or candidates.
     /// If IPC fails after feedHiragana, restarts server and retries the full sequence once.
     func convert(hiragana: String) -> Bool {
-        currentCandidateStrings = []
-        currentCandidates = []
-        currentPreedit = nil
-        originalHiragana = hiragana
+        prepareForConversion(hiragana: hiragana)
 
         guard feedHiragana(hiragana) else { return false }
 
@@ -195,6 +194,16 @@ final class MozcConverter {
 
         let result = updateFromOutput(output!)
         return result.hasCandidates || result.preedit != nil
+    }
+
+    /// Reset per-conversion state and remember the source hiragana to support Escape restore.
+    func prepareForConversion(hiragana: String) {
+        currentCandidateStrings = []
+        currentCandidates = []
+        currentPreedit = nil
+        currentFocusedIndex = 0
+        isConverting = false
+        originalHiragana = hiragana
     }
 
     /// Peek at the conversion result without committing.
@@ -320,16 +329,6 @@ final class MozcConverter {
                 if candidate.hasValue && !candidate.value.isEmpty {
                     candidates.append(MozcCandidate(value: candidate.value, id: candidate.id))
                 }
-            }
-        }
-
-        if candidates.isEmpty, output.hasPreedit {
-            let text = output.preedit.segment.map { $0.value }.joined()
-            if !text.isEmpty {
-                candidates.append(MozcCandidate(value: text, id: 0))
-            }
-            if !originalHiragana.isEmpty && text != originalHiragana {
-                candidates.append(MozcCandidate(value: originalHiragana, id: -1))
             }
         }
 

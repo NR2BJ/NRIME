@@ -19,6 +19,7 @@ final class SettingsStore: ObservableObject {
         let tapVal = defaults.double(forKey: "tapThreshold")
         _tapThreshold = Published(initialValue: tapVal > 0 ? tapVal : 0.2)
         _preventABCSwitch = Published(initialValue: defaults.bool(forKey: "preventABCSwitch"))
+        _developerModeEnabled = Published(initialValue: defaults.bool(forKey: "developerModeEnabled"))
         _perAppModeEnabled = Published(initialValue: defaults.bool(forKey: "perAppModeEnabled"))
         _perAppModeType = Published(initialValue: defaults.string(forKey: "perAppModeType") ?? "whitelist")
         _perAppModeList = Published(initialValue: defaults.stringArray(forKey: "perAppModeList") ?? [])
@@ -56,6 +57,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var preventABCSwitch: Bool {
         didSet { defaults.set(preventABCSwitch, forKey: "preventABCSwitch") }
+    }
+
+    @Published var developerModeEnabled: Bool {
+        didSet { defaults.set(developerModeEnabled, forKey: "developerModeEnabled") }
     }
 
     @Published var tapThreshold: Double {

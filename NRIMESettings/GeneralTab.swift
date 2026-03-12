@@ -53,7 +53,7 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("Prevent switching to ABC", isOn: $store.preventABCSwitch)
-                    Text("Automatically switch back to NRIME when another input source is selected")
+                    Text("Automatically switch back to NRIME when another input source is selected, and try to restore NRIME after login or wake.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -78,6 +78,36 @@ struct GeneralTab: View {
                     Text("Adjusts the text size in the candidate panel")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Developer") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Enable Developer Mode", isOn: $store.developerModeEnabled)
+                    Text("Writes local-only diagnostic logs for lifecycle and input-source events.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Typed text is not recorded automatically, and nothing is uploaded unless the user shares the file manually.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        Button("Open Log") {
+                            DeveloperLogTools.openLog()
+                        }
+                        Button("Reveal in Finder") {
+                            DeveloperLogTools.revealLog()
+                        }
+                        Button("Clear Log") {
+                            DeveloperLogTools.clearLog()
+                        }
+                    }
+                    Text(verbatim: DeveloperLogTools.logFilePath)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
             }
         }
