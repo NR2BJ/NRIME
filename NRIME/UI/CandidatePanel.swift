@@ -557,22 +557,29 @@ final class CandidatePanel {
                 } else {
                     y = max(belowY, screenFrame.minY)
                 }
-
-                let clampedX = min(x, screenFrame.maxX - panelWidth)
-                return NSPoint(x: max(clampedX, screenFrame.minX), y: y)
+                // Left-align with caret position, clamped to screen bounds
+                let clampedX = max(screenFrame.minX, min(x, screenFrame.maxX - panelWidth))
+                return NSPoint(x: clampedX, y: y)
             }
             return NSPoint(x: x, y: belowY)
+        }
+
+        if let panel, panel.isVisible {
+            return panel.frame.origin
         }
 
         // Fallback: near mouse
         let mouseLocation = NSEvent.mouseLocation
         if let screenFrame = TextInputGeometry.screenFrame(containing: mouseLocation) {
+            DeveloperLogger.shared.log("geometry", "Candidate panel fell back to mouse anchor", metadata: [
+                "mouse": String(format: "{x=%.1f,y=%.1f}", mouseLocation.x, mouseLocation.y)
+            ])
             return NSPoint(
-                x: max(screenFrame.minX, min(mouseLocation.x, screenFrame.maxX - panelWidth)),
+                x: max(screenFrame.minX, min(mouseLocation.x - 24, screenFrame.maxX - panelWidth)),
                 y: max(screenFrame.minY, mouseLocation.y - 200)
             )
         }
-        return NSPoint(x: mouseLocation.x, y: mouseLocation.y - 200)
+        return NSPoint(x: mouseLocation.x - 24, y: mouseLocation.y - 200)
     }
 }
 

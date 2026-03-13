@@ -5,19 +5,45 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> NSRect? {
         guard let client else { return nil }
 
+        // 1. Try firstRect — precise positioning for well-behaving apps.
+        //    Reject suspiciously wide rects (Electron apps return the entire input field).
         for range in candidateRanges(for: client) {
             var actualRange = NSRange(location: NSNotFound, length: 0)
             let rect = client.firstRect(forCharacterRange: range, actualRange: &actualRange)
-            if rect != .zero {
+            if isUsableCaretRect(rect)
+                && !shouldDeferSuspiciousFirstRect(rect, requestedRange: range, actualRange: actualRange) {
                 return rect
             }
         }
 
-        guard let index = caretIndex(for: client) else { return nil }
+        // 2. Fallback: attributes at caret index.
+        if let index = caretIndex(for: client) {
+            var lineHeightRect = NSRect.zero
+            client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
+            if isUsableCaretRect(lineHeightRect) {
+                DeveloperLogger.shared.log(
+                    "geometry",
+                    "Using attributes rectangle at caret index",
+                    metadata: ["characterIndex": "\(index)", "rect": lineHeightRect.logDescription]
+                )
+                return lineHeightRect
+            }
+        }
 
-        var lineHeightRect = NSRect.zero
-        client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
-        return lineHeightRect == .zero ? nil : lineHeightRect
+        // 3. Fallback: attributes at index 0 (approach used by Squirrel, AquaSKK, Fcitx5).
+        //    Gives correct Y and height even when cursor-specific queries fail.
+        var zeroRect = NSRect.zero
+        client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
+        if isUsableCaretRect(zeroRect) {
+            DeveloperLogger.shared.log(
+                "geometry",
+                "Using attributes rectangle at index 0 (Squirrel-style fallback)",
+                metadata: ["rect": zeroRect.logDescription]
+            )
+            return zeroRect
+        }
+
+        return nil
     }
 
     static func screenFrame(containing rect: NSRect) -> NSRect? {
@@ -28,15 +54,39 @@ enum TextInputGeometry {
         bestScreenFrame(for: NSRect(origin: point, size: .zero), screenFrames: NSScreen.screens.map(\.visibleFrame))
     }
 
+    static func panelOriginX(for anchorRect: NSRect, panelWidth: CGFloat, within screenFrame: NSRect) -> CGFloat {
+        let horizontalGap: CGFloat = 2
+        let preferredRightwardX = anchorRect.maxX + horizontalGap
+        if preferredRightwardX + panelWidth <= screenFrame.maxX {
+            return max(preferredRightwardX, screenFrame.minX)
+        }
+
+        let rightAlignedToAnchorX = anchorRect.minX - panelWidth - horizontalGap
+        let clampedRightAlignedX = max(screenFrame.minX, min(rightAlignedToAnchorX, screenFrame.maxX - panelWidth))
+        return clampedRightAlignedX
+    }
+
+    static func indicatorAnchorX(for rect: NSRect) -> CGFloat {
+        if rect.width <= 24 {
+            return rect.maxX
+        }
+        return rect.maxX - 10
+    }
+
     static func caretIndex(for client: any IMKTextInput) -> Int? {
         let selectedRange = client.selectedRange()
-        if selectedRange.location != NSNotFound {
+        let markedRange = client.markedRange()
+
+        if isPreferredSelectedRange(selectedRange, relativeTo: markedRange) {
             return max(0, selectedRange.location)
         }
 
-        let markedRange = client.markedRange()
         if markedRange.location != NSNotFound {
             return max(0, markedRange.location + markedRange.length)
+        }
+
+        if selectedRange.location != NSNotFound {
+            return max(0, selectedRange.location)
         }
 
         return nil
@@ -46,18 +96,26 @@ enum TextInputGeometry {
         var ranges: [NSRange] = []
 
         let selectedRange = client.selectedRange()
-        if selectedRange.location != NSNotFound {
+        let markedRange = client.markedRange()
+
+        if isPreferredSelectedRange(selectedRange, relativeTo: markedRange) {
             ranges.append(selectedRange)
             if selectedRange.length == 0 {
                 ranges.append(NSRange(location: selectedRange.location, length: 1))
             }
         }
 
-        let markedRange = client.markedRange()
         if markedRange.location != NSNotFound {
             let caretLocation = markedRange.location + markedRange.length
             ranges.append(NSRange(location: caretLocation, length: 0))
             ranges.append(markedRange)
+        }
+
+        if selectedRange.location != NSNotFound && !isPreferredSelectedRange(selectedRange, relativeTo: markedRange) {
+            ranges.append(selectedRange)
+            if selectedRange.length == 0 {
+                ranges.append(NSRange(location: selectedRange.location, length: 1))
+            }
         }
 
         return ranges
@@ -99,5 +157,54 @@ enum TextInputGeometry {
         }
 
         return (dx * dx) + (dy * dy)
+    }
+
+    private static func isUsableCaretRect(_ rect: NSRect) -> Bool {
+        guard !rect.equalTo(.zero),
+              rect.width > 0,
+              rect.height > 0 else {
+            return false
+        }
+
+        guard let screenFrame = screenFrame(containing: rect) else {
+            return false
+        }
+
+        let cornerTolerance: CGFloat = 1
+        let pinnedToLowerLeftCorner =
+            rect.minX <= screenFrame.minX + cornerTolerance &&
+            rect.minY <= screenFrame.minY + cornerTolerance
+
+        return !pinnedToLowerLeftCorner
+    }
+
+    private static func isPreferredSelectedRange(_ selectedRange: NSRange, relativeTo markedRange: NSRange) -> Bool {
+        guard selectedRange.location != NSNotFound else { return false }
+        guard markedRange.location != NSNotFound else { return true }
+
+        let markedEnd = markedRange.location + markedRange.length
+        return selectedRange.location >= markedRange.location && selectedRange.location <= markedEnd
+    }
+
+    private static func shouldDeferSuspiciousFirstRect(_ rect: NSRect, requestedRange: NSRange, actualRange: NSRange) -> Bool {
+        guard isUsableCaretRect(rect) else { return false }
+        guard rect.width > 40 else { return false }
+
+        if requestedRange.length == 0 {
+            return true
+        }
+
+        guard actualRange.location != NSNotFound, actualRange.length > 0 else {
+            return false
+        }
+
+        let averageCharacterWidth = rect.width / CGFloat(actualRange.length)
+        return averageCharacterWidth > 40
+    }
+}
+
+private extension NSRect {
+    var logDescription: String {
+        String(format: "{x=%.1f,y=%.1f,w=%.1f,h=%.1f}", origin.x, origin.y, size.width, size.height)
     }
 }

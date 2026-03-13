@@ -76,7 +76,7 @@ final class InlineIndicator {
     private func caretOrigin(from client: (any IMKTextInput)?, panelSize: NSSize) -> NSPoint {
         if let lineHeightRect = TextInputGeometry.caretRect(for: client) {
             let gap: CGFloat = 4
-            let x = lineHeightRect.origin.x + lineHeightRect.width + gap
+            let x = TextInputGeometry.indicatorAnchorX(for: lineHeightRect) + gap
 
             // Prefer above the caret; if that goes off-screen, show below
             let aboveY = lineHeightRect.origin.y + lineHeightRect.height + gap
@@ -88,16 +88,20 @@ final class InlineIndicator {
             return NSPoint(x: x, y: aboveY)
         }
 
+        if let panel, panel.isVisible {
+            return panel.frame.origin
+        }
+
         // Fallback: position near the mouse cursor
         let mouseLocation = NSEvent.mouseLocation
         if let screenFrame = TextInputGeometry.screenFrame(containing: mouseLocation) {
             return NSPoint(
-                x: max(screenFrame.minX, min(mouseLocation.x + 16, screenFrame.maxX - panelSize.width)),
+                x: max(screenFrame.minX, min(mouseLocation.x - 12, screenFrame.maxX - panelSize.width)),
                 y: max(screenFrame.minY, min(mouseLocation.y + 16, screenFrame.maxY - panelSize.height))
             )
         }
         return NSPoint(
-            x: mouseLocation.x + 16,
+            x: mouseLocation.x - 12,
             y: mouseLocation.y + 16
         )
     }

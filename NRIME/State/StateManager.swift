@@ -6,6 +6,7 @@ final class StateManager {
     private(set) var currentMode: InputMode = .english
     private var previousNonEnglishMode: InputMode
     private var currentAppBundleId: String?
+    private var hasCompletedInitialActivation = false
 
     /// Callback invoked when mode changes. Set by NRIMEInputController.
     var onModeChanged: ((InputMode) -> Void)?
@@ -54,12 +55,21 @@ final class StateManager {
     /// Called when an app gains focus. Restores saved mode if applicable.
     func activateApp(_ bundleId: String) {
         currentAppBundleId = bundleId
+        defer { hasCompletedInitialActivation = true }
         guard Settings.shared.perAppModeEnabled else { return }
         guard shouldRememberApp(bundleId) else { return }
 
         let saved = Settings.shared.perAppSavedModes
         if let rawValue = saved[bundleId],
            let mode = InputMode(rawValue: rawValue) {
+            if !hasCompletedInitialActivation && currentMode == .english && mode != .english {
+                DeveloperLogger.shared.log("StateManager", "Skipped per-app restore on initial activation", metadata: [
+                    "app": bundleId,
+                    "mode": mode.label,
+                    "sourceID": mode.rawValue
+                ])
+                return
+            }
             if mode != currentMode {
                 currentMode = mode
                 if currentMode != .english {
@@ -110,4 +120,15 @@ final class StateManager {
     func reloadPersistedModePreferences() {
         previousNonEnglishMode = Settings.shared.lastNonEnglishMode
     }
+
+#if DEBUG
+    func resetForTesting() {
+        currentMode = .english
+        previousNonEnglishMode = Settings.shared.lastNonEnglishMode
+        currentAppBundleId = nil
+        hasCompletedInitialActivation = false
+        onModeChanged = nil
+        onStatusIconUpdate = nil
+    }
+#endif
 }

@@ -11,6 +11,9 @@ final class MockTextInputClient: NSObject, IMKTextInput {
 
     var firstRectResponse: NSRect = NSRect(x: 100, y: 100, width: 12, height: 18)
     var attributesRectResponse: NSRect = NSRect(x: 100, y: 100, width: 12, height: 18)
+    var firstRectActualRangeResponse: NSRange?
+    var firstRectResponsesByRange: [String: NSRect] = [:]
+    var firstRectActualRangesByRange: [String: NSRange] = [:]
     private(set) var lastFirstRectRange: NSRange?
     private(set) var lastAttributesCharacterIndex: Int?
 
@@ -93,8 +96,9 @@ final class MockTextInputClient: NSObject, IMKTextInput {
 
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
         lastFirstRectRange = range
-        actualRange?.pointee = range
-        return firstRectResponse
+        let key = Self.rangeKey(range)
+        actualRange?.pointee = firstRectActualRangesByRange[key] ?? firstRectActualRangeResponse ?? range
+        return firstRectResponsesByRange[key] ?? firstRectResponse
     }
 
     func length() -> Int {
@@ -149,6 +153,18 @@ final class MockTextInputClient: NSObject, IMKTextInput {
 
     func setMarkedRangeForTesting(_ range: NSRange?) {
         explicitMarkedRange = range
+    }
+
+    func setFirstRectResponse(_ rect: NSRect, actualRange: NSRange? = nil, for range: NSRange) {
+        let key = Self.rangeKey(range)
+        firstRectResponsesByRange[key] = rect
+        if let actualRange {
+            firstRectActualRangesByRange[key] = actualRange
+        }
+    }
+
+    private static func rangeKey(_ range: NSRange) -> String {
+        "\(range.location):\(range.length)"
     }
 
     private static func plainString(from value: Any?) -> String {

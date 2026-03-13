@@ -173,7 +173,7 @@ final class SettingsStore: ObservableObject {
     }
 
     private func bundleVersionString() -> String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.3"
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.4"
     }
 }
 
