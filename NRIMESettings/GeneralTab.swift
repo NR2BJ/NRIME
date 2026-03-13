@@ -2,6 +2,8 @@ import SwiftUI
 
 struct GeneralTab: View {
     @ObservedObject private var store = SettingsStore.shared
+    @State private var transferStatusMessage: String = ""
+    @State private var transferStatusIsError = false
 
     var body: some View {
         Form {
@@ -110,8 +112,56 @@ struct GeneralTab: View {
                         .textSelection(.enabled)
                 }
             }
+
+            Section("Backup & Restore") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        Button("Export Settings...") {
+                            exportSettings()
+                        }
+                        Button("Import Settings...") {
+                            importSettings()
+                        }
+                    }
+
+                    Text("Exports shortcuts, Japanese settings, per-app mode memory, and remembered Hanja candidate priority as a JSON file.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if !transferStatusMessage.isEmpty {
+                        Text(transferStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(transferStatusIsError ? .red : .secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
+    }
+
+    private func exportSettings() {
+        do {
+            if let url = try store.exportSettingsInteractively() {
+                transferStatusMessage = "Exported settings to \(url.path)"
+                transferStatusIsError = false
+            }
+        } catch {
+            transferStatusMessage = error.localizedDescription
+            transferStatusIsError = true
+        }
+    }
+
+    private func importSettings() {
+        do {
+            if let url = try store.importSettingsInteractively() {
+                transferStatusMessage = "Imported settings from \(url.path)"
+                transferStatusIsError = false
+            }
+        } catch {
+            transferStatusMessage = error.localizedDescription
+            transferStatusIsError = true
+        }
     }
 }
 

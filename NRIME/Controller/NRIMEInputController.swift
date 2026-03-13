@@ -311,6 +311,7 @@ class NRIMEInputController: IMKInputController {
 
         case .korean:
             let hanja = String(selectedText.prefix(while: { $0 != " " }))
+            koreanEngine.rememberSelectedHanja(hanja)
             koreanEngine.clearAutomataState()
             // Both composing and selected-text hanja conversions use marked text,
             // so insertText with NSNotFound replaces the current marked text.

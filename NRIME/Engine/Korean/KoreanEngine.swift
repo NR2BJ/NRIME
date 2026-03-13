@@ -4,6 +4,7 @@ import InputMethodKit
 final class KoreanEngine: InputEngine {
     private let automata = HangulAutomata()
     private var hanjaConverter: HanjaConverter?
+    private let hanjaSelectionStore = HanjaSelectionStore()
     private var hanjaSource: HanjaSource = .none
 
     // The backspace key code
@@ -123,6 +124,11 @@ final class KoreanEngine: InputEngine {
         hanjaSource = .none
     }
 
+    func rememberSelectedHanja(_ hanja: String) {
+        guard let sourceText = hanjaSource.text else { return }
+        hanjaSelectionStore.remember(hanja: hanja, for: sourceText)
+    }
+
     /// Force commit any composing text (called from deactivateServer).
     func forceCommit(client: (any IMKTextInput)?) {
         guard let client = client, automata.isComposing else { return }
@@ -215,7 +221,10 @@ final class KoreanEngine: InputEngine {
     }
 
     private func showHanjaCandidates(for text: String, converter: HanjaConverter, client: any IMKTextInput, isSelectedText: Bool) -> Bool {
-        let results = converter.lookupCandidates(for: text)
+        let results = hanjaSelectionStore.prioritize(
+            converter.lookupCandidates(for: text),
+            for: text
+        )
         if results.isEmpty {
             clearHanjaSession()
             return true

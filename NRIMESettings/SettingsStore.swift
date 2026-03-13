@@ -1,5 +1,6 @@
 import Cocoa
 import Combine
+import UniformTypeIdentifiers
 
 /// Observable settings store that reads/writes from App Group UserDefaults.
 /// Mirrors the Settings class used by the input method process.
@@ -12,26 +13,20 @@ final class SettingsStore: ObservableObject {
         let suiteName = "group.com.nrime.inputmethod"
         defaults = UserDefaults(suiteName: suiteName) ?? UserDefaults.standard
 
-        // Load initial values
-        _inlineIndicatorEnabled = Published(initialValue:
-            defaults.object(forKey: "inlineIndicatorEnabled") == nil ? true : defaults.bool(forKey: "inlineIndicatorEnabled")
-        )
-        let tapVal = defaults.double(forKey: "tapThreshold")
-        _tapThreshold = Published(initialValue: tapVal > 0 ? tapVal : 0.2)
-        _preventABCSwitch = Published(initialValue: defaults.bool(forKey: "preventABCSwitch"))
-        _developerModeEnabled = Published(initialValue: defaults.bool(forKey: "developerModeEnabled"))
-        _perAppModeEnabled = Published(initialValue: defaults.bool(forKey: "perAppModeEnabled"))
-        _perAppModeType = Published(initialValue: defaults.string(forKey: "perAppModeType") ?? "whitelist")
-        _perAppModeList = Published(initialValue: defaults.stringArray(forKey: "perAppModeList") ?? [])
+        _inlineIndicatorEnabled = Published(initialValue: true)
+        _tapThreshold = Published(initialValue: 0.2)
+        _preventABCSwitch = Published(initialValue: false)
+        _developerModeEnabled = Published(initialValue: false)
+        _perAppModeEnabled = Published(initialValue: false)
+        _perAppModeType = Published(initialValue: "whitelist")
+        _perAppModeList = Published(initialValue: [])
+        _toggleEnglishShortcut = Published(initialValue: .defaultToggleEnglish)
+        _switchKoreanShortcut = Published(initialValue: .defaultSwitchKorean)
+        _switchJapaneseShortcut = Published(initialValue: .defaultSwitchJapanese)
+        _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
+        _japaneseKeyConfig = Published(initialValue: .default)
 
-        // Load shortcuts
-        _toggleEnglishShortcut = Published(initialValue: Self.loadShortcut("toggleEnglish", from: defaults) ?? .defaultToggleEnglish)
-        _switchKoreanShortcut = Published(initialValue: Self.loadShortcut("switchKorean", from: defaults) ?? .defaultSwitchKorean)
-        _switchJapaneseShortcut = Published(initialValue: Self.loadShortcut("switchJapanese", from: defaults) ?? .defaultSwitchJapanese)
-        _hanjaConvertShortcut = Published(initialValue: Self.loadShortcut("hanjaConvert", from: defaults) ?? .defaultHanjaConvert)
-
-        // Load Japanese key config
-        _japaneseKeyConfig = Published(initialValue: Self.loadJapaneseKeyConfig(from: defaults))
+        reloadFromDefaults()
     }
 
     // MARK: - Shortcuts
@@ -115,6 +110,70 @@ final class SettingsStore: ObservableObject {
         if let data = try? JSONEncoder().encode(japaneseKeyConfig) {
             defaults.set(data, forKey: "japaneseKeyConfig")
         }
+    }
+
+    func reloadFromDefaults() {
+        inlineIndicatorEnabled = defaults.object(forKey: "inlineIndicatorEnabled") == nil
+            ? true
+            : defaults.bool(forKey: "inlineIndicatorEnabled")
+
+        let tapVal = defaults.double(forKey: "tapThreshold")
+        tapThreshold = tapVal > 0 ? tapVal : 0.2
+
+        preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
+        developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")
+        perAppModeEnabled = defaults.bool(forKey: "perAppModeEnabled")
+        perAppModeType = defaults.string(forKey: "perAppModeType") ?? "whitelist"
+        perAppModeList = defaults.stringArray(forKey: "perAppModeList") ?? []
+
+        toggleEnglishShortcut = Self.loadShortcut("toggleEnglish", from: defaults) ?? .defaultToggleEnglish
+        switchKoreanShortcut = Self.loadShortcut("switchKorean", from: defaults) ?? .defaultSwitchKorean
+        switchJapaneseShortcut = Self.loadShortcut("switchJapanese", from: defaults) ?? .defaultSwitchJapanese
+        hanjaConvertShortcut = Self.loadShortcut("hanjaConvert", from: defaults) ?? .defaultHanjaConvert
+        japaneseKeyConfig = Self.loadJapaneseKeyConfig(from: defaults)
+    }
+
+    func exportSettingsInteractively() throws -> URL? {
+        let panel = NSSavePanel()
+        panel.title = "Export NRIME Settings"
+        panel.message = "Save a JSON backup of your NRIME settings and remembered Hanja candidate priority."
+        panel.nameFieldStringValue = "NRIME-Settings-\(bundleVersionString()).json"
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.allowedContentTypes = [.json]
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return nil
+        }
+
+        let snapshot = SettingsTransfer.capture(from: defaults, appVersion: bundleVersionString())
+        let data = try SettingsTransfer.encode(snapshot)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    func importSettingsInteractively() throws -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = "Import NRIME Settings"
+        panel.message = "Choose a previously exported NRIME settings JSON file."
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return nil
+        }
+
+        let data = try Data(contentsOf: url)
+        let snapshot = try SettingsTransfer.decode(from: data)
+        SettingsTransfer.apply(snapshot, to: defaults)
+        reloadFromDefaults()
+        return url
+    }
+
+    private func bundleVersionString() -> String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.3"
     }
 }
 
