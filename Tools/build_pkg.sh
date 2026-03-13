@@ -10,9 +10,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
 PKG_DIR="$BUILD_DIR/pkg"
 SCRIPTS_DIR="$PROJECT_DIR/Tools/pkg"
-VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PROJECT_DIR/NRIME/Resources/Info.plist")
+VERSION=""
 
-echo "=== NRIME PKG Builder (v$VERSION) ==="
+echo "=== NRIME PKG Builder ==="
 
 # 1. Generate Xcode project
 echo "Generating Xcode project..."
@@ -52,6 +52,9 @@ if [ ! -d "$RESTORE_HELPER_APP" ]; then
     echo "ERROR: NRIMERestoreHelper.app not found at $RESTORE_HELPER_APP"
     exit 1
 fi
+
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$NRIME_APP/Contents/Info.plist")
+echo "Resolved app version: $VERSION"
 
 # 3. Prepare payload
 echo "Preparing PKG payload..."
@@ -110,8 +113,9 @@ pkgbuild \
 
 # 6. Build distribution PKG (final installer)
 echo "Building distribution package..."
+sed "s/__VERSION__/$VERSION/g" "$SCRIPTS_DIR/distribution.xml" > "$PKG_DIR/distribution.xml"
 productbuild \
-    --distribution "$SCRIPTS_DIR/distribution.xml" \
+    --distribution "$PKG_DIR/distribution.xml" \
     --package-path "$PKG_DIR" \
     "$BUILD_DIR/NRIME-$VERSION.pkg"
 
