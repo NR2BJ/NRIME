@@ -80,7 +80,8 @@ final class InlineIndicator {
 
             // Prefer above the caret; if that goes off-screen, show below
             let aboveY = lineHeightRect.origin.y + lineHeightRect.height + gap
-            if let screen = NSScreen.main, aboveY + panelSize.height > screen.visibleFrame.maxY {
+            if let screenFrame = TextInputGeometry.screenFrame(containing: lineHeightRect),
+               aboveY + panelSize.height > screenFrame.maxY {
                 // Show below the caret
                 return NSPoint(x: x, y: lineHeightRect.origin.y - panelSize.height - gap)
             }
@@ -89,6 +90,12 @@ final class InlineIndicator {
 
         // Fallback: position near the mouse cursor
         let mouseLocation = NSEvent.mouseLocation
+        if let screenFrame = TextInputGeometry.screenFrame(containing: mouseLocation) {
+            return NSPoint(
+                x: max(screenFrame.minX, min(mouseLocation.x + 16, screenFrame.maxX - panelSize.width)),
+                y: max(screenFrame.minY, min(mouseLocation.y + 16, screenFrame.maxY - panelSize.height))
+            )
+        }
         return NSPoint(
             x: mouseLocation.x + 16,
             y: mouseLocation.y + 16

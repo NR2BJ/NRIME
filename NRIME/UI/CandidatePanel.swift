@@ -543,21 +543,35 @@ final class CandidatePanel {
 
     private func caretOrigin(from client: (any IMKTextInput)?, panelWidth: CGFloat) -> NSPoint {
         if let lineHeightRect = TextInputGeometry.caretRect(for: client) {
+            let panelHeight = panel?.frame.height ?? 200
             let x = lineHeightRect.origin.x
-            // Position below the caret
-            let y = lineHeightRect.origin.y - (panel?.frame.height ?? 200) - 2
+            let gap: CGFloat = 2
+            let belowY = lineHeightRect.origin.y - panelHeight - gap
 
             // Ensure panel stays on screen
-            if let screen = NSScreen.main {
-                let clampedX = min(x, screen.visibleFrame.maxX - panelWidth)
-                let clampedY = max(y, screen.visibleFrame.minY)
-                return NSPoint(x: max(clampedX, screen.visibleFrame.minX), y: clampedY)
+            if let screenFrame = TextInputGeometry.screenFrame(containing: lineHeightRect) {
+                let y: CGFloat
+                let aboveY = lineHeightRect.origin.y + lineHeightRect.height + gap
+                if belowY < screenFrame.minY && aboveY + panelHeight <= screenFrame.maxY {
+                    y = aboveY
+                } else {
+                    y = max(belowY, screenFrame.minY)
+                }
+
+                let clampedX = min(x, screenFrame.maxX - panelWidth)
+                return NSPoint(x: max(clampedX, screenFrame.minX), y: y)
             }
-            return NSPoint(x: x, y: y)
+            return NSPoint(x: x, y: belowY)
         }
 
         // Fallback: near mouse
         let mouseLocation = NSEvent.mouseLocation
+        if let screenFrame = TextInputGeometry.screenFrame(containing: mouseLocation) {
+            return NSPoint(
+                x: max(screenFrame.minX, min(mouseLocation.x, screenFrame.maxX - panelWidth)),
+                y: max(screenFrame.minY, mouseLocation.y - 200)
+            )
+        }
         return NSPoint(x: mouseLocation.x, y: mouseLocation.y - 200)
     }
 }
