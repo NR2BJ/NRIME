@@ -338,6 +338,5 @@ final class MozcConverter {
 
     deinit {
         client.deleteSession()
-        serverManager.shutdownServer()
     }
 }

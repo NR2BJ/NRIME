@@ -2,7 +2,22 @@ import Cocoa
 import InputMethodKit
 
 enum TextInputGeometry {
-    static func caretRect(for client: (any IMKTextInput)?) -> NSRect? {
+
+    /// Describes the confidence level of a caret position result.
+    enum CaretSource {
+        /// `firstRect` returned a precise, narrow rect.
+        case precise
+        /// `attributes(forCharacterIndex: caretIndex)` was used.
+        case attributesAtCaret
+        /// `attributes(forCharacterIndex: 0)` — only Y/height are reliable; X is the line start.
+        case attributesAtZero
+    }
+
+    struct CaretResult {
+        let rect: NSRect
+        let source: CaretSource
+    }
+    static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return nil }
 
         // 1. Try firstRect — precise positioning for well-behaving apps.
@@ -12,7 +27,7 @@ enum TextInputGeometry {
             let rect = client.firstRect(forCharacterRange: range, actualRange: &actualRange)
             if isUsableCaretRect(rect)
                 && !shouldDeferSuspiciousFirstRect(rect, requestedRange: range, actualRange: actualRange) {
-                return rect
+                return CaretResult(rect: rect, source: .precise)
             }
         }
 
@@ -26,21 +41,21 @@ enum TextInputGeometry {
                     "Using attributes rectangle at caret index",
                     metadata: ["characterIndex": "\(index)", "rect": lineHeightRect.logDescription]
                 )
-                return lineHeightRect
+                return CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
             }
         }
 
         // 3. Fallback: attributes at index 0 (approach used by Squirrel, AquaSKK, Fcitx5).
-        //    Gives correct Y and height even when cursor-specific queries fail.
+        //    Only Y and height are reliable — X points to the line start, not the caret.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         if isUsableCaretRect(zeroRect) {
             DeveloperLogger.shared.log(
                 "geometry",
-                "Using attributes rectangle at index 0 (Squirrel-style fallback)",
+                "Using attributes rectangle at index 0 (vertical geometry only)",
                 metadata: ["rect": zeroRect.logDescription]
             )
-            return zeroRect
+            return CaretResult(rect: zeroRect, source: .attributesAtZero)
         }
 
         return nil
@@ -161,7 +176,7 @@ enum TextInputGeometry {
 
     private static func isUsableCaretRect(_ rect: NSRect) -> Bool {
         guard !rect.equalTo(.zero),
-              rect.width > 0,
+              rect.width >= 0,
               rect.height > 0 else {
             return false
         }

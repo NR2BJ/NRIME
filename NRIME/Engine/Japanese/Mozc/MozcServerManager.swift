@@ -6,11 +6,20 @@ final class MozcServerManager {
     static let shared = MozcServerManager()
 
     private var serverProcess: Process?
+    private let serverProcessLock = NSLock()
+    private let launchQueue = DispatchQueue(label: "com.nrime.mozc.launch")
     private let portName = "org.mozc.inputmethod.Japanese.Converter.session"
     private let warmupQueue = DispatchQueue(label: "com.nrime.mozc.warmup", qos: .utility)
     private let launchPollInterval: TimeInterval = 0.02
     private let restartWaitBudget: TimeInterval = 0.12
     private let prewarmWaitBudget: TimeInterval = 1.0
+
+    private enum ServerPreparationResult {
+        case reachable
+        case alreadyRunning
+        case launched
+        case launchFailed
+    }
 
     private init() {}
 
@@ -18,48 +27,40 @@ final class MozcServerManager {
     func prewarmServer() {
         warmupQueue.async { [weak self] in
             guard let self else { return }
-            if self.isServerReachable() {
+            switch self.prepareServerForUse() {
+            case .reachable:
+                return
+            case .alreadyRunning, .launched:
+                _ = self.waitUntilReachable(timeout: self.prewarmWaitBudget)
+            case .launchFailed:
                 return
             }
-            if self.serverProcess?.isRunning != true {
-                self.killStaleServers()
-                guard self.launchServer() else { return }
-            }
-            _ = self.waitUntilReachable(timeout: self.prewarmWaitBudget)
         }
     }
 
     /// Ensures mozc_server is running. Returns true if server is available.
     func ensureServerRunning() -> Bool {
-        // Check if server is already reachable via Mach port
-        if isServerReachable() {
+        switch prepareServerForUse() {
+        case .reachable:
             return true
-        }
-
-        // If we already launched the process, let the current key event fail fast
-        // instead of waiting in the app's input path.
-        if serverProcess?.isRunning == true {
+        case .alreadyRunning:
             return false
-        }
-
-        // Kill any stale mozc_server from a previous NRIME instance whose
-        // Mach port is no longer reachable but still occupies the port name.
-        killStaleServers()
-
-        // Try to launch the server
-        guard launchServer() else {
+        case .launched:
+            return waitUntilReachable(timeout: launchPollInterval * 2)
+        case .launchFailed:
             NSLog("NRIME: Failed to launch mozc_server")
             return false
         }
-
-        return waitUntilReachable(timeout: launchPollInterval * 2)
     }
 
     /// Kill any existing mozc_server (including stale ones from previous NRIME instances),
     /// then relaunch. Returns true if the fresh server is available.
     func restartServer() -> Bool {
-        killStaleServers()
-        guard launchServer() else {
+        let launched = launchQueue.sync { () -> Bool in
+            killStaleServers()
+            return launchServer()
+        }
+        guard launched else {
             return false
         }
         return waitUntilReachable(timeout: restartWaitBudget)
@@ -67,13 +68,34 @@ final class MozcServerManager {
 
     /// Shuts down the managed mozc_server process.
     func shutdownServer() {
-        guard let process = serverProcess, process.isRunning else { return }
+        serverProcessLock.lock()
+        guard let process = serverProcess, process.isRunning else {
+            serverProcessLock.unlock()
+            return
+        }
         process.terminate()
         serverProcess = nil
+        serverProcessLock.unlock()
         NSLog("NRIME: mozc_server terminated")
     }
 
     // MARK: - Private
+
+    private func prepareServerForUse() -> ServerPreparationResult {
+        launchQueue.sync {
+            if isServerReachable() {
+                return .reachable
+            }
+
+            let isRunning = serverProcessLock.withLock { serverProcess?.isRunning } ?? false
+            if isRunning {
+                return .alreadyRunning
+            }
+
+            killStaleServers()
+            return launchServer() ? .launched : .launchFailed
+        }
+    }
 
     /// Kill any existing mozc_server processes that are not managed by this instance.
     /// This handles stale servers left behind after NRIME is reinstalled/restarted.
@@ -86,8 +108,10 @@ final class MozcServerManager {
         try? killTask.run()
         killTask.waitUntilExit()
 
-        serverProcess?.terminate()
-        serverProcess = nil
+        serverProcessLock.withLock {
+            serverProcess?.terminate()
+            serverProcess = nil
+        }
 
         // Brief wait for Mach port teardown. This runs only on explicit restart/prewarm paths.
         Thread.sleep(forTimeInterval: 0.02)
@@ -133,14 +157,14 @@ final class MozcServerManager {
 
         process.terminationHandler = { [weak self] proc in
             NSLog("NRIME: mozc_server terminated with status \(proc.terminationStatus)")
-            DispatchQueue.main.async {
+            self?.serverProcessLock.withLock {
                 self?.serverProcess = nil
             }
         }
 
         do {
             try process.run()
-            serverProcess = process
+            serverProcessLock.withLock { serverProcess = process }
             NSLog("NRIME: mozc_server launched (PID: \(process.processIdentifier))")
             return true
         } catch {

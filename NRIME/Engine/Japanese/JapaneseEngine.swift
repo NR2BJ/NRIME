@@ -595,6 +595,7 @@ final class JapaneseEngine: InputEngine {
         } else if shiftKatakanaActive || capsLockKatakanaActive {
             text = hiraganaToKatakana(text)
             shiftKatakanaActive = false
+            capsLockKatakanaActive = false
         }
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())
@@ -834,6 +835,7 @@ final class JapaneseEngine: InputEngine {
         if shiftKatakanaActive || capsLockKatakanaActive {
             text = hiraganaToKatakana(text)
             shiftKatakanaActive = false
+            capsLockKatakanaActive = false
         }
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())

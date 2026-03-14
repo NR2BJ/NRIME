@@ -4,9 +4,22 @@ import Cocoa
 final class InputSourceRecovery {
     static let shared = InputSourceRecovery()
 
-    private var consecutiveRecoveries = 0
+    struct RecoveryThrottleState: Equatable {
+        var consecutiveRecoveries: Int
+        var lastRecoveryTime: Date?
+    }
+
+    enum RecoveryThrottleDecision: Equatable {
+        case recover(RecoveryThrottleState)
+        case halt(RecoveryThrottleState)
+    }
+
+    private let stateQueue = DispatchQueue(label: "com.nrime.inputsource.state")
+    private var _userInitiatedSwitch = false
+    private var _consecutiveRecoveries = 0
+    private var _lastRecoveryTime: Date?
+
     private let maxConsecutiveRecoveries = 3
-    private var lastRecoveryTime: Date?
     private var isMonitoring = false
     private var pollTimer: Timer?
     private let secureInputDetector = SecureInputDetector()
@@ -14,7 +27,10 @@ final class InputSourceRecovery {
 
     /// Set to true when the user intentionally deactivates NRIME
     /// (e.g., via deactivateServer). Recovery is suppressed while true.
-    var userInitiatedSwitch = false
+    var userInitiatedSwitch: Bool {
+        get { stateQueue.sync { _userInitiatedSwitch } }
+        set { stateQueue.sync { _userInitiatedSwitch = newValue } }
+    }
 
     private init() {}
 
@@ -123,7 +139,7 @@ final class InputSourceRecovery {
         let secureInputActive = secureInputDetector.isSecureInputActive()
         let shouldRecover = Self.shouldRecoverInputSource(
             preventABCSwitch: Settings.shared.preventABCSwitch,
-            userInitiatedSwitch: false,
+            userInitiatedSwitch: userInitiatedSwitch,
             currentSourceIsNonNRIME: currentSourceIsNonNRIME,
             secureInputActive: secureInputActive
         )
@@ -181,27 +197,26 @@ final class InputSourceRecovery {
 
     private func recoverInputSource() {
         let now = Date()
+        let throttleDecision = beginRecoveryAttempt(at: now)
 
-        if let lastTime = lastRecoveryTime, now.timeIntervalSince(lastTime) < 2.0 {
-            consecutiveRecoveries += 1
-        } else {
-            consecutiveRecoveries = 0
-        }
-
-        guard consecutiveRecoveries < maxConsecutiveRecoveries else {
-            NSLog("NRIME: InputSourceRecovery halted — too many consecutive recoveries (\(consecutiveRecoveries))")
+        guard case .recover = throttleDecision else {
+            let haltedCount: Int
+            switch throttleDecision {
+            case let .halt(state):
+                haltedCount = state.consecutiveRecoveries
+            case .recover:
+                return
+            }
+            NSLog("NRIME: InputSourceRecovery halted — too many consecutive recoveries (\(haltedCount))")
             DeveloperLogger.shared.log("InputSourceRecovery", "Recovery halted", metadata: [
-                "consecutiveRecoveries": String(consecutiveRecoveries)
+                "consecutiveRecoveries": String(haltedCount)
             ])
             // Reset after halt so polling can retry later
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-                self?.consecutiveRecoveries = 0
-                self?.lastRecoveryTime = nil
+                self?.resetRecoveryThrottle()
             }
             return
         }
-
-        lastRecoveryTime = now
 
         switch InputSourceSelector.selectVisibleNRIME() {
         case let .success(targetSourceID):
@@ -230,5 +245,55 @@ final class InputSourceRecovery {
                 "targetSourceID": targetSourceID
             ])
         }
+    }
+
+    private func beginRecoveryAttempt(at now: Date) -> RecoveryThrottleDecision {
+        stateQueue.sync {
+            let currentState = RecoveryThrottleState(
+                consecutiveRecoveries: _consecutiveRecoveries,
+                lastRecoveryTime: _lastRecoveryTime
+            )
+            let decision = Self.evaluateRecoveryThrottle(
+                now: now,
+                state: currentState,
+                maxConsecutiveRecoveries: maxConsecutiveRecoveries
+            )
+            let nextState: RecoveryThrottleState
+            switch decision {
+            case let .recover(state), let .halt(state):
+                nextState = state
+            }
+            _consecutiveRecoveries = nextState.consecutiveRecoveries
+            _lastRecoveryTime = nextState.lastRecoveryTime
+            return decision
+        }
+    }
+
+    private func resetRecoveryThrottle() {
+        stateQueue.sync {
+            _consecutiveRecoveries = 0
+            _lastRecoveryTime = nil
+        }
+    }
+
+    static func evaluateRecoveryThrottle(
+        now: Date,
+        state: RecoveryThrottleState,
+        maxConsecutiveRecoveries: Int,
+        recoveryWindow: TimeInterval = 2.0
+    ) -> RecoveryThrottleDecision {
+        var nextState = state
+        if let lastTime = state.lastRecoveryTime, now.timeIntervalSince(lastTime) < recoveryWindow {
+            nextState.consecutiveRecoveries += 1
+        } else {
+            nextState.consecutiveRecoveries = 0
+        }
+
+        guard nextState.consecutiveRecoveries < maxConsecutiveRecoveries else {
+            return .halt(nextState)
+        }
+
+        nextState.lastRecoveryTime = now
+        return .recover(nextState)
     }
 }

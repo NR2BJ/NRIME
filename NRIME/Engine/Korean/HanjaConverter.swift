@@ -1,6 +1,8 @@
 import Foundation
 import SQLite3
 
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
 final class HanjaConverter {
     private var db: OpaquePointer?
 
@@ -29,17 +31,15 @@ final class HanjaConverter {
 
         let query = "SELECT hanja, meaning FROM hanja WHERE hangul = ? ORDER BY frequency DESC LIMIT 50"
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            hangul.withCString { ptr in
-                sqlite3_bind_text(statement, 1, ptr, -1, nil)
-                while sqlite3_step(statement) == SQLITE_ROW {
-                    guard let hanjaPtr = sqlite3_column_text(statement, 0),
-                          let meaningPtr = sqlite3_column_text(statement, 1) else {
-                        continue
-                    }
-                    let hanja = String(cString: hanjaPtr)
-                    let meaning = String(cString: meaningPtr)
-                    results.append((hanja, meaning))
+            sqlite3_bind_text(statement, 1, hangul, -1, SQLITE_TRANSIENT)
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let hanjaPtr = sqlite3_column_text(statement, 0),
+                      let meaningPtr = sqlite3_column_text(statement, 1) else {
+                    continue
                 }
+                let hanja = String(cString: hanjaPtr)
+                let meaning = String(cString: meaningPtr)
+                results.append((hanja, meaning))
             }
         }
         sqlite3_finalize(statement)

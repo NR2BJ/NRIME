@@ -10,6 +10,8 @@ final class MozcClient {
 
     private var sessionId: UInt64 = 0
     private var hasSession = false
+    private let sessionQueue = DispatchQueue(label: "com.nrime.mozc.session")
+    private let sessionCreationLock = NSLock()
 
     /// Mozc config attached to every Input message.
     /// Enables realtime conversion, history/dictionary suggest, etc.
@@ -39,13 +41,15 @@ final class MozcClient {
         guard let output = call(input) else { return false }
 
         if output.hasID {
-            sessionId = output.id
-            hasSession = true
+            sessionQueue.sync {
+                sessionId = output.id
+                hasSession = true
+            }
 
             // Send SET_REQUEST to configure the session with our Request flags
             var setReqInput = Mozc_Commands_Input()
             setReqInput.type = .setRequest
-            setReqInput.id = sessionId
+            setReqInput.id = sessionQueue.sync { sessionId }
             setReqInput.request = mozcRequest
             _ = call(setReqInput)
 
@@ -60,7 +64,7 @@ final class MozcClient {
 
         var input = Mozc_Commands_Input()
         input.type = .sendKey
-        input.id = sessionId
+        input.id = sessionQueue.sync { sessionId }
         input.key = keyEvent
         initInput(&input)
 
@@ -74,7 +78,7 @@ final class MozcClient {
 
         var input = Mozc_Commands_Input()
         input.type = .sendCommand
-        input.id = sessionId
+        input.id = sessionQueue.sync { sessionId }
         input.command = command
         initInput(&input)
         if let context = context {
@@ -86,21 +90,40 @@ final class MozcClient {
 
     /// Delete the current session.
     func deleteSession() {
-        guard hasSession else { return }
+        let currentId: UInt64? = sessionQueue.sync {
+            guard hasSession else { return nil }
+            return sessionId
+        }
+        guard let id = currentId else { return }
 
         var input = Mozc_Commands_Input()
         input.type = .deleteSession
-        input.id = sessionId
+        input.id = id
 
         _ = call(input)
-        hasSession = false
-        sessionId = 0
+        sessionQueue.sync {
+            hasSession = false
+            sessionId = 0
+        }
     }
 
     /// Reset session state (e.g., after error).
+    /// Best-effort: attempts to delete the server-side session before clearing local state.
     func resetSession() {
-        hasSession = false
-        sessionId = 0
+        let currentId: UInt64? = sessionQueue.sync {
+            guard hasSession else { return nil }
+            return sessionId
+        }
+        if let id = currentId {
+            var input = Mozc_Commands_Input()
+            input.type = .deleteSession
+            input.id = id
+            _ = call(input)  // best-effort; ignore failure
+        }
+        sessionQueue.sync {
+            hasSession = false
+            sessionId = 0
+        }
     }
 
     /// Clear Mozc's learned user history (conversion preferences).
@@ -109,7 +132,7 @@ final class MozcClient {
 
         var input = Mozc_Commands_Input()
         input.type = .clearUserHistory
-        input.id = sessionId
+        input.id = sessionQueue.sync { sessionId }
 
         _ = call(input)
     }
@@ -120,7 +143,7 @@ final class MozcClient {
 
         var input = Mozc_Commands_Input()
         input.type = .clearUserPrediction
-        input.id = sessionId
+        input.id = sessionQueue.sync { sessionId }
 
         _ = call(input)
     }
@@ -134,7 +157,11 @@ final class MozcClient {
     }
 
     private func ensureSession() -> Bool {
-        if hasSession { return true }
+        if sessionQueue.sync(execute: { hasSession }) { return true }
+        sessionCreationLock.lock()
+        defer { sessionCreationLock.unlock() }
+
+        if sessionQueue.sync(execute: { hasSession }) { return true }
         return createSession()
     }
 

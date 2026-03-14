@@ -74,9 +74,17 @@ final class InlineIndicator {
     // MARK: - Private
 
     private func caretOrigin(from client: (any IMKTextInput)?, panelSize: NSSize) -> NSPoint {
-        if let lineHeightRect = TextInputGeometry.caretRect(for: client) {
+        if let result = TextInputGeometry.caretRect(for: client) {
+            let lineHeightRect = result.rect
             let gap: CGFloat = 4
-            let x = TextInputGeometry.indicatorAnchorX(for: lineHeightRect) + gap
+
+            // For attributesAtZero fallback, X is unreliable — keep current position if visible.
+            let x: CGFloat
+            if result.source == .attributesAtZero, let panel, panel.isVisible {
+                x = panel.frame.origin.x
+            } else {
+                x = TextInputGeometry.indicatorAnchorX(for: lineHeightRect) + gap
+            }
 
             // Prefer above the caret; if that goes off-screen, show below
             let aboveY = lineHeightRect.origin.y + lineHeightRect.height + gap

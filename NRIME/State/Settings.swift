@@ -286,9 +286,4 @@ final class Settings {
         _cachedJapaneseKeyConfig = nil
     }
 
-    // MARK: - Sync
-
-    func synchronize() {
-        defaults.synchronize()
-    }
 }

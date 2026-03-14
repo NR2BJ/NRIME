@@ -131,7 +131,10 @@ final class HangulAutomata {
     // MARK: - Consonant Input
 
     private func inputConsonant(_ jamo: Jamo) -> HangulResult {
-        let onsetIdx = jamo.onsetIndex!
+        guard let onsetIdx = jamo.onsetIndex else {
+            let committed = flush()
+            return HangulResult(committed: committed, composing: "")
+        }
         let codaIdx = jamo.codaIndex
 
         switch state {
@@ -186,7 +189,10 @@ final class HangulAutomata {
     // MARK: - Vowel Input
 
     private func inputVowel(_ jamo: Jamo) -> HangulResult {
-        let nucleusIdx = jamo.nucleusIndex!
+        guard let nucleusIdx = jamo.nucleusIndex else {
+            let committed = flush()
+            return HangulResult(committed: committed, composing: "")
+        }
 
         switch state {
         case .empty:
@@ -321,6 +327,7 @@ final class HangulAutomata {
         // Compatibility jamo for vowels: U+314F (ㅏ) to U+3163 (ㅣ)
         let base: UInt32 = 0x314F
         let scalar = base + UInt32(nucleusIdx)
-        return String(Unicode.Scalar(scalar)!)
+        guard let unicodeScalar = Unicode.Scalar(scalar) else { return "?" }
+        return String(unicodeScalar)
     }
 }

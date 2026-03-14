@@ -240,13 +240,13 @@ final class CandidatePanel {
         panel.backgroundColor = .clear
         panel.hasShadow = true
 
-        // Use panel's built-in contentView as container (no Auto Layout for sizing)
-        let container = panel.contentView!
+        // Use a custom container view that updates layer colors on appearance change
+        let container = AppearanceAwareContainerView()
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        container.applyLayerColors()
         container.layer?.cornerRadius = 6
-        container.layer?.borderColor = NSColor.separatorColor.cgColor
         container.layer?.borderWidth = 0.5
+        panel.contentView = container
 
         // StackView and pageLabel use manual frames set in updateDisplay()
         let stack = NSStackView()
@@ -385,10 +385,6 @@ final class CandidatePanel {
             rowViews.append(row)
         }
 
-        if let container = panel.contentView {
-            container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        }
-
         lastRenderedPage = page
         lastRenderedSelectedIndex = selectedIndex
         lastRenderedIsGrid = false
@@ -490,10 +486,6 @@ final class CandidatePanel {
             gridRowStacks.append(rowStack)
         }
 
-        if let container = panel.contentView {
-            container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        }
-
         lastRenderedPage = page
         lastRenderedSelectedIndex = selectedIndex
         lastRenderedIsGrid = true
@@ -542,11 +534,20 @@ final class CandidatePanel {
     // MARK: - Private: Positioning
 
     private func caretOrigin(from client: (any IMKTextInput)?, panelWidth: CGFloat) -> NSPoint {
-        if let lineHeightRect = TextInputGeometry.caretRect(for: client) {
+        if let result = TextInputGeometry.caretRect(for: client) {
+            let lineHeightRect = result.rect
             let panelHeight = panel?.frame.height ?? 200
-            let x = lineHeightRect.origin.x
             let gap: CGFloat = 2
             let belowY = lineHeightRect.origin.y - panelHeight - gap
+
+            // For attributesAtZero fallback, X is unreliable (points to line start).
+            // Keep current panel X position if visible, otherwise use the rect X as best guess.
+            let x: CGFloat
+            if result.source == .attributesAtZero, let panel, panel.isVisible {
+                x = panel.frame.origin.x
+            } else {
+                x = lineHeightRect.origin.x
+            }
 
             // Ensure panel stays on screen
             if let screenFrame = TextInputGeometry.screenFrame(containing: lineHeightRect) {
@@ -608,6 +609,7 @@ private class CandidateRowView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: rowHeight))
 
         wantsLayer = true
+        _isSelected = isSelected
         applyColors(isSelected: isSelected)
 
         addSubview(numberLabel)
@@ -627,8 +629,16 @@ private class CandidateRowView: NSView {
 
     /// Update only the highlight state without recreating the view.
     func updateHighlight(isSelected: Bool) {
+        _isSelected = isSelected
         applyColors(isSelected: isSelected)
     }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors(isSelected: _isSelected)
+    }
+
+    private var _isSelected: Bool = false
 
     private func applyColors(isSelected: Bool) {
         if isSelected {
@@ -660,6 +670,7 @@ private class CandidateGridCellView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
         wantsLayer = true
+        _isSelected = isSelected
         applyColors(isSelected: isSelected)
 
         addSubview(textLabel)
@@ -677,8 +688,16 @@ private class CandidateGridCellView: NSView {
 
     /// Update only the highlight state without recreating the view.
     func updateHighlight(isSelected: Bool) {
+        _isSelected = isSelected
         applyColors(isSelected: isSelected)
     }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors(isSelected: _isSelected)
+    }
+
+    private var _isSelected: Bool = false
 
     private func applyColors(isSelected: Bool) {
         if isSelected {
@@ -689,5 +708,21 @@ private class CandidateGridCellView: NSView {
             layer?.cornerRadius = 0
         }
         textLabel.textColor = isSelected ? .white : .labelColor
+    }
+}
+
+// MARK: - AppearanceAwareContainerView
+
+/// Container view that re-applies layer colors when dark/light mode changes.
+private class AppearanceAwareContainerView: NSView {
+
+    func applyLayerColors() {
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        layer?.borderColor = NSColor.separatorColor.cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyLayerColors()
     }
 }

@@ -180,8 +180,8 @@ final class KoreanEngine: InputEngine {
                 selectionRange: NSRange(location: result.composing.count, length: 0),
                 replacementRange: replacementRange()
             )
-        } else if result.committed.isEmpty {
-            // No committed text and no composing text — clear marked text
+        } else {
+            // Committed text but no composing text, or no text at all — clear marked text
             client.setMarkedText(
                 "" as NSString,
                 selectionRange: NSRange(location: 0, length: 0),

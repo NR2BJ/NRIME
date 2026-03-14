@@ -45,6 +45,12 @@ cp -R "$BUILD_DIR/$SETTINGS_APP" "$INSTALL_DIR/"
 rm -rf "$INSTALL_DIR/$RESTORE_HELPER_APP"
 cp -R "$BUILD_DIR/$RESTORE_HELPER_APP" "$INSTALL_DIR/"
 
+# Strip quarantine/provenance xattrs (macOS Sequoia marks cp'd files as untrusted,
+# causing the input method to appear grayed-out in the input source menu)
+xattr -cr "$INSTALL_DIR/$APP_NAME"
+xattr -cr "$INSTALL_DIR/$SETTINGS_APP"
+xattr -cr "$INSTALL_DIR/$RESTORE_HELPER_APP"
+
 # Ensure executables have execute permissions
 chmod +x "$INSTALL_DIR/$APP_NAME/Contents/MacOS/NRIME"
 chmod +x "$INSTALL_DIR/$SETTINGS_APP/Contents/MacOS/NRIMESettings"
