@@ -135,4 +135,25 @@ final class InputSourceRecoveryTests: XCTestCase {
         XCTAssertTrue(resolution.isActive)
         XCTAssertEqual(resolution.expiresAt, expiry)
     }
+
+    func testUnknownSourceDoesNotRecoverDuringNormalPolling() {
+        XCTAssertFalse(InputSourceRecovery.shouldTreatSourceAsRecoverable(
+            nil,
+            allowUnknownSourceRecovery: false
+        ))
+    }
+
+    func testUnknownSourceCanRecoverDuringResumeChecks() {
+        XCTAssertTrue(InputSourceRecovery.shouldTreatSourceAsRecoverable(
+            nil,
+            allowUnknownSourceRecovery: true
+        ))
+    }
+
+    func testNRIMESourceDoesNotRecoverDuringResumeChecks() {
+        XCTAssertFalse(InputSourceRecovery.shouldTreatSourceAsRecoverable(
+            InputSourceSelector.visibleInputSourceID,
+            allowUnknownSourceRecovery: true
+        ))
+    }
 }

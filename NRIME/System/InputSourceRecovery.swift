@@ -77,6 +77,18 @@ final class InputSourceRecovery {
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(screensDidWake(_:)),
+            name: NSWorkspace.screensDidWakeNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(sessionDidBecomeActive(_:)),
+            name: NSWorkspace.sessionDidBecomeActiveNotification,
+            object: nil
+        )
 
         NSLog("NRIME: InputSourceRecovery monitoring started")
         DeveloperLogger.shared.log("InputSourceRecovery", "Monitoring started")
@@ -97,6 +109,16 @@ final class InputSourceRecovery {
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
+        NSWorkspace.shared.notificationCenter.removeObserver(
+            self,
+            name: NSWorkspace.screensDidWakeNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.removeObserver(
+            self,
+            name: NSWorkspace.sessionDidBecomeActiveNotification,
+            object: nil
+        )
         pollTimer?.invalidate()
         pollTimer = nil
 
@@ -105,14 +127,15 @@ final class InputSourceRecovery {
     }
 
     @objc private func didWake(_ notification: Notification) {
-        // After wake, check with a short delay to let the system settle
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.pollInputSource()
-        }
-        // Check again after a longer delay in case the first one was too early
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-            self?.pollInputSource()
-        }
+        scheduleResumeRecoveryChecks(reason: "did_wake")
+    }
+
+    @objc private func screensDidWake(_ notification: Notification) {
+        scheduleResumeRecoveryChecks(reason: "screens_did_wake")
+    }
+
+    @objc private func sessionDidBecomeActive(_ notification: Notification) {
+        scheduleResumeRecoveryChecks(reason: "session_did_become_active")
     }
 
     private func scheduleStartupRecoveryChecks() {
@@ -154,8 +177,12 @@ final class InputSourceRecovery {
         recoverInputSource()
     }
 
-    private func pollInputSource() {
-        let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
+    private func pollInputSource(reason: String = "timer", allowUnknownSourceRecovery: Bool = false) {
+        let currentSourceID = InputSourceSelector.currentInputSourceID()
+        let currentSourceIsNonNRIME = Self.shouldTreatSourceAsRecoverable(
+            currentSourceID,
+            allowUnknownSourceRecovery: allowUnknownSourceRecovery
+        )
         let secureInputActive = secureInputDetector.isSecureInputActive()
         let currentUserInitiatedSwitch = userInitiatedSwitch
         let shouldRecover = Self.shouldRecoverInputSource(
@@ -167,7 +194,10 @@ final class InputSourceRecovery {
         guard shouldRecover else { return }
 
         DeveloperLogger.shared.log("InputSourceRecovery", "Polling triggered recovery", metadata: [
+            "allowUnknownSourceRecovery": String(allowUnknownSourceRecovery),
+            "currentSourceID": currentSourceID ?? "nil",
             "preventABCSwitch": String(Settings.shared.preventABCSwitch),
+            "reason": reason,
             "secureInput": String(secureInputActive),
             "sourceIsNonNRIME": String(currentSourceIsNonNRIME)
         ])
@@ -328,5 +358,22 @@ final class InputSourceRecovery {
         guard let expiresAt else { return (true, nil) }
         guard expiresAt > now else { return (false, nil) }
         return (true, expiresAt)
+    }
+
+    static func shouldTreatSourceAsRecoverable(
+        _ currentSourceID: String?,
+        allowUnknownSourceRecovery: Bool
+    ) -> Bool {
+        guard let currentSourceID else { return allowUnknownSourceRecovery }
+        return !currentSourceID.hasPrefix(InputSourceSelector.bundleID)
+    }
+
+    private func scheduleResumeRecoveryChecks(reason: String) {
+        let delays: [TimeInterval] = [0.2, 1.0, 3.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.pollInputSource(reason: reason, allowUnknownSourceRecovery: true)
+            }
+        }
     }
 }
