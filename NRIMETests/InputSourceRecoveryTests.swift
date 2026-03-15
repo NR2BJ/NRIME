@@ -108,4 +108,31 @@ final class InputSourceRecoveryTests: XCTestCase {
         XCTAssertEqual(nextState.consecutiveRecoveries, 3)
         XCTAssertEqual(nextState.lastRecoveryTime, priorTime)
     }
+
+    func testUserInitiatedSwitchExpiresAfterGracePeriod() {
+        let now = Date()
+
+        let resolution = InputSourceRecovery.resolveUserInitiatedSwitch(
+            now: now,
+            isActive: true,
+            expiresAt: now.addingTimeInterval(-0.1)
+        )
+
+        XCTAssertFalse(resolution.isActive)
+        XCTAssertNil(resolution.expiresAt)
+    }
+
+    func testUserInitiatedSwitchStaysActiveBeforeGracePeriodExpires() {
+        let now = Date()
+        let expiry = now.addingTimeInterval(4.0)
+
+        let resolution = InputSourceRecovery.resolveUserInitiatedSwitch(
+            now: now,
+            isActive: true,
+            expiresAt: expiry
+        )
+
+        XCTAssertTrue(resolution.isActive)
+        XCTAssertEqual(resolution.expiresAt, expiry)
+    }
 }

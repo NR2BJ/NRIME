@@ -328,6 +328,7 @@ class NRIMEInputController: IMKInputController {
         super.activateServer(sender)
 
         NRIMEInputController.activeController = self
+        InputSourceRecovery.shared.userInitiatedSwitch = false
 
         // Global mouse monitor: commit composing text on click.
         // Electron apps (Claude Desktop, KakaoTalk) don't reliably call

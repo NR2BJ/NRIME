@@ -16,10 +16,12 @@ final class InputSourceRecovery {
 
     private let stateQueue = DispatchQueue(label: "com.nrime.inputsource.state")
     private var _userInitiatedSwitch = false
+    private var _userInitiatedSwitchExpiresAt: Date?
     private var _consecutiveRecoveries = 0
     private var _lastRecoveryTime: Date?
 
     private let maxConsecutiveRecoveries = 3
+    private let userInitiatedSwitchGracePeriod: TimeInterval = 5.0
     private var isMonitoring = false
     private var pollTimer: Timer?
     private let secureInputDetector = SecureInputDetector()
@@ -28,8 +30,26 @@ final class InputSourceRecovery {
     /// Set to true when the user intentionally deactivates NRIME
     /// (e.g., via deactivateServer). Recovery is suppressed while true.
     var userInitiatedSwitch: Bool {
-        get { stateQueue.sync { _userInitiatedSwitch } }
-        set { stateQueue.sync { _userInitiatedSwitch = newValue } }
+        get {
+            stateQueue.sync {
+                let resolution = Self.resolveUserInitiatedSwitch(
+                    now: Date(),
+                    isActive: _userInitiatedSwitch,
+                    expiresAt: _userInitiatedSwitchExpiresAt
+                )
+                _userInitiatedSwitch = resolution.isActive
+                _userInitiatedSwitchExpiresAt = resolution.expiresAt
+                return resolution.isActive
+            }
+        }
+        set {
+            stateQueue.sync {
+                _userInitiatedSwitch = newValue
+                _userInitiatedSwitchExpiresAt = newValue
+                    ? Date().addingTimeInterval(userInitiatedSwitchGracePeriod)
+                    : nil
+            }
+        }
     }
 
     private init() {}
@@ -137,9 +157,10 @@ final class InputSourceRecovery {
     private func pollInputSource() {
         let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
         let secureInputActive = secureInputDetector.isSecureInputActive()
+        let currentUserInitiatedSwitch = userInitiatedSwitch
         let shouldRecover = Self.shouldRecoverInputSource(
             preventABCSwitch: Settings.shared.preventABCSwitch,
-            userInitiatedSwitch: userInitiatedSwitch,
+            userInitiatedSwitch: currentUserInitiatedSwitch,
             currentSourceIsNonNRIME: currentSourceIsNonNRIME,
             secureInputActive: secureInputActive
         )
@@ -156,20 +177,21 @@ final class InputSourceRecovery {
     @objc private func inputSourceChanged(_ notification: Notification) {
         let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
         let secureInputActive = secureInputDetector.isSecureInputActive()
+        let currentUserInitiatedSwitch = userInitiatedSwitch
         let shouldRecover = Self.shouldRecoverInputSource(
             preventABCSwitch: Settings.shared.preventABCSwitch,
-            userInitiatedSwitch: userInitiatedSwitch,
+            userInitiatedSwitch: currentUserInitiatedSwitch,
             currentSourceIsNonNRIME: currentSourceIsNonNRIME,
             secureInputActive: secureInputActive
         )
 
-        if shouldRecover || currentSourceIsNonNRIME || userInitiatedSwitch || secureInputActive {
+        if shouldRecover || currentSourceIsNonNRIME || currentUserInitiatedSwitch || secureInputActive {
             DeveloperLogger.shared.log("InputSourceRecovery", "Input source changed", metadata: [
                 "preventABCSwitch": String(Settings.shared.preventABCSwitch),
                 "secureInput": String(secureInputActive),
                 "shouldRecover": String(shouldRecover),
                 "sourceIsNonNRIME": String(currentSourceIsNonNRIME),
-                "userInitiatedSwitch": String(userInitiatedSwitch)
+                "userInitiatedSwitch": String(currentUserInitiatedSwitch)
             ])
         }
         userInitiatedSwitch = false
@@ -295,5 +317,16 @@ final class InputSourceRecovery {
 
         nextState.lastRecoveryTime = now
         return .recover(nextState)
+    }
+
+    static func resolveUserInitiatedSwitch(
+        now: Date,
+        isActive: Bool,
+        expiresAt: Date?
+    ) -> (isActive: Bool, expiresAt: Date?) {
+        guard isActive else { return (false, nil) }
+        guard let expiresAt else { return (true, nil) }
+        guard expiresAt > now else { return (false, nil) }
+        return (true, expiresAt)
     }
 }
