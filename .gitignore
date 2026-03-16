@@ -14,6 +14,10 @@ NRIME/Resources/mozc_server
 # Claude Code
 .claude/
 
+# Work logs and planning docs (local-only)
+worklog.md
+NRIME.md
+
 # macOS
 .DS_Store
 *.swp
