@@ -5,8 +5,9 @@
 macOS용 올인원 입력기. 한국어, 영어, 일본어를 **하나의 입력 소스**로 처리합니다.
 
 - 입력 소스 전환 없이 단축키로 즉시 언어 변경
-- 완전 오프라인 동작
+- 완전 오프라인 동작 (네트워크 불필요)
 - 일본어 변환은 [Google Mozc](https://github.com/google/mozc) 엔진 사용 (BSD 라이선스)
+- Electron 앱 완전 지원 (VS Code, Slack, Discord, Claude for Desktop 등)
 
 ## 설치
 
@@ -43,19 +44,29 @@ bash Tools/build_pkg.sh
 
 ### 제거
 
-언인스톨 스크립트로 모든 흔적을 완전히 제거합니다:
-
 ```bash
 bash Tools/uninstall.sh
 ```
 
 로그아웃/로그인하면 완전히 제거됩니다.
 
-스크립트 없이 터미널에서 바로 제거하려면:
+<details>
+<summary>수동 제거</summary>
 
 ```bash
-killall NRIME NRIMESettings mozc_server 2>/dev/null; sudo rm -rf ~/Library/Input\ Methods/NRIME.app ~/Library/Input\ Methods/NRIMESettings.app /Library/Input\ Methods/NRIME.app /Library/Input\ Methods/NRIMESettings.app; defaults delete com.nrime.inputmethod.app 2>/dev/null; defaults delete com.nrime.settings 2>/dev/null; defaults delete group.com.nrime.inputmethod 2>/dev/null; rm -rf ~/Library/Application\ Support/Mozc ~/Library/Caches/com.nrime.inputmethod.app ~/Library/Caches/com.nrime.settings
+killall NRIME NRIMESettings mozc_server 2>/dev/null
+sudo rm -rf ~/Library/Input\ Methods/NRIME.app ~/Library/Input\ Methods/NRIMESettings.app \
+  /Library/Input\ Methods/NRIME.app /Library/Input\ Methods/NRIMESettings.app
+defaults delete com.nrime.inputmethod.app 2>/dev/null
+defaults delete com.nrime.settings 2>/dev/null
+defaults delete group.com.nrime.inputmethod 2>/dev/null
+rm -rf ~/Library/Application\ Support/Mozc \
+  ~/Library/Caches/com.nrime.inputmethod.app \
+  ~/Library/Caches/com.nrime.settings \
+  ~/Library/Group\ Containers/group.com.nrime
 ```
+
+</details>
 
 ## 기본 단축키
 
@@ -92,7 +103,7 @@ killall NRIME NRIMESettings mozc_server 2>/dev/null; sudo rm -rf ~/Library/Input
 ```
 
 **변환 흐름:**
-1. 로마지 타이핑 → 히라가나로 실시간 표시
+1. 로마지 타이핑 → 히라가나로 실시간 표시 (라이브 변환 지원)
 2. `Space` 또는 `↓` → 변환 후보 표시
 3. `↑↓` 로 후보 이동, `1-9`로 직접 선택
 4. `Enter` 확정, `Escape` 취소
@@ -120,37 +131,60 @@ killall NRIME NRIMESettings mozc_server 2>/dev/null; sudo rm -rf ~/Library/Input
 
 | 탭 | 내용 |
 |----|------|
-| General | 단축키 변경, 인라인 모드 표시 ON/OFF |
-| Japanese | F6-F10 키 설정, Caps Lock/Shift 동작, 구두점 스타일 |
+| General | 단축키 변경, 인라인 모드 표시 ON/OFF, 진단 로그 |
+| Japanese | F6-F10 키 설정, Caps Lock/Shift 동작, 구두점 스타일, 라이브 변환 |
 | Per-App | 앱별로 마지막 사용 언어 기억 (화이트리스트/블랙리스트) |
 | About | 버전 정보 |
 
 ## 호환성
 
-- **키 리매핑 프로그램**: Karabiner-Elements, BetterTouchTool 등과 충돌 없음 (키 입력 감시용 CGEventTap 미사용)
-- **원격 데스크톱**: 정상 동작
-- **비밀번호 필드**: 자동으로 감지하여 시스템에 위임
+| 환경 | 상태 |
+|------|------|
+| 네이티브 macOS 앱 (Safari, TextEdit, Notes 등) | 정상 동작 |
+| Electron 앱 (VS Code, Slack, Discord, Claude for Desktop) | 정상 동작 (워크어라운드 적용) |
+| 키 리매핑 (Karabiner-Elements, BetterTouchTool) | 충돌 없음 (CGEventTap 미사용) |
+| 원격 데스크톱 | 정상 동작 |
+| 비밀번호 필드 | 자동 감지, 시스템에 위임 |
 
-## Electron/Chromium 앱 대응
+## 기술 노트: Electron/Chromium IME 워크어라운드
 
-VS Code, Slack, Discord, Claude for Desktop 등 Electron 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스트가 유실되는 문제를 해결하기 위해 다음과 같은 워크어라운드를 적용합니다.
+<details>
+<summary>IME 개발자용 참고 자료</summary>
 
-### 문제의 근본 원인
+Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스트가 유실되는 문제의 원인과 해결 방법입니다. 이 워크어라운드는 네이티브 앱에서도 동일하게 적용되며 부작용 없습니다.
 
-macOS의 `StandardKeyBinding.dict`에 **Shift+Return 바인딩이 존재하지 않습니다.** 따라서 Chromium의 `interpretKeyEvents:`가 `doCommandBySelector:insertNewline:` 대신 `insertText:"\n"`을 호출하고, 이때 Chromium 내부의 `oldHasMarkedText` 추적 로직이 해당 이벤트를 IME 조합 이벤트로 오판하여 fake `VKEY_PROCESSKEY`(0xE5)를 생성합니다. 이로 인해 확정된 텍스트가 유실됩니다.
+### 근본 원인
 
-Cmd+key의 경우, `performKeyEquivalent:` 경로를 타기 때문에 `return false`로 이벤트를 전달할 수 없습니다.
+**Shift+Enter**: macOS `StandardKeyBinding.dict`에 Shift+Return 바인딩이 없습니다. Return은 `insertNewline:`으로 매핑되지만, Shift+Return은 매핑이 없어서 Chromium의 `interpretKeyEvents:`가 `doCommandBySelector:` 대신 `insertText:"\n"`을 호출합니다. 이때 Chromium 내부의 `oldHasMarkedText` 추적 로직이 해당 이벤트를 IME 조합 이벤트로 오판하여 fake `VKEY_PROCESSKEY`(0xE5)를 생성하고, 확정된 텍스트가 유실됩니다.
 
-### 적용된 해결 방법
+**Cmd+key**: `performKeyEquivalent:` 경로를 타기 때문에 IMKit에서 `return false`로는 이벤트를 앱에 전달할 수 없습니다.
+
+### 해결 방법
 
 | 상황 | 방법 | 이유 |
 |------|------|------|
-| **Shift+Enter** | 텍스트 확정 후 10ms 딜레이를 두고 `client.insertText("\n")` 호출, `return true` | key event를 보내지 않으므로 `interpretKeyEvents:` 경로를 완전 회피. 딜레이는 Chromium IPC 처리 시간 확보 (5ms 이하에서 race condition 발생, 10ms에서 안정) |
-| **Cmd+A/C/V/X/Z** | 텍스트 확정 후 `CGEvent.post(tap: .cghidEventTap)`로 repost, `return true` | `eventSourceUserData`에 repost tag(`0x4E52494D45`)를 설정하여 컨트롤러가 재진입을 감지하고 `return false`로 통과시킴. `performKeyEquivalent:` 경로는 `oldHasMarkedText` 문제 없음 |
+| **Shift+Enter** | 텍스트 확정 후 10ms 딜레이를 두고 `client.insertText("\n")`, `return true` | key event를 보내지 않으므로 `interpretKeyEvents:` 경로를 완전 회피. 딜레이는 Chromium IPC 처리 시간 확보용 (5ms 이하 race condition, 10ms 안정) |
+| **Cmd+A/C/V/X/Z** | 텍스트 확정 후 tagged CGEvent repost via `.cghidEventTap`, `return true` | `eventSourceUserData`에 repost tag를 설정하여 컨트롤러가 재진입을 감지하고 `return false`로 통과시킴. `performKeyEquivalent:` 경로는 `oldHasMarkedText` 문제 없음 |
 
-### 다른 IME들의 접근 비교
+### 시도했지만 실패한 접근법
+
+| 접근법 | 결과 | 이유 |
+|--------|------|------|
+| `insertText + return false` | 텍스트 유실 + 줄바꿈 | Chromium `oldHasMarkedText` 오판 |
+| `setMarkedText("") + insertText + return false` | 텍스트 유실 + 줄바꿈 | 동일 원인 |
+| `flush() only + return false` | 텍스트 유실 + 스페이스 | composing text 미확정 |
+| `insertText(text + "\n")` | 커서 고착 | Chromium 내부 상태 불일치 |
+| `CGEvent.post(.cgAnnotatedSessionEventTap)` | 확정만, 동작 없음 | Electron이 해당 탭의 이벤트 무시 |
+| `CGEventPostToPSN` | 확정만, 동작 없음 | Electron이 PSN 직접 전달 무시 |
+| `NSAppleScript (System Events)` | 권한 오류 -1743 | IME 프로세스에서 Automation TCC 불가 |
+| `NSApp.sendAction(selectAll:)` | 확정만, 동작 없음 | IME 프로세스의 responder chain으로 전달됨 |
+| 동기 `client.insertText("\n")` | 확정만, 줄바꿈 없음 | Chromium이 IPC 배치 처리로 무시 |
+
+### 다른 IME들의 접근
 
 Squirrel(RIME), fcitx5-macos, Google Mozc 등 다른 macOS IME들은 "commit + return false" 패턴을 사용하지 않습니다. 키를 내부에서 처리하고 `return true`를 반환하거나, 처리하지 않는 키는 조합 없이 `return false`를 반환합니다.
+
+</details>
 
 ## 라이선스
 
