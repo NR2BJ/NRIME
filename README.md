@@ -54,16 +54,28 @@ bash Tools/uninstall.sh
 <summary>수동 제거</summary>
 
 ```bash
-killall NRIME NRIMESettings mozc_server 2>/dev/null
-sudo rm -rf ~/Library/Input\ Methods/NRIME.app ~/Library/Input\ Methods/NRIMESettings.app \
-  /Library/Input\ Methods/NRIME.app /Library/Input\ Methods/NRIMESettings.app
+# 프로세스 종료
+killall NRIME NRIMESettings NRIMERestoreHelper mozc_server 2>/dev/null
+
+# 앱 삭제 (사용자/시스템 설치 모두)
+rm -rf ~/Library/Input\ Methods/NRIME.app \
+  ~/Library/Input\ Methods/NRIMESettings.app \
+  ~/Library/Input\ Methods/NRIMERestoreHelper.app
+sudo rm -rf /Library/Input\ Methods/NRIME.app \
+  /Library/Input\ Methods/NRIMESettings.app \
+  /Library/Input\ Methods/NRIMERestoreHelper.app
+
+# 설정 삭제
 defaults delete com.nrime.inputmethod.app 2>/dev/null
 defaults delete com.nrime.settings 2>/dev/null
 defaults delete group.com.nrime.inputmethod 2>/dev/null
+
+# 데이터, 캐시, 컨테이너, LaunchAgent 삭제
 rm -rf ~/Library/Application\ Support/Mozc \
   ~/Library/Caches/com.nrime.inputmethod.app \
   ~/Library/Caches/com.nrime.settings \
   ~/Library/Group\ Containers/group.com.nrime
+rm -f ~/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist
 ```
 
 </details>
@@ -131,7 +143,7 @@ rm -rf ~/Library/Application\ Support/Mozc \
 
 | 탭 | 내용 |
 |----|------|
-| General | 단축키 변경, 인라인 모드 표시 ON/OFF, 진단 로그 |
+| General | 단축키 변경, 인라인 모드 표시 ON/OFF |
 | Japanese | F6-F10 키 설정, Caps Lock/Shift 동작, 구두점 스타일, 라이브 변환 |
 | Per-App | 앱별로 마지막 사용 언어 기억 (화이트리스트/블랙리스트) |
 | About | 버전 정보 |
@@ -147,9 +159,6 @@ rm -rf ~/Library/Application\ Support/Mozc \
 | 비밀번호 필드 | 자동 감지, 시스템에 위임 |
 
 ## 기술 노트: Electron/Chromium IME 워크어라운드
-
-<details>
-<summary>IME 개발자용 참고 자료</summary>
 
 Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스트가 유실되는 문제의 원인과 해결 방법입니다. 이 워크어라운드는 네이티브 앱에서도 동일하게 적용되며 부작용 없습니다.
 
@@ -183,8 +192,6 @@ Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스
 ### 다른 IME들의 접근
 
 Squirrel(RIME), fcitx5-macos, Google Mozc 등 다른 macOS IME들은 "commit + return false" 패턴을 사용하지 않습니다. 키를 내부에서 처리하고 `return true`를 반환하거나, 처리하지 않는 키는 조합 없이 `return false`를 반환합니다.
-
-</details>
 
 ## 라이선스
 

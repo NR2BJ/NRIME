@@ -17,7 +17,6 @@ final class SettingsStore: ObservableObject {
         _tapThreshold = Published(initialValue: 0.2)
         _preventABCSwitch = Published(initialValue: false)
         _developerModeEnabled = Published(initialValue: false)
-        _detailedKeyLoggingEnabled = Published(initialValue: false)
         _perAppModeEnabled = Published(initialValue: false)
         _perAppModeType = Published(initialValue: "whitelist")
         _perAppModeList = Published(initialValue: [])
@@ -57,10 +56,6 @@ final class SettingsStore: ObservableObject {
 
     @Published var developerModeEnabled: Bool {
         didSet { defaults.set(developerModeEnabled, forKey: "developerModeEnabled") }
-    }
-
-    @Published var detailedKeyLoggingEnabled: Bool {
-        didSet { defaults.set(detailedKeyLoggingEnabled, forKey: "detailedKeyLoggingEnabled") }
     }
 
     @Published var tapThreshold: Double {
@@ -127,7 +122,6 @@ final class SettingsStore: ObservableObject {
 
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")
-        detailedKeyLoggingEnabled = defaults.bool(forKey: "detailedKeyLoggingEnabled")
         perAppModeEnabled = defaults.bool(forKey: "perAppModeEnabled")
         perAppModeType = defaults.string(forKey: "perAppModeType") ?? "whitelist"
         perAppModeList = defaults.stringArray(forKey: "perAppModeList") ?? []

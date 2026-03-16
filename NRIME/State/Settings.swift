@@ -73,14 +73,6 @@ final class Settings {
         set { defaults.set(newValue, forKey: "developerModeEnabled") }
     }
 
-    /// Detailed key logging: logs keyCode, modifiers, characters for each key event.
-    /// Only active when developerModeEnabled is also true.
-    /// Warning: may log sensitive input — for debugging only.
-    var detailedKeyLoggingEnabled: Bool {
-        get { defaults.bool(forKey: "detailedKeyLoggingEnabled") }
-        set { defaults.set(newValue, forKey: "detailedKeyLoggingEnabled") }
-    }
-
     var lastNonEnglishMode: InputMode {
         get {
             guard let rawValue = defaults.string(forKey: "lastNonEnglishMode"),
