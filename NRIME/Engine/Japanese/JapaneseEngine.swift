@@ -255,8 +255,9 @@ final class JapaneseEngine: InputEngine {
             // Async insertText("\n") via IME client API avoids interpretKeyEvents: entirely.
             if wasComposing && isShifted {
                 commitComposing(client: client)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
-                    client.insertText("\n" as NSString, replacementRange: replacementRange())
+                let capturedClient = client
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
                 }
                 return true
             }
@@ -645,8 +646,9 @@ final class JapaneseEngine: InputEngine {
         // Shift+Enter — commit conversion, then insert newline after delay.
         if (keyCode == 0x24 || keyCode == 0x4C) && isShifted {
             commitConversion(client: client)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
-                client.insertText("\n" as NSString, replacementRange: replacementRange())
+            let capturedClient = client
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
             }
             return true
         }

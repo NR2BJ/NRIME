@@ -69,8 +69,11 @@ final class KoreanEngine: InputEngine {
         // Async insertText("\n") via IME client API avoids the interpretKeyEvents: path entirely.
         if automata.isComposing && isShifted && Self.isEnterKey(event.keyCode) {
             commitComposing(client: client)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
-                client.insertText("\n" as NSString, replacementRange: replacementRange())
+            // Capture client locally — the proxy may become stale if the user switches
+            // away within the 10ms window, in which case IMKit silently ignores the call.
+            let capturedClient = client
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
             }
             return true
         }

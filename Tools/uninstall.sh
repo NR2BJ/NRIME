@@ -36,9 +36,10 @@ rm -f "$HOME/Library/Preferences/com.nrime.settings.plist.lockfile"
 rm -f "$HOME/Library/Preferences/group.com.nrime.inputmethod.plist"
 rm -f "$HOME/Library/Preferences/group.com.nrime.inputmethod.plist.lockfile"
 
-# 4. Remove Mozc engine data (user dictionary, conversion learning)
-echo "[4/7] Removing Mozc data..."
+# 4. Remove Mozc engine data and NRIME logs
+echo "[4/7] Removing Mozc data and logs..."
 rm -rf "$HOME/Library/Application Support/Mozc"
+rm -rf "$HOME/Library/Application Support/NRIME"
 
 # 5. Remove caches and containers
 echo "[5/7] Removing caches..."
