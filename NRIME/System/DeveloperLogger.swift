@@ -1,4 +1,4 @@
-import Foundation
+import Cocoa
 
 final class DeveloperLogger {
     static let shared = DeveloperLogger()
@@ -129,6 +129,29 @@ final class DeveloperLogger {
         # Clear this file anytime from NRIME Settings > General > Developer.
 
         """
+    }
+
+    // MARK: - Detailed Key Logging
+
+    /// Log a key event with full detail (keyCode, modifiers, characters).
+    /// Only logs when both developerMode AND detailedKeyLogging are enabled.
+    func logKeyEvent(_ subsystem: String, _ message: String, event: NSEvent) {
+        guard Settings.shared.detailedKeyLoggingEnabled else { return }
+        log(subsystem, message, metadata: [
+            "keyCode": String(format: "0x%02X", event.keyCode),
+            "modifiers": String(format: "0x%08X", event.modifierFlags.rawValue),
+            "chars": event.characters ?? "",
+            "charsIgnoring": event.charactersIgnoringModifiers ?? ""
+        ])
+    }
+
+    /// Log a selector forwarding event.
+    /// Only logs when both developerMode AND detailedKeyLogging are enabled.
+    func logSelector(_ subsystem: String, _ message: String, selector: String) {
+        guard Settings.shared.detailedKeyLoggingEnabled else { return }
+        log(subsystem, message, metadata: [
+            "selector": selector
+        ])
     }
 
     private static func normalize(_ value: String) -> String {

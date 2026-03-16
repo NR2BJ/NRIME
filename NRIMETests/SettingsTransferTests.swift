@@ -38,11 +38,11 @@ final class SettingsTransferTests: XCTestCase {
         sourceDefaults.set(["com.apple.Terminal": InputMode.english.rawValue], forKey: SettingsTransfer.perAppSavedModesKey)
         sourceDefaults.set(InputMode.japanese.rawValue, forKey: SettingsTransfer.lastNonEnglishModeKey)
         sourceDefaults.set(
-            try JSONEncoder().encode(Settings.ShortcutConfig.defaultSwitchJapanese),
+            try JSONEncoder().encode(ShortcutConfig.defaultSwitchJapanese),
             forKey: SettingsTransfer.shortcutKey(for: "switchJapanese")
         )
         sourceDefaults.set(
-            try JSONEncoder().encode(Settings.JapaneseKeyConfig.default),
+            try JSONEncoder().encode(JapaneseKeyConfig.default),
             forKey: SettingsTransfer.japaneseKeyConfigKey
         )
         sourceDefaults.set(

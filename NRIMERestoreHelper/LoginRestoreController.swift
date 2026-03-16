@@ -87,8 +87,9 @@ final class LoginRestoreController {
     }
 
     private func attemptRestore(after delay: TimeInterval, trigger: String, bundleID: String? = nil) {
-        let currentSourceID = InputSourceSelector.currentInputSourceID() ?? "unknown"
-        guard InputSourceSelector.currentSourceIsNonNRIME() else {
+        let rawSourceID = InputSourceSelector.currentInputSourceID()
+        let currentSourceID = rawSourceID ?? "unknown"
+        guard LoginRestorePolicy.shouldAttemptRestore(currentSourceID: rawSourceID) else {
             if trigger != "scheduled" || delay == 0 || delay == LoginRestorePolicy.stabilizationDuration {
                 var metadata = [
                     "delay": Self.delayString(delay),

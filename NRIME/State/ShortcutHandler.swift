@@ -59,9 +59,9 @@ final class ShortcutHandler {
         defer { previousModifierFlags = newFlags }
 
         // Determine if this modifier key went down or up
-        guard let flag = Settings.ShortcutConfig.modifierFlag(for: keyCode) else {
+        guard let flag = ShortcutConfig.modifierFlag(for: keyCode) else {
             // Caps Lock: try modifier-only tap first, then plain-key shortcut
-            if keyCode == Settings.ShortcutConfig.keyCodeCapsLock {
+            if keyCode == ShortcutConfig.keyCodeCapsLock {
                 if checkModifierOnlyTap(keyCode) { return true }
                 return checkPlainKeyShortcut(keyCode)
             }

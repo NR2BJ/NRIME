@@ -17,6 +17,7 @@ final class SettingsStore: ObservableObject {
         _tapThreshold = Published(initialValue: 0.2)
         _preventABCSwitch = Published(initialValue: false)
         _developerModeEnabled = Published(initialValue: false)
+        _detailedKeyLoggingEnabled = Published(initialValue: false)
         _perAppModeEnabled = Published(initialValue: false)
         _perAppModeType = Published(initialValue: "whitelist")
         _perAppModeList = Published(initialValue: [])
@@ -56,6 +57,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var developerModeEnabled: Bool {
         didSet { defaults.set(developerModeEnabled, forKey: "developerModeEnabled") }
+    }
+
+    @Published var detailedKeyLoggingEnabled: Bool {
+        didSet { defaults.set(detailedKeyLoggingEnabled, forKey: "detailedKeyLoggingEnabled") }
     }
 
     @Published var tapThreshold: Double {
@@ -122,6 +127,7 @@ final class SettingsStore: ObservableObject {
 
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")
+        detailedKeyLoggingEnabled = defaults.bool(forKey: "detailedKeyLoggingEnabled")
         perAppModeEnabled = defaults.bool(forKey: "perAppModeEnabled")
         perAppModeType = defaults.string(forKey: "perAppModeType") ?? "whitelist"
         perAppModeList = defaults.stringArray(forKey: "perAppModeList") ?? []
@@ -173,83 +179,9 @@ final class SettingsStore: ObservableObject {
     }
 
     private func bundleVersionString() -> String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.4"
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
     }
 }
 
-/// Japanese IME key configuration — must match Settings.JapaneseKeyConfig in the input method.
-struct JapaneseKeyConfig: Codable, Equatable {
-    var hiraganaKeyCode: UInt16? = 0x61      // F6
-    var fullKatakanaKeyCode: UInt16? = 0x62  // F7
-    var halfKatakanaKeyCode: UInt16? = 0x64  // F8
-    var fullRomajiKeyCode: UInt16? = 0x65    // F9
-    var halfRomajiKeyCode: UInt16? = 0x6D    // F10
-
-    var capsLockAction: CapsLockAction = .capsLock
-    var shiftKeyAction: ShiftKeyAction = .none
-
-    /// Punctuation style: "japanese" → 。、  "western" → .,
-    var punctuationStyle: PunctuationStyle = .japanese
-    /// Whether / key produces ・ (nakaguro)
-    var slashToNakaguro: Bool = true
-    /// Whether ¥ key produces ¥ (yen sign)
-    var yenKeyToYen: Bool = true
-    /// Whether Space inserts full-width space (U+3000) instead of half-width (U+0020)
-    var fullWidthSpace: Bool = false
-
-    /// Live conversion: show conversion results in real-time as user types
-    var liveConversion: Bool = false
-    /// Prediction: show predicted next words after committing text
-    var prediction: Bool = true
-
-    /// Candidate panel font size in points (default: 14)
-    var candidateFontSize: CGFloat = 14
-
-    static let `default` = JapaneseKeyConfig()
-}
-
-enum CapsLockAction: String, Codable, CaseIterable {
-    case capsLock = "capsLock"
-    case katakana = "katakana"
-    case romaji = "romaji"
-}
-
-enum ShiftKeyAction: String, Codable, CaseIterable {
-    case none = "none"
-    case katakana = "katakana"
-    case romaji = "romaji"
-}
-
-enum PunctuationStyle: String, Codable, CaseIterable {
-    case japanese = "japanese"          // 。、
-    case fullWidthWestern = "fullWidthWestern"  // ．，
-}
-
-/// Shortcut configuration — must match Settings.ShortcutConfig in the input method.
-struct ShortcutConfig: Codable, Equatable {
-    var keyCode: UInt16
-    var modifierKeyCode: UInt16
-    var modifiers: UInt
-    var isModifierOnlyTap: Bool
-    var label: String
-
-    static let defaultToggleEnglish = ShortcutConfig(
-        keyCode: 0x3C, modifierKeyCode: 0x3C,
-        modifiers: 0, isModifierOnlyTap: true, label: "Right Shift"
-    )
-    static let defaultSwitchKorean = ShortcutConfig(
-        keyCode: 0x12, modifierKeyCode: 0x3C,
-        modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
-        isModifierOnlyTap: false, label: "Right Shift + 1"
-    )
-    static let defaultSwitchJapanese = ShortcutConfig(
-        keyCode: 0x13, modifierKeyCode: 0x3C,
-        modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
-        isModifierOnlyTap: false, label: "Right Shift + 2"
-    )
-    static let defaultHanjaConvert = ShortcutConfig(
-        keyCode: 0x24, modifierKeyCode: 0x3A,
-        modifiers: UInt(NSEvent.ModifierFlags.option.rawValue),
-        isModifierOnlyTap: false, label: "Option + Enter"
-    )
-}
+// ShortcutConfig, JapaneseKeyConfig, CapsLockAction, ShiftKeyAction, PunctuationStyle
+// are defined in Shared/SettingsModels.swift (shared between NRIME and NRIMESettings targets)

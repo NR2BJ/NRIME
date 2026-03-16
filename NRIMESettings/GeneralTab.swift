@@ -92,6 +92,12 @@ struct GeneralTab: View {
                     Text("Typed text is not recorded automatically, and nothing is uploaded unless the user shares the file manually.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    Toggle("Enable Detailed Key Logging", isOn: $store.detailedKeyLoggingEnabled)
+                        .disabled(!store.developerModeEnabled)
+                    Text("Logs keyCode, modifier flags, and characters for each key event. May contain sensitive input.")
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.8))
                 }
 
                 VStack(alignment: .leading, spacing: 8) {

@@ -35,9 +35,15 @@ final class KoreanEngine: InputEngine {
     func handleEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
         guard event.type == .keyDown else { return false }
 
-        // Ignore events with Command, Control, or Option modifiers (system shortcuts)
+        // Modifier keys (Cmd, Ctrl, Option) while composing:
+        // Cmd+key goes through performKeyEquivalent (not keyDown), so return false
+        // won't forward it. Commit text, then repost the event via CGEvent with a tag
+        // so our controller detects it and passes it through to the host app.
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || event.modifierFlags.contains(.option) {
-            commitComposing(client: client)
+            if automata.isComposing {
+                commitAndRepostEvent(event: event, client: client)
+                return true
+            }
             return false
         }
 
@@ -56,36 +62,15 @@ final class KoreanEngine: InputEngine {
 
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
 
-        // Shift+Enter while composing: commit, then re-post the key event
-        // at cgAnnotatedSessionEventTap to bypass IMKit entirely.
-        // (insertText + return false doesn't forward the key in Electron apps.)
-        let isEnter = event.keyCode == 0x24 || event.keyCode == 0x4C
-        if automata.isComposing && isEnter && isShifted {
-            let text = automata.flush()
-            let kc = event.keyCode
-            let repRange = replacementRange()
-            // Clear marked text immediately so no visual artifact remains.
-            client.setMarkedText("" as NSString,
-                                 selectionRange: NSRange(location: 0, length: 0),
-                                 replacementRange: repRange)
-            // Commit + Shift+Enter outside handle() — insertText called inside
-            // handle() with return true gets rolled back by IMKit in some apps.
-            // Must be in SEPARATE async blocks: insertText interferes with CGEvent
-            // when in the same block.
-            DispatchQueue.main.async {
-                if !text.isEmpty {
-                    client.insertText(text as NSString, replacementRange: repRange)
-                }
-            }
-            DispatchQueue.main.async {
-                let src = CGEventSource(stateID: .privateState)
-                if let down = CGEvent(keyboardEventSource: src, virtualKey: kc, keyDown: true),
-                   let up = CGEvent(keyboardEventSource: src, virtualKey: kc, keyDown: false) {
-                    down.flags = .maskShift
-                    up.flags = .maskShift
-                    down.post(tap: .cgAnnotatedSessionEventTap)
-                    up.post(tap: .cgAnnotatedSessionEventTap)
-                }
+        // Shift+Enter while composing: commit text, then insert newline after delay.
+        // Cannot use "commit + return false" — Shift+Return has no StandardKeyBinding.dict
+        // entry, so Chromium's oldHasMarkedText check misinterprets the forwarded event.
+        // Cannot use synchronous insertText("\n") — gets batched/swallowed by Chromium.
+        // Async insertText("\n") via IME client API avoids the interpretKeyEvents: path entirely.
+        if automata.isComposing && isShifted && Self.isEnterKey(event.keyCode) {
+            commitComposing(client: client)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
+                client.insertText("\n" as NSString, replacementRange: replacementRange())
             }
             return true
         }
@@ -135,6 +120,11 @@ final class KoreanEngine: InputEngine {
         let text = automata.flush()
         clearHanjaSession()
         if !text.isEmpty {
+            client.setMarkedText(
+                "" as NSString,
+                selectionRange: NSRange(location: 0, length: 0),
+                replacementRange: replacementRange()
+            )
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
     }
@@ -197,6 +187,40 @@ final class KoreanEngine: InputEngine {
         if !text.isEmpty {
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
+    }
+
+
+    /// Commit composing text and repost the modifier key event via CGEvent.
+    /// Cmd+key events go through performKeyEquivalent (not keyDown), so return false
+    /// won't forward them. Instead, we commit text synchronously and repost the event
+    /// as a tagged CGEvent so the controller detects the tag and passes it through.
+    private func commitAndRepostEvent(event: NSEvent, client: any IMKTextInput) {
+        commitComposing(client: client)
+
+        // Repost the key event via CGEvent with our repost tag.
+        // The controller's handle() checks eventSourceUserData and returns false
+        // for tagged events, allowing them to pass through to the host app.
+        let keyCode = event.keyCode
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        DispatchQueue.main.async {
+            guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
+            keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+            keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+            keyDown.post(tap: .cghidEventTap)
+
+            // Key up after a brief delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+                keyUp.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+                keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                keyUp.post(tap: .cghidEventTap)
+            }
+        }
+    }
+
+    /// Whether the given keyCode is an Enter key (Return or numpad Enter).
+    private static func isEnterKey(_ keyCode: UInt16) -> Bool {
+        keyCode == 0x24 || keyCode == 0x4C  // Return, numpad Enter
     }
 
     func triggerHanjaConversion(client: any IMKTextInput) -> Bool {

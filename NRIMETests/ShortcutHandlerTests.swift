@@ -5,10 +5,10 @@ import XCTest
 final class ShortcutHandlerTests: XCTestCase {
 
     private var handler: ShortcutHandler!
-    private var originalToggleEnglish: Settings.ShortcutConfig!
-    private var originalSwitchKorean: Settings.ShortcutConfig!
-    private var originalSwitchJapanese: Settings.ShortcutConfig!
-    private var originalHanjaConvert: Settings.ShortcutConfig!
+    private var originalToggleEnglish: ShortcutConfig!
+    private var originalSwitchKorean: ShortcutConfig!
+    private var originalSwitchJapanese: ShortcutConfig!
+    private var originalHanjaConvert: ShortcutConfig!
     private var originalTapThreshold: TimeInterval = 0
 
     override func setUp() {
@@ -88,12 +88,12 @@ final class ShortcutHandlerTests: XCTestCase {
 
     func testResetHandler() {
         XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
-            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: [.shift]
         )))
         handler.reset()
         XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
-            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: []
         )))
         XCTAssertEqual(StateManager.shared.currentMode, .english)
@@ -101,11 +101,11 @@ final class ShortcutHandlerTests: XCTestCase {
 
     func testModifierOnlyTapTriggersToggleEnglish() {
         XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
-            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: [.shift]
         )))
         XCTAssertTrue(handler.handleEvent(flagsChangedEvent(
-            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: []
         )))
         XCTAssertEqual(StateManager.shared.currentMode, .korean)
@@ -113,7 +113,7 @@ final class ShortcutHandlerTests: XCTestCase {
 
     func testModifierComboSwitchesJapanese() {
         XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
-            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: [.shift]
         )))
         XCTAssertTrue(handler.handleEvent(keyEvent(
@@ -126,7 +126,7 @@ final class ShortcutHandlerTests: XCTestCase {
 
     func testModifierComboSuppressesTapActionOnRelease() {
         XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
-            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: [.shift]
         )))
         XCTAssertTrue(handler.handleEvent(keyEvent(
@@ -135,7 +135,7 @@ final class ShortcutHandlerTests: XCTestCase {
             modifiers: [.shift]
         )))
         XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
-            keyCode: Settings.ShortcutConfig.keyCodeRightShift,
+            keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: []
         )))
         XCTAssertEqual(StateManager.shared.currentMode, .japanese)

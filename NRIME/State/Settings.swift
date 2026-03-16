@@ -29,80 +29,7 @@ final class Settings {
     }
 
     // MARK: - Shortcut Keys
-
-    /// Stored shortcut configuration. Each shortcut is serialized as a dictionary.
-    /// Keys: "toggleEnglish", "switchKorean", "switchJapanese", "hanjaConvert"
-
-    struct ShortcutConfig: Codable, Equatable {
-        /// For modifier-only tap: the modifier's hardware keyCode (e.g. 0x3C = Right Shift)
-        /// For modifier+key combo: the non-modifier key's keyCode (e.g. 0x12 = "1")
-        /// For plain key: the key's keyCode (e.g. 0x69 = F13)
-        var keyCode: UInt16
-
-        /// For modifier+key combo: the modifier's hardware keyCode (e.g. 0x3C for Right Shift)
-        /// For modifier-only tap or plain key: same as keyCode
-        var modifierKeyCode: UInt16
-
-        /// Required modifier flags (high-level: .shift, .option, .control, .command)
-        var modifiers: UInt
-
-        /// true if this shortcut fires on modifier key tap (no other key involved)
-        var isModifierOnlyTap: Bool
-
-        /// Display label, e.g. "Right Shift", "Right Shift + 1"
-        var label: String
-
-        // MARK: - Modifier keyCode constants
-        static let keyCodeRightShift: UInt16  = 0x3C
-        static let keyCodeLeftShift: UInt16   = 0x38
-        static let keyCodeRightCtrl: UInt16   = 0x3E
-        static let keyCodeLeftCtrl: UInt16    = 0x3B
-        static let keyCodeRightOption: UInt16 = 0x3D
-        static let keyCodeLeftOption: UInt16  = 0x3A
-        static let keyCodeRightCmd: UInt16    = 0x36
-        static let keyCodeLeftCmd: UInt16     = 0x37
-        static let keyCodeCapsLock: UInt16    = 0x39
-
-        /// Which high-level modifier flag this modifier keyCode belongs to
-        static func modifierFlag(for keyCode: UInt16) -> NSEvent.ModifierFlags? {
-            switch keyCode {
-            case keyCodeRightShift, keyCodeLeftShift:   return .shift
-            case keyCodeRightCtrl, keyCodeLeftCtrl:     return .control
-            case keyCodeRightOption, keyCodeLeftOption:  return .option
-            case keyCodeRightCmd, keyCodeLeftCmd:        return .command
-            default: return nil
-            }
-        }
-
-        /// Is this keyCode a modifier key?
-        static func isModifierKey(_ keyCode: UInt16) -> Bool {
-            return modifierFlag(for: keyCode) != nil || keyCode == keyCodeCapsLock
-        }
-
-        /// Default: Right Shift tap
-        static let defaultToggleEnglish = ShortcutConfig(
-            keyCode: keyCodeRightShift, modifierKeyCode: keyCodeRightShift,
-            modifiers: 0, isModifierOnlyTap: true, label: "Right Shift"
-        )
-        /// Default: Right Shift + 1
-        static let defaultSwitchKorean = ShortcutConfig(
-            keyCode: 0x12, modifierKeyCode: keyCodeRightShift,
-            modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
-            isModifierOnlyTap: false, label: "Right Shift + 1"
-        )
-        /// Default: Right Shift + 2
-        static let defaultSwitchJapanese = ShortcutConfig(
-            keyCode: 0x13, modifierKeyCode: keyCodeRightShift,
-            modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
-            isModifierOnlyTap: false, label: "Right Shift + 2"
-        )
-        /// Default: Option + Enter
-        static let defaultHanjaConvert = ShortcutConfig(
-            keyCode: 0x24, modifierKeyCode: keyCodeLeftOption,
-            modifiers: UInt(NSEvent.ModifierFlags.option.rawValue),
-            isModifierOnlyTap: false, label: "Option + Enter"
-        )
-    }
+    // ShortcutConfig is defined in Shared/SettingsModels.swift
 
     func shortcut(for key: String) -> ShortcutConfig {
         guard let data = defaults.data(forKey: "shortcut_\(key)"),
@@ -144,6 +71,14 @@ final class Settings {
     var developerModeEnabled: Bool {
         get { defaults.bool(forKey: "developerModeEnabled") }
         set { defaults.set(newValue, forKey: "developerModeEnabled") }
+    }
+
+    /// Detailed key logging: logs keyCode, modifiers, characters for each key event.
+    /// Only active when developerModeEnabled is also true.
+    /// Warning: may log sensitive input — for debugging only.
+    var detailedKeyLoggingEnabled: Bool {
+        get { defaults.bool(forKey: "detailedKeyLoggingEnabled") }
+        set { defaults.set(newValue, forKey: "detailedKeyLoggingEnabled") }
     }
 
     var lastNonEnglishMode: InputMode {
@@ -197,66 +132,8 @@ final class Settings {
     }
 
     // MARK: - Japanese IME Keys
-
-    /// Japanese IME key configuration.
-    /// Each key maps an action name to an optional macOS keyCode.
-    /// nil = disabled (user removed the binding).
-    struct JapaneseKeyConfig: Codable, Equatable {
-        /// Convert to hiragana (default: F6 = 0x61)
-        var hiraganaKeyCode: UInt16? = 0x61
-        /// Convert to full-width katakana (default: F7 = 0x62)
-        var fullKatakanaKeyCode: UInt16? = 0x62
-        /// Convert to half-width katakana (default: F8 = 0x64)
-        var halfKatakanaKeyCode: UInt16? = 0x64
-        /// Convert to full-width romaji (default: F9 = 0x65)
-        var fullRomajiKeyCode: UInt16? = 0x65
-        /// Convert to half-width romaji (default: F10 = 0x6D)
-        var halfRomajiKeyCode: UInt16? = 0x6D
-
-        /// Caps Lock action in Japanese mode
-        var capsLockAction: CapsLockAction = .capsLock
-        /// Shift key action in Japanese mode
-        var shiftKeyAction: ShiftKeyAction = .none
-
-        /// Punctuation style: .japanese → 。、  .western → .,
-        var punctuationStyle: PunctuationStyle = .japanese
-        /// Whether / key produces ・ (nakaguro)
-        var slashToNakaguro: Bool = true
-        /// Whether ¥ key produces ¥ (yen sign)
-        var yenKeyToYen: Bool = true
-        /// Whether Space inserts full-width space (U+3000) instead of half-width (U+0020)
-        var fullWidthSpace: Bool = false
-
-        /// Live conversion: show conversion results in real-time as user types
-        var liveConversion: Bool = false
-        /// Prediction: show predicted next words after committing text
-        var prediction: Bool = true
-
-        /// Candidate panel font size in points (default: 14)
-        var candidateFontSize: CGFloat = 14
-
-        static let `default` = JapaneseKeyConfig()
-    }
-
-    /// Caps Lock behavior options for Japanese input
-    enum CapsLockAction: String, Codable, CaseIterable {
-        case capsLock = "capsLock"           // System default (toggle caps)
-        case katakana = "katakana"           // Convert to full-width katakana
-        case romaji = "romaji"               // Convert to half-width romaji
-    }
-
-    /// Shift key behavior options for Japanese input
-    enum ShiftKeyAction: String, Codable, CaseIterable {
-        case none = "none"                   // Normal shift (no special behavior)
-        case katakana = "katakana"           // Shift+input → katakana
-        case romaji = "romaji"               // Shift+input → romaji passthrough
-    }
-
-    /// Punctuation style options for Japanese input
-    enum PunctuationStyle: String, Codable, CaseIterable {
-        case japanese = "japanese"           // 。、
-        case fullWidthWestern = "fullWidthWestern"  // ．，
-    }
+    // JapaneseKeyConfig, CapsLockAction, ShiftKeyAction, PunctuationStyle
+    // are defined in Shared/SettingsModels.swift
 
     var japaneseKeyConfig: JapaneseKeyConfig {
         get {

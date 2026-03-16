@@ -39,6 +39,24 @@ class NRIMEInputController: IMKInputController {
             return false
         }
 
+        // 0. Re-posted events: immediately pass through to the host app.
+        //    KeyEventReposter tags synthetic CGEvents so we don't re-intercept them.
+        if let cgEvent = event.cgEvent {
+            let userData = cgEvent.getIntegerValueField(.eventSourceUserData)
+            if userData == KeyEventReposter.repostTag {
+                DeveloperLogger.shared.log("Controller", "repost tag DETECTED → returning false", metadata: [
+                    "keyCode": String(format: "0x%02X", event.keyCode)
+                ])
+                return false
+            }
+        } else if event.type == .keyDown {
+            // cgEvent is nil — we can't detect reposted events via tag
+            DeveloperLogger.shared.log("Controller", "event.cgEvent is NIL", metadata: [
+                "keyCode": String(format: "0x%02X", event.keyCode),
+                "type": "\(event.type.rawValue)"
+            ])
+        }
+
         // Cache client for the global mouse monitor callback.
         cachedClient = client as AnyObject
 

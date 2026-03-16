@@ -1,9 +1,19 @@
 import Foundation
 
 enum LoginRestorePolicy {
-    static let stabilizationDuration: TimeInterval = 15.0
+    static let stabilizationDuration: TimeInterval = 30.0
     static let pollInterval: TimeInterval = 0.5
     static let terminationGracePeriod: TimeInterval = 1.0
+
+    /// Determine if a restore should be attempted based on current input source.
+    /// Treats nil source ID as recoverable (common during early boot / login).
+    static func shouldAttemptRestore(
+        currentSourceID: String?,
+        bundleIDPrefix: String = "com.nrime.inputmethod"
+    ) -> Bool {
+        guard let currentSourceID else { return true }  // nil = early boot, treat as recoverable
+        return !currentSourceID.hasPrefix(bundleIDPrefix)
+    }
 
     static func attemptDelays(
         stabilizationDuration: TimeInterval = stabilizationDuration,

@@ -148,6 +148,12 @@ final class UserDictionaryManager: ObservableObject {
     /// Index of the dictionary within storage we're editing (default: first / only one).
     private var activeDictionaryIndex: Int = 0
 
+    /// Background queue for serialization and file I/O.
+    private let saveQueue = DispatchQueue(label: "com.nrime.settings.dict-save", qos: .utility)
+
+    /// Debounced mozc_server restart (avoids restarting on every rapid edit).
+    private var mozcRestartWorkItem: DispatchWorkItem?
+
     // MARK: - Load
 
     func load() {
@@ -201,17 +207,6 @@ final class UserDictionaryManager: ObservableObject {
     func save() -> Bool {
         lastError = nil
 
-        // Ensure directory exists
-        let dir = mozcDir
-        if !FileManager.default.fileExists(atPath: dir.path) {
-            do {
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            } catch {
-                lastError = "Failed to create Mozc directory: \(error.localizedDescription)"
-                return false
-            }
-        }
-
         // Ensure at least one dictionary exists
         if storage.dictionaries.isEmpty {
             var dict = Mozc_UserDictionary_UserDictionary()
@@ -233,17 +228,30 @@ final class UserDictionaryManager: ObservableObject {
             return pbEntry
         }
 
-        do {
-            let data = try storage.serializedData()
-            try data.write(to: dictionaryPath, options: .atomic)
+        // Snapshot data for background save
+        let snapshotStorage = storage
+        let dir = mozcDir
+        let path = dictionaryPath
 
-            // Restart mozc_server so it picks up the new dictionary
-            restartMozcServer()
-            return true
-        } catch {
-            lastError = "Failed to save dictionary: \(error.localizedDescription)"
-            return false
+        saveQueue.async { [weak self] in
+            do {
+                // Ensure directory exists
+                if !FileManager.default.fileExists(atPath: dir.path) {
+                    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                }
+
+                let data = try snapshotStorage.serializedData()
+                try data.write(to: path, options: .atomic)
+
+                // Debounced restart: cancel previous pending restart
+                self?.scheduleMozcRestart()
+            } catch {
+                DispatchQueue.main.async {
+                    self?.lastError = "Failed to save dictionary: \(error.localizedDescription)"
+                }
+            }
         }
+        return true
     }
 
     // MARK: - CRUD
@@ -270,11 +278,22 @@ final class UserDictionaryManager: ObservableObject {
 
     // MARK: - Helpers
 
+    /// Schedule a debounced mozc_server restart (0.4s delay).
+    /// Multiple rapid edits only trigger one restart.
+    private func scheduleMozcRestart() {
+        mozcRestartWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.restartMozcServer()
+        }
+        mozcRestartWorkItem = item
+        saveQueue.asyncAfter(deadline: .now() + 0.4, execute: item)
+    }
+
     private func restartMozcServer() {
         let task = Process()
-        task.launchPath = "/usr/bin/pkill"
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
         task.arguments = ["-f", "mozc_server"]
         try? task.run()
-        task.waitUntilExit()
+        // Fire-and-forget: don't block waiting for pkill to finish
     }
 }

@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BUILD_DIR="$PROJECT_DIR/build/Debug"
+BUILD_DIR="$PROJECT_DIR/build/Release"
 INSTALL_DIR="$HOME/Library/Input Methods"
 APP_NAME="NRIME.app"
 SETTINGS_APP="NRIMESettings.app"
@@ -22,15 +22,15 @@ cd "$PROJECT_DIR"
 xcodegen generate
 
 echo "Building NRIME..."
-xcodebuild -project NRIME.xcodeproj -scheme NRIME -configuration Debug \
+xcodebuild -project NRIME.xcodeproj -scheme NRIME -configuration Release \
     SYMROOT="$PROJECT_DIR/build" build
 
 echo "Building NRIMESettings..."
-xcodebuild -project NRIME.xcodeproj -scheme NRIMESettings -configuration Debug \
+xcodebuild -project NRIME.xcodeproj -scheme NRIMESettings -configuration Release \
     SYMROOT="$PROJECT_DIR/build" build
 
 echo "Building NRIMERestoreHelper..."
-xcodebuild -project NRIME.xcodeproj -scheme NRIMERestoreHelper -configuration Debug \
+xcodebuild -project NRIME.xcodeproj -scheme NRIMERestoreHelper -configuration Release \
     SYMROOT="$PROJECT_DIR/build" build
 
 # Install FIRST (before kill, so macOS restarts with the NEW binary)

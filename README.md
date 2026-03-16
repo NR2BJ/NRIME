@@ -131,6 +131,27 @@ killall NRIME NRIMESettings mozc_server 2>/dev/null; sudo rm -rf ~/Library/Input
 - **원격 데스크톱**: 정상 동작
 - **비밀번호 필드**: 자동으로 감지하여 시스템에 위임
 
+## Electron/Chromium 앱 대응
+
+VS Code, Slack, Discord, Claude for Desktop 등 Electron 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스트가 유실되는 문제를 해결하기 위해 다음과 같은 워크어라운드를 적용합니다.
+
+### 문제의 근본 원인
+
+macOS의 `StandardKeyBinding.dict`에 **Shift+Return 바인딩이 존재하지 않습니다.** 따라서 Chromium의 `interpretKeyEvents:`가 `doCommandBySelector:insertNewline:` 대신 `insertText:"\n"`을 호출하고, 이때 Chromium 내부의 `oldHasMarkedText` 추적 로직이 해당 이벤트를 IME 조합 이벤트로 오판하여 fake `VKEY_PROCESSKEY`(0xE5)를 생성합니다. 이로 인해 확정된 텍스트가 유실됩니다.
+
+Cmd+key의 경우, `performKeyEquivalent:` 경로를 타기 때문에 `return false`로 이벤트를 전달할 수 없습니다.
+
+### 적용된 해결 방법
+
+| 상황 | 방법 | 이유 |
+|------|------|------|
+| **Shift+Enter** | 텍스트 확정 후 10ms 딜레이를 두고 `client.insertText("\n")` 호출, `return true` | key event를 보내지 않으므로 `interpretKeyEvents:` 경로를 완전 회피. 딜레이는 Chromium IPC 처리 시간 확보 (5ms 이하에서 race condition 발생, 10ms에서 안정) |
+| **Cmd+A/C/V/X/Z** | 텍스트 확정 후 `CGEvent.post(tap: .cghidEventTap)`로 repost, `return true` | `eventSourceUserData`에 repost tag(`0x4E52494D45`)를 설정하여 컨트롤러가 재진입을 감지하고 `return false`로 통과시킴. `performKeyEquivalent:` 경로는 `oldHasMarkedText` 문제 없음 |
+
+### 다른 IME들의 접근 비교
+
+Squirrel(RIME), fcitx5-macos, Google Mozc 등 다른 macOS IME들은 "commit + return false" 패턴을 사용하지 않습니다. 키를 내부에서 처리하고 `return true`를 반환하거나, 처리하지 않는 키는 조합 없이 `return false`를 반환합니다.
+
 ## 라이선스
 
 - NRIME: MIT License

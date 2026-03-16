@@ -8,10 +8,10 @@ final class NRIMEInputControllerTests: XCTestCase {
 
     private var client: MockTextInputClient!
     private var controller: NRIMEInputController!
-    private var originalToggleEnglish: Settings.ShortcutConfig!
-    private var originalSwitchKorean: Settings.ShortcutConfig!
-    private var originalSwitchJapanese: Settings.ShortcutConfig!
-    private var originalHanjaConvert: Settings.ShortcutConfig!
+    private var originalToggleEnglish: ShortcutConfig!
+    private var originalSwitchKorean: ShortcutConfig!
+    private var originalSwitchJapanese: ShortcutConfig!
+    private var originalHanjaConvert: ShortcutConfig!
 
     override func setUp() {
         super.setUp()
@@ -99,6 +99,7 @@ final class NRIMEInputControllerTests: XCTestCase {
 
         let handled = controller.handle(keyEvent(keyCode: 0x24, characters: "\r"), client: client)
 
+        // Enter while composing: commit text, consumed (return true)
         XCTAssertTrue(handled)
         XCTAssertEqual(client.insertedTexts, ["か"])
         XCTAssertEqual(client.markedString, "")
@@ -169,6 +170,102 @@ final class NRIMEInputControllerTests: XCTestCase {
         XCTAssertEqual(client.insertedTexts, ["한"])
         XCTAssertEqual(client.markedString, "")
     }
+
+    // MARK: - Shift+Enter & Cmd+A Passthrough Tests
+
+    func testShiftEnterWhileKoreanComposingConsumedForRepost() {
+        StateManager.shared.switchTo(.korean)
+
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x0F), client: client)) // r → ㄱ
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k → 가
+        XCTAssertEqual(client.markedString, "가")
+
+        let handled = controller.handle(
+            keyEvent(keyCode: 0x24, characters: "\r", modifiers: [.shift]),
+            client: client
+        )
+
+        // Consumed: text committed async, Shift+Enter re-posted via CGEvent
+        XCTAssertTrue(handled)
+        XCTAssertEqual(client.markedString, "")
+    }
+
+    func testCmdAWhileKoreanComposingConsumedForRepost() {
+        StateManager.shared.switchTo(.korean)
+
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x0F), client: client)) // r
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k
+        XCTAssertEqual(client.markedString, "가")
+
+        let handled = controller.handle(
+            keyEvent(keyCode: 0x00, characters: "a", modifiers: [.command]),
+            client: client
+        )
+
+        // Consumed: text committed async, Cmd+A re-posted via CGEvent
+        XCTAssertTrue(handled)
+        XCTAssertEqual(client.markedString, "")
+    }
+
+    func testCmdAWhileKoreanNotComposingPassesThrough() {
+        StateManager.shared.switchTo(.korean)
+
+        let handled = controller.handle(
+            keyEvent(keyCode: 0x00, characters: "a", modifiers: [.command]),
+            client: client
+        )
+
+        XCTAssertFalse(handled)
+        XCTAssertEqual(client.insertedTexts, [])
+    }
+
+    func testShiftEnterWhileJapaneseComposingConsumedForRepost() {
+        StateManager.shared.switchTo(.japanese)
+
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x00), client: client)) // a → か
+        XCTAssertEqual(client.markedString, "か")
+
+        let handled = controller.handle(
+            keyEvent(keyCode: 0x24, characters: "\r", modifiers: [.shift]),
+            client: client
+        )
+
+        // Consumed: text committed async, Shift+Enter re-posted via CGEvent
+        XCTAssertTrue(handled)
+        XCTAssertEqual(client.markedString, "")
+    }
+
+    func testCmdAWhileJapaneseComposingConsumedForRepost() {
+        StateManager.shared.switchTo(.japanese)
+
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x00), client: client)) // a → か
+        XCTAssertEqual(client.markedString, "か")
+
+        let handled = controller.handle(
+            keyEvent(keyCode: 0x00, characters: "a", modifiers: [.command]),
+            client: client
+        )
+
+        // Consumed: text committed async, Cmd+A re-posted via CGEvent
+        XCTAssertTrue(handled)
+        XCTAssertEqual(client.markedString, "")
+    }
+
+    func testCmdAWhileJapaneseNotComposingPassesThrough() {
+        StateManager.shared.switchTo(.japanese)
+
+        let handled = controller.handle(
+            keyEvent(keyCode: 0x00, characters: "a", modifiers: [.command]),
+            client: client
+        )
+
+        XCTAssertFalse(handled)
+        XCTAssertEqual(client.insertedTexts, [])
+    }
+
+    // MARK: - Mouse Click Tests
 
     func testMouseClickCommitUsesCachedClient() {
         StateManager.shared.switchTo(.korean)

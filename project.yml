@@ -36,6 +36,8 @@ targets:
         type: file
       - path: Shared/SettingsTransfer.swift
         type: file
+      - path: Shared/SettingsModels.swift
+        type: file
       - path: NRIME/Resources/mozc_server
         buildPhase: resources
         type: file
@@ -71,6 +73,8 @@ targets:
       - path: Shared/HanjaSelectionStore.swift
         type: file
       - path: Shared/SettingsTransfer.swift
+        type: file
+      - path: Shared/SettingsModels.swift
         type: file
       - path: NRIME/Engine/Japanese/Proto/user_dictionary_storage.pb.swift
         type: file

@@ -47,16 +47,18 @@ final class JapaneseEngine: InputEngine {
 
         guard event.type == .keyDown else { return false }
 
-        // Ignore events with Command, Control, or Option modifiers
+        // Modifier keys (Cmd, Ctrl, Option) while active:
+        // Flush internal state, commit text, and return false to let the original
+        // key event pass through to the app.
         let mods = event.modifierFlags
         if mods.contains(.command) || mods.contains(.control) || mods.contains(.option) {
+            let wasActive = showingPrediction || conversionState == .converting || composer.isComposing
             if showingPrediction {
                 dismissPrediction()
             }
-            if conversionState == .converting {
-                commitConversion(client: client)
-            } else {
-                commitComposing(client: client)
+            if wasActive {
+                commitAndRepostEvent(event: event, client: client)
+                return true
             }
             return false
         }
@@ -93,6 +95,11 @@ final class JapaneseEngine: InputEngine {
                     preedit: mozcConverter.currentPreedit,
                     originalHiragana: mozcConverter.originalHiragana
                 ) {
+                client.setMarkedText(
+                    "" as NSString,
+                    selectionRange: NSRange(location: 0, length: 0),
+                    replacementRange: replacementRange()
+                )
                 client.insertText(text as NSString, replacementRange: replacementRange())
             }
             conversionState = .composing
@@ -107,6 +114,11 @@ final class JapaneseEngine: InputEngine {
         guard composer.isComposing else { return }
         let text = composer.flush()
         if !text.isEmpty {
+            client.setMarkedText(
+                "" as NSString,
+                selectionRange: NSRange(location: 0, length: 0),
+                replacementRange: replacementRange()
+            )
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
     }
@@ -233,18 +245,26 @@ final class JapaneseEngine: InputEngine {
             return handleBackspace(client: client)
         }
 
-        // Enter — commit composing text
+        // Enter — commit composing text.
         if keyCode == 0x24 || keyCode == 0x4C {
-            let wasComposing = composer.isComposing
+            let wasComposing = composer.isComposing || liveConversionActive
+
+            // Shift+Enter while composing: commit text, then insert newline after delay.
+            // Cannot use "commit + return false" — Shift+Return has no StandardKeyBinding.dict
+            // entry, so Chromium's oldHasMarkedText misinterprets the forwarded event.
+            // Async insertText("\n") via IME client API avoids interpretKeyEvents: entirely.
+            if wasComposing && isShifted {
+                commitComposing(client: client)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
+                    client.insertText("\n" as NSString, replacementRange: replacementRange())
+                }
+                return true
+            }
+
             if liveConversionActive {
                 commitLiveConversion(client: client)
-            } else {
+            } else if composer.isComposing {
                 commitComposing(client: client)
-            }
-            // Shift+Enter while composing: re-post via CGEvent (same as Korean).
-            if wasComposing && isShifted {
-                Self.repostShiftEnter(keyCode: keyCode)
-                return true
             }
             return wasComposing
         }
@@ -598,6 +618,12 @@ final class JapaneseEngine: InputEngine {
             capsLockKatakanaActive = false
         }
         if !text.isEmpty {
+            // Explicitly end composition first, then insert committed text.
+            client.setMarkedText(
+                "" as NSString,
+                selectionRange: NSRange(location: 0, length: 0),
+                replacementRange: replacementRange()
+            )
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
 
@@ -616,10 +642,12 @@ final class JapaneseEngine: InputEngine {
         let keyCode = event.keyCode
         let isShifted = event.modifierFlags.contains(.shift)
 
-        // Shift+Enter — commit conversion then re-post via CGEvent.
+        // Shift+Enter — commit conversion, then insert newline after delay.
         if (keyCode == 0x24 || keyCode == 0x4C) && isShifted {
             commitConversion(client: client)
-            Self.repostShiftEnter(keyCode: keyCode)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
+                client.insertText("\n" as NSString, replacementRange: replacementRange())
+            }
             return true
         }
 
@@ -666,6 +694,21 @@ final class JapaneseEngine: InputEngine {
 
             if let preedit = mozcConverter.currentPreedit, !preedit.segment.isEmpty {
                 renderPreedit(preedit, client: client)
+
+                // peekConversion() left Mozc in CONVERSION state but without
+                // opening the candidate window.  Send Space to Mozc so it
+                // populates the full candidate list (same as a second Space press).
+                if mozcConverter.currentCandidateStrings.isEmpty {
+                    var spaceKey = Mozc_Commands_KeyEvent()
+                    spaceKey.specialKey = .space
+                    if let output = mozcConverter.sendKeyEvent(spaceKey) {
+                        let result = mozcConverter.updateFromOutput(output)
+                        if let updatedPreedit = result.preedit, !updatedPreedit.segment.isEmpty {
+                            renderPreedit(updatedPreedit, client: client)
+                        }
+                    }
+                }
+
                 showCandidateWindow(client: client)
                 return true
             }
@@ -806,6 +849,12 @@ final class JapaneseEngine: InputEngine {
                 preedit: mozcConverter.currentPreedit,
                 originalHiragana: mozcConverter.originalHiragana
             ) {
+            // Explicitly end composition first, then insert committed text.
+            client.setMarkedText(
+                "" as NSString,
+                selectionRange: NSRange(location: 0, length: 0),
+                replacementRange: replacementRange()
+            )
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
         if submittedText == nil {
@@ -838,6 +887,12 @@ final class JapaneseEngine: InputEngine {
             capsLockKatakanaActive = false
         }
         if !text.isEmpty {
+            // Explicitly end composition first, then insert committed text.
+            client.setMarkedText(
+                "" as NSString,
+                selectionRange: NSRange(location: 0, length: 0),
+                replacementRange: replacementRange()
+            )
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
     }
@@ -1014,6 +1069,37 @@ final class JapaneseEngine: InputEngine {
         NSRange(location: NSNotFound, length: NSNotFound)
     }
 
+    // MARK: - Modifier Key Passthrough
+
+    /// Commit text from any state (composing or converting) and repost the key event
+    /// via CGEvent with a repost tag so the controller passes it through to the host app.
+    /// Used for Cmd+key (performKeyEquivalent path) and Shift+Enter (no StandardKeyBinding).
+    private func commitAndRepostEvent(event: NSEvent, client: any IMKTextInput) {
+        // Gather and commit text from current state
+        if conversionState == .converting {
+            commitConversion(client: client)
+        } else if composer.isComposing {
+            commitComposing(client: client)
+        }
+
+        // Repost the key event via CGEvent with our repost tag.
+        let keyCode = event.keyCode
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        DispatchQueue.main.async {
+            guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
+            keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+            keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+            keyDown.post(tap: .cghidEventTap)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+                keyUp.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+                keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                keyUp.post(tap: .cghidEventTap)
+            }
+        }
+    }
+
     /// Convert hiragana string to full-width katakana.
     /// Hiragana U+3041-U+3096 -> Katakana U+30A1-U+30F6 (offset 0x60)
     private func hiraganaToKatakana(_ text: String) -> String {
@@ -1024,24 +1110,6 @@ final class JapaneseEngine: InputEngine {
             // ー is already katakana, pass through
             return Character(scalar)
         })
-    }
-
-    // MARK: - Shift+Enter Re-injection
-
-    /// Re-post Shift+Enter as a CGEvent so the app receives a newline after commit.
-    /// The re-posted event arrives when composer.isComposing is false (composing) or
-    /// conversionState is .composing (converting), so it falls through naturally.
-    private static func repostShiftEnter(keyCode: UInt16) {
-        DispatchQueue.main.async {
-            let src = CGEventSource(stateID: .hidSystemState)
-            if let down = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: true),
-               let up = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: false) {
-                down.flags = .maskShift
-                up.flags = .maskShift
-                down.post(tap: .cghidEventTap)
-                up.post(tap: .cghidEventTap)
-            }
-        }
     }
 
     // MARK: - KeyCode -> Character mapping
