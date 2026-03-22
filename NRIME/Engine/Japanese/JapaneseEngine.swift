@@ -283,8 +283,8 @@ final class JapaneseEngine: InputEngine {
             return false
         }
 
-        // Down arrow while composing — also trigger conversion
-        if keyCode == 0x7D && composer.isComposing {
+        // Down arrow or Tab while composing — also trigger conversion
+        if (keyCode == 0x7D || keyCode == 0x30) && composer.isComposing {
             return triggerMozcConversion(client: client)
         }
 
