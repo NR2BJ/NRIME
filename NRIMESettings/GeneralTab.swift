@@ -13,6 +13,10 @@ struct GeneralTab: View {
                     shortcut: $store.toggleEnglishShortcut
                 )
                 ShortcutRow(
+                    title: "Toggle Non-English Mode",
+                    shortcut: $store.toggleNonEnglishShortcut
+                )
+                ShortcutRow(
                     title: "Switch to Korean",
                     shortcut: $store.switchKoreanShortcut
                 )
@@ -29,6 +33,7 @@ struct GeneralTab: View {
             Section("Tap Threshold") {
                 VStack(alignment: .leading, spacing: 4) {
                     let needsThreshold = store.toggleEnglishShortcut.isModifierOnlyTap
+                        || store.toggleNonEnglishShortcut.isModifierOnlyTap
                         || store.switchKoreanShortcut.isModifierOnlyTap
                         || store.switchJapaneseShortcut.isModifierOnlyTap
                         || store.hanjaConvertShortcut.isModifierOnlyTap
@@ -78,6 +83,25 @@ struct GeneralTab: View {
                         .frame(width: 150)
                     }
                     Text("Adjusts the text size in the candidate panel")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Conversion Trigger Keys")
+                    Toggle("Space", isOn: Binding(
+                        get: { store.japaneseKeyConfig.conversionTriggerSpace },
+                        set: { store.japaneseKeyConfig.conversionTriggerSpace = $0 }
+                    ))
+                    Toggle("Tab", isOn: Binding(
+                        get: { store.japaneseKeyConfig.conversionTriggerTab },
+                        set: { store.japaneseKeyConfig.conversionTriggerTab = $0 }
+                    ))
+                    Toggle("↓ Arrow", isOn: Binding(
+                        get: { store.japaneseKeyConfig.conversionTriggerDownArrow },
+                        set: { store.japaneseKeyConfig.conversionTriggerDownArrow = $0 }
+                    ))
+                    Text("Choose which keys start Japanese conversion while composing")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -185,7 +209,8 @@ struct ShortcutRow: View {
                     .background(Color.orange.opacity(0.15))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
-                Text(shortcut.label)
+                Text(shortcut.disabled ? "None" : shortcut.label)
+                    .foregroundStyle(shortcut.disabled ? .secondary : .primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.secondary.opacity(0.12))
@@ -195,11 +220,23 @@ struct ShortcutRow: View {
                 isRecording.toggle()
             }
             .buttonStyle(.borderless)
+            if !isRecording && !shortcut.disabled {
+                Button("Clear") {
+                    var cleared = shortcut
+                    cleared.disabled = true
+                    cleared.label = "None"
+                    shortcut = cleared
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            }
         }
         .overlay {
             if isRecording {
                 KeyRecorderView { config in
-                    shortcut = config
+                    var newConfig = config
+                    newConfig.disabled = false
+                    shortcut = newConfig
                     isRecording = false
                 }
                 .frame(width: 0, height: 0)

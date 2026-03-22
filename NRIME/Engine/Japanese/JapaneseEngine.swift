@@ -271,20 +271,26 @@ final class JapaneseEngine: InputEngine {
         }
 
         // Space — trigger Mozc conversion, or insert full-width space
+        let config = Settings.shared.japaneseKeyConfig
         if keyCode == 0x31 {
-            if composer.isComposing {
+            if composer.isComposing && config.conversionTriggerSpace {
                 return triggerMozcConversion(client: client)
             }
             // Not composing: insert full-width space if configured
-            if Settings.shared.japaneseKeyConfig.fullWidthSpace {
+            if config.fullWidthSpace {
                 client.insertText("\u{3000}" as NSString, replacementRange: replacementRange())
                 return true
             }
             return false
         }
 
-        // Down arrow or Tab while composing — also trigger conversion
-        if (keyCode == 0x7D || keyCode == 0x30) && composer.isComposing {
+        // Tab while composing — trigger conversion if enabled
+        if keyCode == 0x30 && composer.isComposing && config.conversionTriggerTab {
+            return triggerMozcConversion(client: client)
+        }
+
+        // Down arrow while composing — trigger conversion if enabled
+        if keyCode == 0x7D && composer.isComposing && config.conversionTriggerDownArrow {
             return triggerMozcConversion(client: client)
         }
 

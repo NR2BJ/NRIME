@@ -24,6 +24,9 @@ struct ShortcutConfig: Codable, Equatable {
     /// Display label, e.g. "Right Shift", "Right Shift + 1"
     var label: String
 
+    /// When true, this shortcut is disabled (no key binding assigned)
+    var disabled: Bool = false
+
     // MARK: - Modifier keyCode constants
     static let keyCodeRightShift: UInt16  = 0x3C
     static let keyCodeLeftShift: UInt16   = 0x38
@@ -68,6 +71,12 @@ struct ShortcutConfig: Codable, Equatable {
         modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
         isModifierOnlyTap: false, label: "Right Shift + 2"
     )
+    /// Default: Shift + Space
+    static let defaultToggleNonEnglish = ShortcutConfig(
+        keyCode: 0x31, modifierKeyCode: keyCodeLeftShift,
+        modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
+        isModifierOnlyTap: false, label: "Shift + Space"
+    )
     /// Default: Option + Enter
     static let defaultHanjaConvert = ShortcutConfig(
         keyCode: 0x24, modifierKeyCode: keyCodeLeftOption,
@@ -110,6 +119,11 @@ struct JapaneseKeyConfig: Codable, Equatable {
 
     /// Candidate panel font size in points (default: 14)
     var candidateFontSize: CGFloat = 14
+
+    /// Conversion trigger keys
+    var conversionTriggerSpace: Bool = true
+    var conversionTriggerTab: Bool = true
+    var conversionTriggerDownArrow: Bool = true
 
     static let `default` = JapaneseKeyConfig()
 }
