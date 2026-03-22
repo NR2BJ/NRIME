@@ -11,6 +11,8 @@ enum TextInputGeometry {
         case attributesAtCaret
         /// `attributes(forCharacterIndex: 0)` — only Y/height are reliable; X is the line start.
         case attributesAtZero
+        /// Accessibility API (AXUIElement) provided the caret bounds.
+        case accessibility
     }
 
     struct CaretResult {
@@ -45,7 +47,18 @@ enum TextInputGeometry {
             }
         }
 
-        // 3. Fallback: attributes at index 0 (approach used by Squirrel, AquaSKK, Fcitx5).
+        // 3. Fallback: Accessibility API — query focused element's caret bounds.
+        //    More reliable than attributesAtZero; works in most apps including Electron.
+        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
+            DeveloperLogger.shared.log(
+                "geometry",
+                "Using Accessibility API caret bounds",
+                metadata: ["rect": axRect.logDescription]
+            )
+            return CaretResult(rect: axRect, source: .accessibility)
+        }
+
+        // 4. Fallback: attributes at index 0 (approach used by Squirrel, AquaSKK, Fcitx5).
         //    Only Y and height are reliable — X points to the line start, not the caret.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
@@ -172,6 +185,68 @@ enum TextInputGeometry {
         }
 
         return (dx * dx) + (dy * dy)
+    }
+
+    // MARK: - Accessibility API
+
+    /// Query the focused UI element's caret bounds via AXUIElement.
+    /// Returns a screen-coordinate rect (flipped from AX top-left to AppKit bottom-left).
+    private static func accessibilityCaretRect() -> NSRect? {
+        let systemWide = AXUIElementCreateSystemWide()
+
+        var focusedAppValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &focusedAppValue) == .success else {
+            return nil
+        }
+        let focusedApp = focusedAppValue as! AXUIElement
+
+        var focusedElementValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(focusedApp, kAXFocusedUIElementAttribute as CFString, &focusedElementValue) == .success else {
+            return nil
+        }
+        let focusedElement = focusedElementValue as! AXUIElement
+
+        // Get selected text range
+        var rangeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(focusedElement, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success else {
+            return nil
+        }
+
+        var range = CFRange(location: 0, length: 0)
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+            return nil
+        }
+
+        // Use a zero-length range at the caret position for precise bounds
+        var caretRange = CFRange(location: range.location, length: 0)
+        guard let caretRangeValue = AXValueCreate(.cfRange, &caretRange) else {
+            return nil
+        }
+
+        // Get bounds for the caret position
+        var boundsValue: AnyObject?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            focusedElement,
+            kAXBoundsForRangeParameterizedAttribute as CFString,
+            caretRangeValue,
+            &boundsValue
+        ) == .success else {
+            return nil
+        }
+
+        var axBounds = CGRect.zero
+        guard AXValueGetValue(boundsValue as! AXValue, .cgRect, &axBounds) else {
+            return nil
+        }
+
+        // AX uses top-left origin; convert to AppKit bottom-left origin
+        guard let screenHeight = NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: axBounds.midX, y: 0)) })?.frame.height
+                ?? NSScreen.main?.frame.height else {
+            return nil
+        }
+
+        let flippedY = screenHeight - axBounds.origin.y - axBounds.size.height
+        return NSRect(x: axBounds.origin.x, y: flippedY, width: max(axBounds.size.width, 1), height: axBounds.size.height)
     }
 
     private static func isUsableCaretRect(_ rect: NSRect) -> Bool {

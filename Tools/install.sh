@@ -57,6 +57,19 @@ chmod +x "$INSTALL_DIR/$SETTINGS_APP/Contents/MacOS/NRIMESettings"
 chmod +x "$INSTALL_DIR/$RESTORE_HELPER_APP/Contents/MacOS/NRIMERestoreHelper"
 chmod +x "$INSTALL_DIR/$APP_NAME/Contents/Resources/mozc_server" 2>/dev/null || true
 
+# Deregister all existing NRIME input sources to prevent duplicates
+echo "Cleaning up existing input sources..."
+swift -e '
+import Carbon
+let conditions = [kTISPropertyBundleID: "com.nrime.inputmethod.app" as CFString] as CFDictionary
+if let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource] {
+    for source in sources {
+        TISDisableInputSource(source)
+    }
+    print("  Disabled \(sources.count) existing source(s)")
+}
+' 2>&1 || true
+
 # Kill AFTER install — macOS auto-restarts the IME with the new binary
 echo "Restarting NRIME process..."
 killall NRIME 2>/dev/null || true
