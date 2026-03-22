@@ -270,11 +270,18 @@ final class JapaneseEngine: InputEngine {
             return wasComposing
         }
 
-        // Space — trigger Mozc conversion, or insert full-width space
+        // Space — trigger Mozc conversion, or commit + space, or insert full-width space
         let config = Settings.shared.japaneseKeyConfig
         if keyCode == 0x31 {
-            if composer.isComposing && config.conversionTriggerSpace {
-                return triggerMozcConversion(client: client)
+            if composer.isComposing {
+                if config.conversionTriggerSpace {
+                    return triggerMozcConversion(client: client)
+                }
+                // Trigger disabled: commit composing text, then insert space
+                commitComposing(client: client)
+                let space = config.fullWidthSpace ? "\u{3000}" : " "
+                client.insertText(space as NSString, replacementRange: replacementRange())
+                return true
             }
             // Not composing: insert full-width space if configured
             if config.fullWidthSpace {
@@ -284,9 +291,13 @@ final class JapaneseEngine: InputEngine {
             return false
         }
 
-        // Tab while composing — trigger conversion if enabled
-        if keyCode == 0x30 && composer.isComposing && config.conversionTriggerTab {
-            return triggerMozcConversion(client: client)
+        // Tab while composing — trigger conversion if enabled, otherwise pass through
+        if keyCode == 0x30 && composer.isComposing {
+            if config.conversionTriggerTab {
+                return triggerMozcConversion(client: client)
+            }
+            commitComposing(client: client)
+            return false
         }
 
         // Down arrow while composing — trigger conversion if enabled
