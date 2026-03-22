@@ -22,9 +22,9 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return nil }
 
-        // 1. Accessibility API with timeout — most accurate, but can block in some apps.
-        //    Run on a background thread with 100ms deadline to avoid stalling the main thread.
-        if let axRect = accessibilityCaretRectWithTimeout(), isUsableCaretRect(axRect) {
+        // 1. Accessibility API — most accurate across all apps.
+        //    Uses AXUIElementSetMessagingTimeout to cap latency at 50ms.
+        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
             return CaretResult(rect: axRect, source: .accessibility)
         }
 
@@ -57,20 +57,6 @@ enum TextInputGeometry {
         }
 
         return nil
-    }
-
-    /// Run accessibilityCaretRect on a background thread with a 100ms timeout.
-    private static func accessibilityCaretRectWithTimeout() -> NSRect? {
-        var result: NSRect?
-        let semaphore = DispatchSemaphore(value: 0)
-
-        DispatchQueue.global(qos: .userInteractive).async {
-            result = accessibilityCaretRect()
-            semaphore.signal()
-        }
-
-        let timeout = semaphore.wait(timeout: .now() + 0.1)
-        return timeout == .success ? result : nil
     }
 
     static func screenFrame(containing rect: NSRect) -> NSRect? {
@@ -189,18 +175,17 @@ enum TextInputGeometry {
     // MARK: - Accessibility API
 
     /// Query the focused UI element's caret bounds via AXUIElement.
-    /// Returns a screen-coordinate rect (flipped from AX top-left to AppKit bottom-left).
+    /// Uses PID-direct access and 50ms messaging timeout for speed.
     private static func accessibilityCaretRect() -> NSRect? {
-        let systemWide = AXUIElementCreateSystemWide()
-
-        var focusedAppValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &focusedAppValue) == .success else {
+        // Use PID-direct access instead of system-wide traversal (saves one IPC hop)
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
             return nil
         }
-        let focusedApp = focusedAppValue as! AXUIElement
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(appElement, 0.05) // 50ms timeout
 
         var focusedElementValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(focusedApp, kAXFocusedUIElementAttribute as CFString, &focusedElementValue) == .success else {
+        guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedElementValue) == .success else {
             return nil
         }
         let focusedElement = focusedElementValue as! AXUIElement
