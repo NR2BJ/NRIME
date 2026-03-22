@@ -22,7 +22,12 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return nil }
 
-        // 1. Try firstRect — precise positioning for well-behaving apps.
+        // 1. Accessibility API — most reliable across all apps including Electron.
+        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
+            return CaretResult(rect: axRect, source: .accessibility)
+        }
+
+        // 2. Try firstRect — precise positioning for well-behaving apps.
         //    Reject suspiciously wide rects (Electron apps return the entire input field).
         for range in candidateRanges(for: client) {
             var actualRange = NSRange(location: NSNotFound, length: 0)
@@ -33,41 +38,20 @@ enum TextInputGeometry {
             }
         }
 
-        // 2. Fallback: attributes at caret index.
+        // 3. Fallback: attributes at caret index.
         if let index = caretIndex(for: client) {
             var lineHeightRect = NSRect.zero
             client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
             if isUsableCaretRect(lineHeightRect) {
-                DeveloperLogger.shared.log(
-                    "geometry",
-                    "Using attributes rectangle at caret index",
-                    metadata: ["characterIndex": "\(index)", "rect": lineHeightRect.logDescription]
-                )
                 return CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
             }
         }
 
-        // 3. Fallback: Accessibility API — query focused element's caret bounds.
-        //    More reliable than attributesAtZero; works in most apps including Electron.
-        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
-            DeveloperLogger.shared.log(
-                "geometry",
-                "Using Accessibility API caret bounds",
-                metadata: ["rect": axRect.logDescription]
-            )
-            return CaretResult(rect: axRect, source: .accessibility)
-        }
-
-        // 4. Fallback: attributes at index 0 (approach used by Squirrel, AquaSKK, Fcitx5).
+        // 4. Fallback: attributes at index 0.
         //    Only Y and height are reliable — X points to the line start, not the caret.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         if isUsableCaretRect(zeroRect) {
-            DeveloperLogger.shared.log(
-                "geometry",
-                "Using attributes rectangle at index 0 (vertical geometry only)",
-                metadata: ["rect": zeroRect.logDescription]
-            )
             return CaretResult(rect: zeroRect, source: .attributesAtZero)
         }
 
