@@ -22,7 +22,13 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return nil }
 
-        // 1. Try firstRect — precise positioning for well-behaving apps.
+        // 1. Accessibility API with timeout — most accurate, but can block in some apps.
+        //    Run on a background thread with 100ms deadline to avoid stalling the main thread.
+        if let axRect = accessibilityCaretRectWithTimeout(), isUsableCaretRect(axRect) {
+            return CaretResult(rect: axRect, source: .accessibility)
+        }
+
+        // 2. Try firstRect — precise positioning for well-behaving apps.
         //    Reject suspiciously wide rects (Electron apps return the entire input field).
         for range in candidateRanges(for: client) {
             var actualRange = NSRange(location: NSNotFound, length: 0)
@@ -33,18 +39,13 @@ enum TextInputGeometry {
             }
         }
 
-        // 2. Fallback: attributes at caret index.
+        // 3. Fallback: attributes at caret index.
         if let index = caretIndex(for: client) {
             var lineHeightRect = NSRect.zero
             client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
             if isUsableCaretRect(lineHeightRect) {
                 return CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
             }
-        }
-
-        // 3. Fallback: Accessibility API — slower but accurate when IMK methods fail.
-        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
-            return CaretResult(rect: axRect, source: .accessibility)
         }
 
         // 4. Fallback: attributes at index 0.
@@ -56,6 +57,20 @@ enum TextInputGeometry {
         }
 
         return nil
+    }
+
+    /// Run accessibilityCaretRect on a background thread with a 100ms timeout.
+    private static func accessibilityCaretRectWithTimeout() -> NSRect? {
+        var result: NSRect?
+        let semaphore = DispatchSemaphore(value: 0)
+
+        DispatchQueue.global(qos: .userInteractive).async {
+            result = accessibilityCaretRect()
+            semaphore.signal()
+        }
+
+        let timeout = semaphore.wait(timeout: .now() + 0.1)
+        return timeout == .success ? result : nil
     }
 
     static func screenFrame(containing rect: NSRect) -> NSRect? {
