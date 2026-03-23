@@ -44,7 +44,6 @@ final class MozcClient {
         input.type = .createSession
 
         guard let output = call(input, timeout: sessionTimeout) else {
-            debugLog("createSession: call returned nil")
             return false
         }
 
@@ -69,7 +68,6 @@ final class MozcClient {
     /// Send a key event to the current session.
     func sendKey(_ keyEvent: Mozc_Commands_KeyEvent) -> Mozc_Commands_Output? {
         guard ensureSession() else {
-            debugLog("sendKey: ensureSession failed")
             return nil
         }
 
@@ -79,11 +77,7 @@ final class MozcClient {
         input.key = keyEvent
         initInput(&input)
 
-        let result = call(input, timeout: rpcTimeout)
-        if result == nil {
-            debugLog("sendKey: call returned nil for key=\(keyEvent.keyString)")
-        }
-        return result
+        return call(input, timeout: rpcTimeout)
     }
 
     /// Send a session command (SUBMIT, REVERT, SELECT_CANDIDATE, etc.)
@@ -178,7 +172,6 @@ final class MozcClient {
 
         let now = Date()
         if now < sessionRetryNotBefore {
-            debugLog("ensureSession: backing off until \(sessionRetryNotBefore)")
             return false
         }
 
@@ -190,13 +183,10 @@ final class MozcClient {
 
         // IPC failed — server may have crashed leaving stale lock.
         // Clean lock files, restart server, and retry.
-        debugLog("ensureSession: createSession failed, cleaning locks and restarting")
         MozcClient.removeStaleLockFiles()
         if now.timeIntervalSince(lastServerRestartAt) >= serverRestartCooldown {
             lastServerRestartAt = now
             _ = MozcServerManager.shared.restartServer()
-        } else {
-            debugLog("ensureSession: skipping restart due to cooldown")
         }
         if createSession() {
             sessionRetryNotBefore = .distantPast
@@ -204,7 +194,6 @@ final class MozcClient {
         }
 
         sessionRetryNotBefore = Date().addingTimeInterval(sessionFailureCooldown)
-        debugLog("ensureSession: createSession failed after restart")
         return false
     }
 
@@ -217,13 +206,6 @@ final class MozcClient {
             let path = mozcDir.appendingPathComponent(name).path
             try? fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path)
             try? fm.removeItem(atPath: path)
-        }
-    }
-
-    private func debugLog(_ msg: String) {
-        let line = "\(msg)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") {
-            h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); h.closeFile()
         }
     }
 
@@ -240,11 +222,9 @@ final class MozcClient {
         }
 
         let resolvedTimeout = overrideTimeout ?? timeout(for: input.type)
-        debugLog("call: type=\(input.type) timeout=\(resolvedTimeout) size=\(requestData.count) hex=\(requestData.map { String(format: "%02x", $0) }.joined())")
 
         // Send via Mach IPC
         guard let responseData = machCall(request: requestData, timeout: resolvedTimeout) else {
-            debugLog("call: machCall returned nil")
             return nil
         }
 
@@ -279,13 +259,11 @@ final class MozcClient {
             )
 
             guard ok, let ptr = responsePtr, responseSize > 0 else {
-                debugLog("machCall: C shim failed")
                 return nil
             }
 
             let data = Data(bytes: ptr, count: responseSize)
             free(ptr)
-            debugLog("machCall: OK size=\(responseSize)")
             return data
         }
     }

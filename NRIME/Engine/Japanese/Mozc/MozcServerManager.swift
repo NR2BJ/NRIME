@@ -28,15 +28,6 @@ final class MozcServerManager {
         launchQueue.setSpecific(key: launchQueueKey, value: ())
     }
 
-    private func debugLog(_ msg: String) {
-        let line = "ServerManager: \(msg)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") {
-            h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); h.closeFile()
-        } else {
-            FileManager.default.createFile(atPath: "/tmp/nrime-debug.log", contents: line.data(using: .utf8))
-        }
-    }
-
     /// Launch Mozc in the background so the first conversion does not pay startup cost.
     func prewarmServer() {
         warmupQueue.async { [weak self] in
@@ -99,20 +90,16 @@ final class MozcServerManager {
     private func prepareServerForUse() -> ServerPreparationResult {
         withLaunchQueue {
             if isServerReachable() {
-                debugLog("already reachable")
                 return .reachable
             }
 
             let isRunning = serverProcessLock.withLock { serverProcess?.isRunning } ?? false
             if isRunning {
-                debugLog("process running but not reachable")
                 return .alreadyRunning
             }
 
-            debugLog("not found, launching...")
             killStaleServers()
             let launched = launchServerViaLaunchAgent() || launchServer()
-            debugLog("launchServer result=\(launched)")
             return launched ? .launched : .launchFailed
         }
     }
@@ -214,17 +201,14 @@ final class MozcServerManager {
 
     private func launchServerViaLaunchAgent() -> Bool {
         guard let plistPath = installedLaunchAgentPlistPath() else {
-            debugLog("launch agent plist not found; falling back to direct launch")
             return false
         }
 
         let domain = "gui/\(getuid())"
         _ = runLaunchCtl(arguments: ["bootout", domain, plistPath])
         let bootstrapStatus = runLaunchCtl(arguments: ["bootstrap", domain, plistPath])
-        debugLog("launchctl bootstrap status=\(bootstrapStatus) plist=\(plistPath)")
 
         let kickstartStatus = runLaunchCtl(arguments: ["kickstart", "-k", "\(domain)/\(launchAgentLabel)"])
-        debugLog("launchctl kickstart status=\(kickstartStatus)")
         return kickstartStatus == 0 || bootstrapStatus == 0
     }
 
@@ -232,7 +216,6 @@ final class MozcServerManager {
     private func stopLaunchAgentServer() -> Bool {
         let domain = "gui/\(getuid())"
         let killStatus = runLaunchCtl(arguments: ["kill", "TERM", "\(domain)/\(launchAgentLabel)"])
-        debugLog("launchctl kill status=\(killStatus)")
         return killStatus == 0
     }
 
@@ -257,26 +240,21 @@ final class MozcServerManager {
             task.waitUntilExit()
             return task.terminationStatus
         } catch {
-            debugLog("launchctl failed args=\(arguments.joined(separator: " ")) error=\(error)")
             return -1
         }
     }
 
     private func serverBinaryPath() -> String? {
-        debugLog("Bundle.main.bundlePath=\(Bundle.main.bundlePath)")
         // Look in the app bundle's Resources
         if let path = Bundle.main.path(forResource: "mozc_server", ofType: nil) {
-            debugLog("mozc_server found in bundle: \(path)")
             return path
         }
         // Fallback: look next to the app bundle (for development)
         let appDir = Bundle.main.bundlePath
         let siblingPath = (appDir as NSString).deletingLastPathComponent + "/mozc_server"
         if FileManager.default.isExecutableFile(atPath: siblingPath) {
-            debugLog("mozc_server found as sibling: \(siblingPath)")
             return siblingPath
         }
-        debugLog("mozc_server NOT FOUND anywhere")
         return nil
     }
 

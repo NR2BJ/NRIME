@@ -62,7 +62,6 @@ final class MozcConverter {
     /// The last character's Output is stored in `lastFeedOutput` for live conversion.
     func feedHiragana(_ hiragana: String) -> Bool {
         guard serverManager.ensureServerRunning() else {
-            debugLog("feedHiragana: ensureServer failed")
             isAvailable = false
             return false
         }
@@ -79,37 +78,26 @@ final class MozcConverter {
 
             if let output = client.sendKey(keyEvent) {
                 if output.hasErrorCode {
-                    debugLog("feedHiragana: errorCode=\(output.errorCode) at char[\(i)]=\(chars[i])")
                     client.resetSession()
                     return false
                 }
                 lastFeedOutput = output
                 i += 1
             } else if !retried {
-                debugLog("feedHiragana: sendKey nil at char[\(i)]=\(chars[i]), retrying")
                 // IPC failure — restart server and retry from beginning
                 client.resetSession()
                 guard serverManager.restartServer() else {
-                    debugLog("feedHiragana: restart failed")
                     isAvailable = false
                     return false
                 }
                 retried = true
                 i = 0
             } else {
-                debugLog("feedHiragana: sendKey nil after retry at char[\(i)]=\(chars[i])")
                 client.resetSession()
                 return false
             }
         }
         return true
-    }
-
-    private func debugLog(_ msg: String) {
-        let line = "\(msg)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") {
-            h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); h.closeFile()
-        }
     }
 
     /// Process a Mozc Output, updating internal state.
@@ -184,8 +172,6 @@ final class MozcConverter {
         prepareForConversion(hiragana: hiragana)
 
         let feedOk = feedHiragana(hiragana)
-        let dbg1 = "mozcConvert feedOk=\(feedOk) hiragana=\(hiragana)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg1.data(using: .utf8)!); h.closeFile() }
         guard feedOk else { return false }
 
         // Send Space to trigger conversion
@@ -193,8 +179,6 @@ final class MozcConverter {
         spaceKey.specialKey = .space
 
         var output = client.sendKey(spaceKey)
-        let dbg2 = "mozcConvert spaceOutput=\(output != nil)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg2.data(using: .utf8)!); h.closeFile() }
         if output == nil {
             // Space key IPC failed — restart server and retry entire sequence
             client.resetSession()
@@ -210,8 +194,6 @@ final class MozcConverter {
         }
 
         let result = updateFromOutput(output!)
-        let dbg3 = "mozcConvert hasCandidates=\(result.hasCandidates) preedit=\(result.preedit != nil) candidateCount=\(currentCandidateStrings.count)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg3.data(using: .utf8)!); h.closeFile() }
         return result.hasCandidates || result.preedit != nil
     }
 

@@ -39,11 +39,6 @@ class NRIMEInputController: IMKInputController {
             return false
         }
 
-        // DEBUG: log every event at handle() entry
-        let dbg = "handle keyCode=0x\(String(format:"%02X",event.keyCode)) flags=0x\(String(format:"%X",event.modifierFlags.rawValue)) type=\(event.type.rawValue)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg.data(using: .utf8)!); h.closeFile() }
-        else { try? dbg.write(toFile: "/tmp/nrime-debug.log", atomically: false, encoding: .utf8) }
-
         // 0. Re-posted events: immediately pass through to the host app.
         //    KeyEventReposter tags synthetic CGEvents so we don't re-intercept them.
         if let cgEvent = event.cgEvent {
@@ -88,13 +83,7 @@ class NRIMEInputController: IMKInputController {
         }
 
         // 4. Shortcut detection + engine routing
-        let result = routeEvent(event, client: client)
-        // DEBUG: log shortcut-worthy events (modifier keys)
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue & 0xFFFF0000 != 0 && event.type == .keyDown {
-            let dbg2 = "routeEvent result=\(result) keyCode=0x\(String(format:"%02X",event.keyCode)) flags=0x\(String(format:"%X",event.modifierFlags.rawValue))\n"
-            if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg2.data(using: .utf8)!); h.closeFile() }
-        }
-        return result
+        return routeEvent(event, client: client)
     }
 
     /// Handle all keyboard events during Japanese Mozc conversion.

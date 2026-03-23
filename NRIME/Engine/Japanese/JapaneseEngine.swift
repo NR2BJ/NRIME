@@ -700,10 +700,6 @@ final class JapaneseEngine: InputEngine {
     // MARK: - Conversion Helpers
 
     private func triggerMozcConversion(client: any IMKTextInput) -> Bool {
-        let mozcRunning = (ProcessInfo.processInfo.environment["_"] != nil) // dummy
-        let dbgM = "triggerMozc live=\(liveConversionActive) composing=\(composer.isComposing) serverAvail=\(mozcConverter.isAvailable)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbgM.data(using: .utf8)!); h.closeFile() }
-        else { try? dbgM.write(toFile: "/tmp/nrime-debug.log", atomically: false, encoding: .utf8) }
         if liveConversionActive {
             // Live conversion active — Mozc is already in CONVERSION state from peekConversion().
             // Transition to .converting and show candidate window.
@@ -760,8 +756,6 @@ final class JapaneseEngine: InputEngine {
         guard !hiragana.isEmpty else { return false }
 
         let convertOk = mozcConverter.convert(hiragana: hiragana)
-        let dbgC = "convert result=\(convertOk) hiragana=\(hiragana) candidates=\(mozcConverter.currentCandidateStrings.count)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbgC.data(using: .utf8)!); h.closeFile() }
         if convertOk {
             conversionState = .converting
 
