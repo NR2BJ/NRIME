@@ -90,16 +90,23 @@ final class MozcServerManager {
     private func prepareServerForUse() -> ServerPreparationResult {
         withLaunchQueue {
             if isServerReachable() {
+                DeveloperLogger.shared.log("MozcServer", "Server already reachable via Mach port")
                 return .reachable
             }
 
             let isRunning = serverProcessLock.withLock { serverProcess?.isRunning } ?? false
             if isRunning {
+                DeveloperLogger.shared.log("MozcServer", "Server process running but port not yet reachable")
                 return .alreadyRunning
             }
 
             killStaleServers()
             let launched = launchServerViaLaunchAgent() || launchServer()
+            if launched {
+                DeveloperLogger.shared.log("MozcServer", "Server launched successfully")
+            } else {
+                DeveloperLogger.shared.log("MozcServer", "Server launch failed")
+            }
             return launched ? .launched : .launchFailed
         }
     }
@@ -165,6 +172,9 @@ final class MozcServerManager {
             return false
         }
 
+        DeveloperLogger.shared.log("MozcServer", "Launching server directly",
+                                   metadata: ["binaryPath": binaryPath])
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binaryPath)
         // --nodetach keeps server in foreground so we can manage it
@@ -201,6 +211,7 @@ final class MozcServerManager {
 
     private func launchServerViaLaunchAgent() -> Bool {
         guard let plistPath = installedLaunchAgentPlistPath() else {
+            DeveloperLogger.shared.log("MozcServer", "LaunchAgent plist not found — skipping launchctl path")
             return false
         }
 
@@ -209,7 +220,11 @@ final class MozcServerManager {
         let bootstrapStatus = runLaunchCtl(arguments: ["bootstrap", domain, plistPath])
 
         let kickstartStatus = runLaunchCtl(arguments: ["kickstart", "-k", "\(domain)/\(launchAgentLabel)"])
-        return kickstartStatus == 0 || bootstrapStatus == 0
+        let success = kickstartStatus == 0 || bootstrapStatus == 0
+        DeveloperLogger.shared.log("MozcServer", "LaunchAgent launch \(success ? "succeeded" : "failed")",
+                                   metadata: ["bootstrapStatus": "\(bootstrapStatus)",
+                                              "kickstartStatus": "\(kickstartStatus)"])
+        return success
     }
 
     @discardableResult

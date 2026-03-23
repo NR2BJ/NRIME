@@ -62,6 +62,7 @@ final class MozcConverter {
     /// The last character's Output is stored in `lastFeedOutput` for live conversion.
     func feedHiragana(_ hiragana: String) -> Bool {
         guard serverManager.ensureServerRunning() else {
+            DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed — server not running")
             isAvailable = false
             return false
         }
@@ -78,6 +79,8 @@ final class MozcConverter {
 
             if let output = client.sendKey(keyEvent) {
                 if output.hasErrorCode {
+                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana got error code from Mozc",
+                                               metadata: ["errorCode": "\(output.errorCode)"])
                     client.resetSession()
                     return false
                 }
@@ -85,14 +88,17 @@ final class MozcConverter {
                 i += 1
             } else if !retried {
                 // IPC failure — restart server and retry from beginning
+                DeveloperLogger.shared.log("MozcConvert", "feedHiragana IPC failed — restarting server and retrying")
                 client.resetSession()
                 guard serverManager.restartServer() else {
+                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed — server restart unsuccessful")
                     isAvailable = false
                     return false
                 }
                 retried = true
                 i = 0
             } else {
+                DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed after retry")
                 client.resetSession()
                 return false
             }
@@ -169,6 +175,8 @@ final class MozcConverter {
     /// Returns true if conversion produced a preedit or candidates.
     /// If IPC fails after feedHiragana, restarts server and retries the full sequence once.
     func convert(hiragana: String) -> Bool {
+        DeveloperLogger.shared.log("MozcConvert", "Convert requested",
+                                   metadata: ["length": "\(hiragana.count)"])
         prepareForConversion(hiragana: hiragana)
 
         let feedOk = feedHiragana(hiragana)
@@ -194,6 +202,9 @@ final class MozcConverter {
         }
 
         let result = updateFromOutput(output!)
+        DeveloperLogger.shared.log("MozcConvert", "Convert result",
+                                   metadata: ["candidates": "\(currentCandidateStrings.count)",
+                                              "hasPreedit": "\(result.preedit != nil)"])
         return result.hasCandidates || result.preedit != nil
     }
 

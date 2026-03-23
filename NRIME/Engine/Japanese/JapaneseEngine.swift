@@ -700,6 +700,8 @@ final class JapaneseEngine: InputEngine {
     // MARK: - Conversion Helpers
 
     private func triggerMozcConversion(client: any IMKTextInput) -> Bool {
+        DeveloperLogger.shared.log("Japanese", "Conversion triggered",
+                                   metadata: ["liveConversion": "\(liveConversionActive)"])
         if liveConversionActive {
             // Live conversion active — Mozc is already in CONVERSION state from peekConversion().
             // Transition to .converting and show candidate window.
@@ -757,6 +759,8 @@ final class JapaneseEngine: InputEngine {
 
         let convertOk = mozcConverter.convert(hiragana: hiragana)
         if convertOk {
+            DeveloperLogger.shared.log("Japanese", "Conversion succeeded",
+                                       metadata: ["candidates": "\(mozcConverter.currentCandidateStrings.count)"])
             conversionState = .converting
 
             // Render Mozc's multi-segment preedit if available, otherwise show hiragana

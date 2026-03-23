@@ -184,6 +184,7 @@ final class ShortcutHandler {
     // MARK: - Execute
 
     private func performAction(_ action: Action) -> Bool {
+        DeveloperLogger.shared.log("Shortcut", "Shortcut triggered", metadata: ["action": "\(action)"])
         if let onAction = onAction {
             return onAction(action)
         }

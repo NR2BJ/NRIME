@@ -227,6 +227,7 @@ final class KoreanEngine: InputEngine {
     }
 
     func triggerHanjaConversion(client: any IMKTextInput) -> Bool {
+        DeveloperLogger.shared.log("Korean", "Hanja conversion triggered")
         guard let converter = hanjaConverter else { return true }
 
         // 1. Try composing text first (actively being typed)
@@ -252,6 +253,10 @@ final class KoreanEngine: InputEngine {
             converter.lookupCandidates(for: text),
             for: text
         )
+        DeveloperLogger.shared.log("Korean", "Hanja lookup result",
+                                   metadata: ["source": text,
+                                              "candidates": "\(results.count)",
+                                              "isSelectedText": "\(isSelectedText)"])
         if results.isEmpty {
             clearHanjaSession()
             return true

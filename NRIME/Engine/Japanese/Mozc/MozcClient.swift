@@ -44,6 +44,7 @@ final class MozcClient {
         input.type = .createSession
 
         guard let output = call(input, timeout: sessionTimeout) else {
+            DeveloperLogger.shared.log("Mozc", "Session creation failed — IPC call returned nil")
             return false
         }
 
@@ -52,6 +53,7 @@ final class MozcClient {
                 sessionId = output.id
                 hasSession = true
             }
+            DeveloperLogger.shared.log("Mozc", "Session created", metadata: ["sessionId": "\(output.id)"])
 
             // Send SET_REQUEST to configure the session with our Request flags
             var setReqInput = Mozc_Commands_Input()
@@ -62,6 +64,7 @@ final class MozcClient {
 
             return true
         }
+        DeveloperLogger.shared.log("Mozc", "Session creation failed — no ID in response")
         return false
     }
 
@@ -172,6 +175,7 @@ final class MozcClient {
 
         let now = Date()
         if now < sessionRetryNotBefore {
+            DeveloperLogger.shared.log("Mozc", "Session retry in backoff period")
             return false
         }
 
@@ -183,6 +187,7 @@ final class MozcClient {
 
         // IPC failed — server may have crashed leaving stale lock.
         // Clean lock files, restart server, and retry.
+        DeveloperLogger.shared.log("Mozc", "Session creation failed — attempting server restart")
         MozcClient.removeStaleLockFiles()
         if now.timeIntervalSince(lastServerRestartAt) >= serverRestartCooldown {
             lastServerRestartAt = now
@@ -193,6 +198,8 @@ final class MozcClient {
             return true
         }
 
+        DeveloperLogger.shared.log("Mozc", "Session creation failed after server restart — entering backoff",
+                                   metadata: ["cooldown": "\(sessionFailureCooldown)s"])
         sessionRetryNotBefore = Date().addingTimeInterval(sessionFailureCooldown)
         return false
     }
@@ -259,11 +266,15 @@ final class MozcClient {
             )
 
             guard ok, let ptr = responsePtr, responseSize > 0 else {
+                DeveloperLogger.shared.log("Mozc", "Mach IPC failed",
+                                           metadata: ["requestSize": "\(request.count)"])
                 return nil
             }
 
             let data = Data(bytes: ptr, count: responseSize)
             free(ptr)
+            DeveloperLogger.shared.log("Mozc", "Mach IPC success",
+                                       metadata: ["responseSize": "\(responseSize)"])
             return data
         }
     }
