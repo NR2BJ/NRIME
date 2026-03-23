@@ -42,6 +42,7 @@ NRIME_APP="$BUILD_DIR/Release/NRIME.app"
 SETTINGS_APP="$BUILD_DIR/Release/NRIMESettings.app"
 RESTORE_HELPER_APP="$BUILD_DIR/Release/NRIMERestoreHelper.app"
 LAUNCH_AGENT_PLIST="$SCRIPTS_DIR/com.nrime.inputmethod.loginrestore.plist"
+MOZC_LAUNCH_AGENT_PLIST="$SCRIPTS_DIR/com.nrime.inputmethod.mozcserver.plist"
 
 if [ ! -d "$NRIME_APP" ]; then
     echo "ERROR: NRIME.app not found at $NRIME_APP"
@@ -70,6 +71,7 @@ if [ -d "$SETTINGS_APP" ]; then
 fi
 ditto "$RESTORE_HELPER_APP" "$PKG_DIR/payload/Library/Input Methods/NRIMERestoreHelper.app"
 cp "$LAUNCH_AGENT_PLIST" "$PKG_DIR/payload/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist"
+cp "$MOZC_LAUNCH_AGENT_PLIST" "$PKG_DIR/payload/Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist"
 
 # Ad-hoc code sign (inside-out to avoid broken nested signatures)
 echo "Ad-hoc signing apps..."

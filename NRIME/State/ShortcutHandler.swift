@@ -7,6 +7,7 @@ final class ShortcutHandler {
     /// Action to perform when a shortcut is triggered
     enum Action {
         case toggleEnglish
+        case toggleNonEnglish
         case switchKorean
         case switchJapanese
         case hanjaConvert
@@ -18,6 +19,7 @@ final class ShortcutHandler {
     /// All shortcut keys and their corresponding actions.
     private static let allShortcuts: [(String, Action)] = [
         ("toggleEnglish", .toggleEnglish),
+        ("toggleNonEnglish", .toggleNonEnglish),
         ("switchKorean", .switchKorean),
         ("switchJapanese", .switchJapanese),
         ("hanjaConvert", .hanjaConvert),
@@ -128,6 +130,7 @@ final class ShortcutHandler {
     private func checkModifierOnlyTap(_ keyCode: UInt16) -> Bool {
         for (key, action) in Self.allShortcuts {
             let config = Settings.shared.shortcut(for: key)
+            guard !config.disabled else { continue }
             if config.isModifierOnlyTap && config.keyCode == keyCode {
                 return performAction(action)
             }
@@ -139,7 +142,7 @@ final class ShortcutHandler {
     private func checkModifierKeyCombo(_ event: NSEvent) -> Bool? {
         for (key, action) in Self.allShortcuts {
             let config = Settings.shared.shortcut(for: key)
-            guard !config.isModifierOnlyTap else { continue }
+            guard !config.disabled, !config.isModifierOnlyTap else { continue }
 
             // Must have a modifier
             let requiredFlags = NSEvent.ModifierFlags(rawValue: UInt(config.modifiers))
@@ -155,13 +158,9 @@ final class ShortcutHandler {
 
             guard eventSignificant == requiredSignificant else { continue }
 
-            // Check left/right distinction via modifier keyCode
-            if let activeModKey = activeModifierKeyCode {
-                // We know exactly which physical modifier key is held
-                if activeModKey != config.modifierKeyCode { continue }
-            }
-            // If no activeModifierKeyCode (modifier was already held before we started tracking),
-            // fall through and match on high-level flags only
+            // For modifier+key combos, high-level flags are sufficient.
+            // Don't enforce left/right distinction — Option+Enter should work
+            // with either left or right Option key.
 
             return performAction(action)
         }
@@ -173,7 +172,7 @@ final class ShortcutHandler {
     private func checkPlainKeyShortcut(_ keyCode: UInt16) -> Bool {
         for (key, action) in Self.allShortcuts {
             let config = Settings.shared.shortcut(for: key)
-            guard !config.isModifierOnlyTap else { continue }
+            guard !config.disabled, !config.isModifierOnlyTap else { continue }
             guard NSEvent.ModifierFlags(rawValue: UInt(config.modifiers)).isEmpty else { continue }
             if config.keyCode == keyCode {
                 return performAction(action)
@@ -192,6 +191,8 @@ final class ShortcutHandler {
         switch action {
         case .toggleEnglish:
             StateManager.shared.toggleEnglish()
+        case .toggleNonEnglish:
+            StateManager.shared.toggleNonEnglish()
         case .switchKorean:
             StateManager.shared.switchTo(.korean)
         case .switchJapanese:

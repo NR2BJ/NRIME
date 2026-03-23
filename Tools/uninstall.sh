@@ -65,6 +65,14 @@ rm -f "$LAUNCH_AGENT_USER"
 sudo launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_SYSTEM" 2>/dev/null || true
 sudo rm -f "$LAUNCH_AGENT_SYSTEM"
 
+MOZC_LAUNCH_AGENT_LABEL="com.nrime.inputmethod.mozcserver"
+MOZC_LAUNCH_AGENT_USER="$HOME/Library/LaunchAgents/$MOZC_LAUNCH_AGENT_LABEL.plist"
+MOZC_LAUNCH_AGENT_SYSTEM="/Library/LaunchAgents/$MOZC_LAUNCH_AGENT_LABEL.plist"
+launchctl bootout "gui/$(id -u)" "$MOZC_LAUNCH_AGENT_USER" 2>/dev/null || true
+rm -f "$MOZC_LAUNCH_AGENT_USER"
+sudo launchctl bootout "gui/$(id -u)" "$MOZC_LAUNCH_AGENT_SYSTEM" 2>/dev/null || true
+sudo rm -f "$MOZC_LAUNCH_AGENT_SYSTEM"
+
 # 7. Remove NRIME from AppleEnabledInputSources
 echo "[7/7] Removing input source registration..."
 swift -e '

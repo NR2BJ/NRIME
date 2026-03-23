@@ -5,14 +5,17 @@ import Foundation
 final class MozcServerManager {
     static let shared = MozcServerManager()
 
+    private let launchAgentLabel = "com.nrime.inputmethod.mozcserver"
     private var serverProcess: Process?
     private let serverProcessLock = NSLock()
     private let launchQueue = DispatchQueue(label: "com.nrime.mozc.launch")
+    private let launchQueueKey = DispatchSpecificKey<Void>()
     private let portName = "org.mozc.inputmethod.Japanese.Converter.session"
     private let warmupQueue = DispatchQueue(label: "com.nrime.mozc.warmup", qos: .utility)
-    private let launchPollInterval: TimeInterval = 0.02
-    private let restartWaitBudget: TimeInterval = 0.12
-    private let prewarmWaitBudget: TimeInterval = 1.0
+    private let launchPollInterval: TimeInterval = 0.05
+    private let restartWaitBudget: TimeInterval = 3.0
+    private let launchWaitBudget: TimeInterval = 3.0
+    private let prewarmWaitBudget: TimeInterval = 3.0
 
     private enum ServerPreparationResult {
         case reachable
@@ -21,7 +24,18 @@ final class MozcServerManager {
         case launchFailed
     }
 
-    private init() {}
+    private init() {
+        launchQueue.setSpecific(key: launchQueueKey, value: ())
+    }
+
+    private func debugLog(_ msg: String) {
+        let line = "ServerManager: \(msg)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") {
+            h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); h.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: "/tmp/nrime-debug.log", contents: line.data(using: .utf8))
+        }
+    }
 
     /// Launch Mozc in the background so the first conversion does not pay startup cost.
     func prewarmServer() {
@@ -44,9 +58,9 @@ final class MozcServerManager {
         case .reachable:
             return true
         case .alreadyRunning:
-            return false
+            return waitUntilReachable(timeout: launchWaitBudget)
         case .launched:
-            return waitUntilReachable(timeout: launchPollInterval * 2)
+            return waitUntilReachable(timeout: launchWaitBudget)
         case .launchFailed:
             NSLog("NRIME: Failed to launch mozc_server")
             return false
@@ -56,9 +70,9 @@ final class MozcServerManager {
     /// Kill any existing mozc_server (including stale ones from previous NRIME instances),
     /// then relaunch. Returns true if the fresh server is available.
     func restartServer() -> Bool {
-        let launched = launchQueue.sync { () -> Bool in
+        let launched = withLaunchQueue { () -> Bool in
             killStaleServers()
-            return launchServer()
+            return launchServerViaLaunchAgent() || launchServer()
         }
         guard launched else {
             return false
@@ -68,6 +82,7 @@ final class MozcServerManager {
 
     /// Shuts down the managed mozc_server process.
     func shutdownServer() {
+        _ = stopLaunchAgentServer()
         serverProcessLock.lock()
         guard let process = serverProcess, process.isRunning else {
             serverProcessLock.unlock()
@@ -82,24 +97,38 @@ final class MozcServerManager {
     // MARK: - Private
 
     private func prepareServerForUse() -> ServerPreparationResult {
-        launchQueue.sync {
+        withLaunchQueue {
             if isServerReachable() {
+                debugLog("already reachable")
                 return .reachable
             }
 
             let isRunning = serverProcessLock.withLock { serverProcess?.isRunning } ?? false
             if isRunning {
+                debugLog("process running but not reachable")
                 return .alreadyRunning
             }
 
+            debugLog("not found, launching...")
             killStaleServers()
-            return launchServer() ? .launched : .launchFailed
+            let launched = launchServerViaLaunchAgent() || launchServer()
+            debugLog("launchServer result=\(launched)")
+            return launched ? .launched : .launchFailed
         }
+    }
+
+    private func withLaunchQueue<T>(_ work: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: launchQueueKey) != nil {
+            return work()
+        }
+        return launchQueue.sync(execute: work)
     }
 
     /// Kill any existing mozc_server processes that are not managed by this instance.
     /// This handles stale servers left behind after NRIME is reinstalled/restarted.
     private func killStaleServers() {
+        _ = stopLaunchAgentServer()
+
         let killTask = Process()
         killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
         killTask.arguments = ["mozc_server"]
@@ -113,8 +142,11 @@ final class MozcServerManager {
             serverProcess = nil
         }
 
-        // Brief wait for Mach port teardown. This runs only on explicit restart/prewarm paths.
-        Thread.sleep(forTimeInterval: 0.02)
+        // Remove stale lock files left by crashed mozc_server.
+        MozcClient.removeStaleLockFiles()
+
+        // Wait for Mach port teardown. Kernel may hold stale port briefly after process dies.
+        Thread.sleep(forTimeInterval: 0.5)
     }
 
     private func waitUntilReachable(timeout: TimeInterval) -> Bool {
@@ -151,9 +183,16 @@ final class MozcServerManager {
         // --nodetach keeps server in foreground so we can manage it
         process.arguments = ["--nodetach"]
 
-        // Suppress stdout/stderr
+        // Redirect stderr to debug log for crash diagnosis
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        let logPath = "/tmp/nrime-mozc-server.log"
+        FileManager.default.createFile(atPath: logPath, contents: nil)
+        if let logHandle = FileHandle(forWritingAtPath: logPath) {
+            logHandle.seekToEndOfFile()
+            process.standardError = logHandle
+        } else {
+            process.standardError = FileHandle.nullDevice
+        }
 
         process.terminationHandler = { [weak self] proc in
             NSLog("NRIME: mozc_server terminated with status \(proc.terminationStatus)")
@@ -173,17 +212,71 @@ final class MozcServerManager {
         }
     }
 
+    private func launchServerViaLaunchAgent() -> Bool {
+        guard let plistPath = installedLaunchAgentPlistPath() else {
+            debugLog("launch agent plist not found; falling back to direct launch")
+            return false
+        }
+
+        let domain = "gui/\(getuid())"
+        _ = runLaunchCtl(arguments: ["bootout", domain, plistPath])
+        let bootstrapStatus = runLaunchCtl(arguments: ["bootstrap", domain, plistPath])
+        debugLog("launchctl bootstrap status=\(bootstrapStatus) plist=\(plistPath)")
+
+        let kickstartStatus = runLaunchCtl(arguments: ["kickstart", "-k", "\(domain)/\(launchAgentLabel)"])
+        debugLog("launchctl kickstart status=\(kickstartStatus)")
+        return kickstartStatus == 0 || bootstrapStatus == 0
+    }
+
+    @discardableResult
+    private func stopLaunchAgentServer() -> Bool {
+        let domain = "gui/\(getuid())"
+        let killStatus = runLaunchCtl(arguments: ["kill", "TERM", "\(domain)/\(launchAgentLabel)"])
+        debugLog("launchctl kill status=\(killStatus)")
+        return killStatus == 0
+    }
+
+    private func installedLaunchAgentPlistPath() -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates = [
+            "\(home)/Library/LaunchAgents/\(launchAgentLabel).plist",
+            "/Library/LaunchAgents/\(launchAgentLabel).plist"
+        ]
+        return candidates.first(where: { FileManager.default.fileExists(atPath: $0) })
+    }
+
+    @discardableResult
+    private func runLaunchCtl(arguments: [String]) -> Int32 {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = arguments
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return task.terminationStatus
+        } catch {
+            debugLog("launchctl failed args=\(arguments.joined(separator: " ")) error=\(error)")
+            return -1
+        }
+    }
+
     private func serverBinaryPath() -> String? {
+        debugLog("Bundle.main.bundlePath=\(Bundle.main.bundlePath)")
         // Look in the app bundle's Resources
         if let path = Bundle.main.path(forResource: "mozc_server", ofType: nil) {
+            debugLog("mozc_server found in bundle: \(path)")
             return path
         }
         // Fallback: look next to the app bundle (for development)
         let appDir = Bundle.main.bundlePath
         let siblingPath = (appDir as NSString).deletingLastPathComponent + "/mozc_server"
         if FileManager.default.isExecutableFile(atPath: siblingPath) {
+            debugLog("mozc_server found as sibling: \(siblingPath)")
             return siblingPath
         }
+        debugLog("mozc_server NOT FOUND anywhere")
         return nil
     }
 

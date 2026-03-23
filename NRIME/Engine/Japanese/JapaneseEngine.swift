@@ -700,6 +700,10 @@ final class JapaneseEngine: InputEngine {
     // MARK: - Conversion Helpers
 
     private func triggerMozcConversion(client: any IMKTextInput) -> Bool {
+        let mozcRunning = (ProcessInfo.processInfo.environment["_"] != nil) // dummy
+        let dbgM = "triggerMozc live=\(liveConversionActive) composing=\(composer.isComposing) serverAvail=\(mozcConverter.isAvailable)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbgM.data(using: .utf8)!); h.closeFile() }
+        else { try? dbgM.write(toFile: "/tmp/nrime-debug.log", atomically: false, encoding: .utf8) }
         if liveConversionActive {
             // Live conversion active — Mozc is already in CONVERSION state from peekConversion().
             // Transition to .converting and show candidate window.
@@ -755,7 +759,10 @@ final class JapaneseEngine: InputEngine {
         let hiragana = composer.flush()
         guard !hiragana.isEmpty else { return false }
 
-        if mozcConverter.convert(hiragana: hiragana) {
+        let convertOk = mozcConverter.convert(hiragana: hiragana)
+        let dbgC = "convert result=\(convertOk) hiragana=\(hiragana) candidates=\(mozcConverter.currentCandidateStrings.count)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbgC.data(using: .utf8)!); h.closeFile() }
+        if convertOk {
             conversionState = .converting
 
             // Render Mozc's multi-segment preedit if available, otherwise show hiragana
@@ -1006,13 +1013,28 @@ final class JapaneseEngine: InputEngine {
     // MARK: - Candidate Window
 
     private func showCandidateWindow(client: (any IMKTextInput)? = nil) {
-        NSApp.candidatePanel?.show(candidates: mozcConverter.currentCandidateStrings,
+        let candidates = candidateDisplayStrings
+        guard !candidates.isEmpty else {
+            NSApp.candidatePanel?.hide()
+            return
+        }
+        NSApp.candidatePanel?.show(candidates: candidates,
                                    selectedIndex: mozcConverter.currentFocusedIndex,
                                    client: client)
     }
 
     private func hideCandidateWindow() {
         NSApp.candidatePanel?.hide()
+    }
+
+    var candidateDisplayStrings: [String] {
+        if !mozcConverter.currentCandidateStrings.isEmpty {
+            return mozcConverter.currentCandidateStrings
+        }
+        if let preedit = mozcConverter.currentPreedit, !preedit.segment.isEmpty {
+            return [preedit.segment.map(\.value).joined()]
+        }
+        return []
     }
 
     // MARK: - Key Mapping

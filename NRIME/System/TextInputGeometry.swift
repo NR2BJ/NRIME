@@ -23,7 +23,7 @@ enum TextInputGeometry {
         guard let client else { return nil }
 
         // 1. Accessibility API — most accurate across all apps.
-        //    Uses AXUIElementSetMessagingTimeout to cap latency at 50ms.
+        //    Uses AXUIElementSetMessagingTimeout to cap latency at 10ms.
         if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
             return CaretResult(rect: axRect, source: .accessibility)
         }
@@ -182,7 +182,7 @@ enum TextInputGeometry {
             return nil
         }
         let appElement = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(appElement, 0.05) // 50ms timeout
+        AXUIElementSetMessagingTimeout(appElement, 0.01) // 10ms timeout
 
         var focusedElementValue: AnyObject?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedElementValue) == .success else {

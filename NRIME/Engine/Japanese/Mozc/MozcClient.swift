@@ -6,12 +6,17 @@ import SwiftProtobuf
 final class MozcClient {
     private let portName = "org.mozc.inputmethod.Japanese.Converter.session"
     private let protocolVersion: mach_msg_id_t = 3  // IPC_PROTOCOL_VERSION
-    private let timeout: mach_msg_timeout_t = 250  // fail fast to avoid blocking app key handling
+    private let rpcTimeout: mach_msg_timeout_t = 750
+    private let sessionTimeout: mach_msg_timeout_t = 5_000
 
     private var sessionId: UInt64 = 0
     private var hasSession = false
     private let sessionQueue = DispatchQueue(label: "com.nrime.mozc.session")
     private let sessionCreationLock = NSLock()
+    private var sessionRetryNotBefore = Date.distantPast
+    private var lastServerRestartAt = Date.distantPast
+    private let sessionFailureCooldown: TimeInterval = 2.0
+    private let serverRestartCooldown: TimeInterval = 5.0
 
     /// Mozc config attached to every Input message.
     /// Enables realtime conversion, history/dictionary suggest, etc.
@@ -38,7 +43,10 @@ final class MozcClient {
         var input = Mozc_Commands_Input()
         input.type = .createSession
 
-        guard let output = call(input) else { return false }
+        guard let output = call(input, timeout: sessionTimeout) else {
+            debugLog("createSession: call returned nil")
+            return false
+        }
 
         if output.hasID {
             sessionQueue.sync {
@@ -51,7 +59,7 @@ final class MozcClient {
             setReqInput.type = .setRequest
             setReqInput.id = sessionQueue.sync { sessionId }
             setReqInput.request = mozcRequest
-            _ = call(setReqInput)
+            _ = call(setReqInput, timeout: sessionTimeout)
 
             return true
         }
@@ -60,7 +68,10 @@ final class MozcClient {
 
     /// Send a key event to the current session.
     func sendKey(_ keyEvent: Mozc_Commands_KeyEvent) -> Mozc_Commands_Output? {
-        guard ensureSession() else { return nil }
+        guard ensureSession() else {
+            debugLog("sendKey: ensureSession failed")
+            return nil
+        }
 
         var input = Mozc_Commands_Input()
         input.type = .sendKey
@@ -68,7 +79,11 @@ final class MozcClient {
         input.key = keyEvent
         initInput(&input)
 
-        return call(input)
+        let result = call(input, timeout: rpcTimeout)
+        if result == nil {
+            debugLog("sendKey: call returned nil for key=\(keyEvent.keyString)")
+        }
+        return result
     }
 
     /// Send a session command (SUBMIT, REVERT, SELECT_CANDIDATE, etc.)
@@ -85,7 +100,7 @@ final class MozcClient {
             input.context = context
         }
 
-        return call(input)
+        return call(input, timeout: rpcTimeout)
     }
 
     /// Delete the current session.
@@ -100,7 +115,7 @@ final class MozcClient {
         input.type = .deleteSession
         input.id = id
 
-        _ = call(input)
+        _ = call(input, timeout: rpcTimeout)
         sessionQueue.sync {
             hasSession = false
             sessionId = 0
@@ -118,7 +133,7 @@ final class MozcClient {
             var input = Mozc_Commands_Input()
             input.type = .deleteSession
             input.id = id
-            _ = call(input)  // best-effort; ignore failure
+            _ = call(input, timeout: rpcTimeout)  // best-effort; ignore failure
         }
         sessionQueue.sync {
             hasSession = false
@@ -134,7 +149,7 @@ final class MozcClient {
         input.type = .clearUserHistory
         input.id = sessionQueue.sync { sessionId }
 
-        _ = call(input)
+        _ = call(input, timeout: rpcTimeout)
     }
 
     /// Clear Mozc's user prediction data.
@@ -145,7 +160,7 @@ final class MozcClient {
         input.type = .clearUserPrediction
         input.id = sessionQueue.sync { sessionId }
 
-        _ = call(input)
+        _ = call(input, timeout: rpcTimeout)
     }
 
     // MARK: - Private
@@ -161,13 +176,61 @@ final class MozcClient {
         sessionCreationLock.lock()
         defer { sessionCreationLock.unlock() }
 
+        let now = Date()
+        if now < sessionRetryNotBefore {
+            debugLog("ensureSession: backing off until \(sessionRetryNotBefore)")
+            return false
+        }
+
         if sessionQueue.sync(execute: { hasSession }) { return true }
-        return createSession()
+        if createSession() {
+            sessionRetryNotBefore = .distantPast
+            return true
+        }
+
+        // IPC failed — server may have crashed leaving stale lock.
+        // Clean lock files, restart server, and retry.
+        debugLog("ensureSession: createSession failed, cleaning locks and restarting")
+        MozcClient.removeStaleLockFiles()
+        if now.timeIntervalSince(lastServerRestartAt) >= serverRestartCooldown {
+            lastServerRestartAt = now
+            _ = MozcServerManager.shared.restartServer()
+        } else {
+            debugLog("ensureSession: skipping restart due to cooldown")
+        }
+        if createSession() {
+            sessionRetryNotBefore = .distantPast
+            return true
+        }
+
+        sessionRetryNotBefore = Date().addingTimeInterval(sessionFailureCooldown)
+        debugLog("ensureSession: createSession failed after restart")
+        return false
+    }
+
+    /// Remove mozc_server lock files that prevent new instances from starting.
+    static func removeStaleLockFiles() {
+        let mozcDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Mozc")
+        let fm = FileManager.default
+        for name in [".server.lock", ".session.ipc"] {
+            let path = mozcDir.appendingPathComponent(name).path
+            try? fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path)
+            try? fm.removeItem(atPath: path)
+        }
+    }
+
+    private func debugLog(_ msg: String) {
+        let line = "\(msg)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") {
+            h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); h.closeFile()
+        }
     }
 
     /// Serialize Input protobuf, send via Mach port, receive and deserialize Output.
     /// Mozc server expects serialized Input (not Command) and returns serialized Output.
-    private func call(_ input: Mozc_Commands_Input) -> Mozc_Commands_Output? {
+    private func call(_ input: Mozc_Commands_Input,
+                      timeout overrideTimeout: mach_msg_timeout_t? = nil) -> Mozc_Commands_Output? {
         // Serialize Input directly — Mozc server parses request as Input
         let requestData: Data
         do {
@@ -176,8 +239,12 @@ final class MozcClient {
             return nil
         }
 
+        let resolvedTimeout = overrideTimeout ?? timeout(for: input.type)
+        debugLog("call: type=\(input.type) timeout=\(resolvedTimeout) size=\(requestData.count) hex=\(requestData.map { String(format: "%02x", $0) }.joined())")
+
         // Send via Mach IPC
-        guard let responseData = machCall(request: requestData) else {
+        guard let responseData = machCall(request: requestData, timeout: resolvedTimeout) else {
+            debugLog("call: machCall returned nil")
             return nil
         }
 
@@ -189,122 +256,46 @@ final class MozcClient {
         }
     }
 
-    // MARK: - Mach IPC
+    // MARK: - Mach IPC (C shim)
 
-    /// Send/receive a single Mach message with OOL protobuf data.
-    private func machCall(request: Data) -> Data? {
-        // 1. Look up server port
-        var serverPort: mach_port_t = mach_port_t(0)
-        let kr = bootstrap_look_up(bootstrap_port, portName, &serverPort)
-        guard kr == KERN_SUCCESS, serverPort != mach_port_t(0) else {
-            return nil
-        }
-        defer { mach_port_deallocate(mach_task_self_, serverPort) }
-
-        // 2. Allocate reply port
-        var replyPort: mach_port_t = mach_port_t(0)
-        guard mach_port_allocate(mach_task_self_, MACH_PORT_RIGHT_RECEIVE, &replyPort) == KERN_SUCCESS else {
-            return nil
-        }
-        defer { mach_port_destroy(mach_task_self_, replyPort) }
-
-        // Insert send right for reply port
-        mach_port_insert_right(mach_task_self_, replyPort, replyPort,
-                               mach_msg_type_name_t(MACH_MSG_TYPE_MAKE_SEND))
-
-        // 3. Build send message
-        let responseData = request.withUnsafeBytes { (requestBytes: UnsafeRawBufferPointer) -> Data? in
-            guard let requestPtr = requestBytes.baseAddress else { return nil }
-
-            var sendMsg = MachIPCSendMessage()
-            sendMsg.header.msgh_bits = nrime_mach_msgh_bits(
-                UInt32(MACH_MSG_TYPE_COPY_SEND), UInt32(MACH_MSG_TYPE_MAKE_SEND)
-            ) | UInt32(MACH_MSGH_BITS_COMPLEX)
-            sendMsg.header.msgh_size = UInt32(MemoryLayout<MachIPCSendMessage>.size)
-            sendMsg.header.msgh_remote_port = serverPort
-            sendMsg.header.msgh_local_port = replyPort
-            sendMsg.header.msgh_id = protocolVersion
-
-            sendMsg.body.msgh_descriptor_count = 1
-
-            sendMsg.data.address = UnsafeMutableRawPointer(mutating: requestPtr)
-            sendMsg.data.size = mach_msg_size_t(request.count)
-            sendMsg.data.deallocate = 0  // false
-            sendMsg.data.copy = mach_msg_copy_options_t(MACH_MSG_VIRTUAL_COPY)
-            sendMsg.data.type = mach_msg_descriptor_type_t(MACH_MSG_OOL_DESCRIPTOR)
-
-            sendMsg.count = mach_msg_type_number_t(request.count)
-
-            // 4. Send
-            let sendResult = withUnsafeMutablePointer(to: &sendMsg) { ptr in
-                mach_msg(
-                    &ptr.pointee.header,
-                    MACH_SEND_MSG | MACH_SEND_TIMEOUT,
-                    mach_msg_size_t(MemoryLayout<MachIPCSendMessage>.size),
-                    0,
-                    mach_port_t(0),
-                    timeout,
-                    mach_port_t(0)
-                )
+    /// Send/receive via C implementation that matches upstream mozc mach_ipc.cc exactly.
+    /// This eliminates all Swift-to-Mach IPC subtle differences that caused empty responses.
+    private func machCall(request: Data, timeout: mach_msg_timeout_t) -> Data? {
+        return request.withUnsafeBytes { rawBuffer -> Data? in
+            guard let requestPtr = rawBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                return nil
             }
 
-            guard sendResult == MACH_MSG_SUCCESS else { return nil }
+            var responsePtr: UnsafeMutablePointer<UInt8>? = nil
+            var responseSize: Int = 0
 
-            // 5. Receive response
-            var recvMsg = MachIPCReceiveMessage()
-
-            let recvResult = withUnsafeMutablePointer(to: &recvMsg) { ptr in
-                mach_msg(
-                    &ptr.pointee.header,
-                    MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                    0,
-                    mach_msg_size_t(MemoryLayout<MachIPCReceiveMessage>.size),
-                    replyPort,
-                    timeout,
-                    mach_port_t(0)
-                )
-            }
-
-            guard recvResult == MACH_MSG_SUCCESS else { return nil }
-
-            // 6. Validate protocol version
-            guard recvMsg.header.msgh_id == protocolVersion else { return nil }
-
-            // 7. Extract OOL data
-            let oolSize = recvMsg.data.size
-            guard recvMsg.data.address != nil, oolSize > 0 else { return nil }
-
-            let data = Data(bytes: recvMsg.data.address!, count: Int(oolSize))
-
-            // Deallocate OOL memory
-            vm_deallocate(
-                mach_task_self_,
-                vm_address_t(bitPattern: recvMsg.data.address!),
-                vm_size_t(oolSize)
+            let ok = nrime_mozc_call(
+                portName,
+                requestPtr,
+                request.count,
+                &responsePtr,
+                &responseSize,
+                timeout
             )
 
+            guard ok, let ptr = responsePtr, responseSize > 0 else {
+                debugLog("machCall: C shim failed")
+                return nil
+            }
+
+            let data = Data(bytes: ptr, count: responseSize)
+            free(ptr)
+            debugLog("machCall: OK size=\(responseSize)")
             return data
         }
-
-        return responseData
     }
-}
 
-// MARK: - Mach Message Structs
-
-/// Matches mozc mach_ipc_send_message struct layout
-private struct MachIPCSendMessage {
-    var header = mach_msg_header_t()
-    var body = mach_msg_body_t()
-    var data = mach_msg_ool_descriptor_t()
-    var count: mach_msg_type_number_t = 0
-}
-
-/// Matches mozc mach_ipc_receive_message struct layout
-private struct MachIPCReceiveMessage {
-    var header = mach_msg_header_t()
-    var body = mach_msg_body_t()
-    var data = mach_msg_ool_descriptor_t()
-    var count: mach_msg_type_number_t = 0
-    var trailer = mach_msg_trailer_t()
+    private func timeout(for inputType: Mozc_Commands_Input.CommandType) -> mach_msg_timeout_t {
+        switch inputType {
+        case .createSession, .setRequest, .reload, .reloadAndWait:
+            return sessionTimeout
+        default:
+            return rpcTimeout
+        }
+    }
 }

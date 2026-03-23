@@ -227,6 +227,10 @@ final class KoreanEngine: InputEngine {
     }
 
     func triggerHanjaConversion(client: any IMKTextInput) -> Bool {
+        let dbg = "triggerHanja converterNil=\(hanjaConverter == nil) composing='\(automata.currentComposingText())' panelNil=\(NSApp.candidatePanel == nil)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg.data(using: .utf8)!); h.closeFile() }
+        else { try? dbg.write(toFile: "/tmp/nrime-debug.log", atomically: false, encoding: .utf8) }
+
         guard let converter = hanjaConverter else { return true }
 
         // 1. Try composing text first (actively being typed)

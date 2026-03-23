@@ -39,6 +39,11 @@ class NRIMEInputController: IMKInputController {
             return false
         }
 
+        // DEBUG: log every event at handle() entry
+        let dbg = "handle keyCode=0x\(String(format:"%02X",event.keyCode)) flags=0x\(String(format:"%X",event.modifierFlags.rawValue)) type=\(event.type.rawValue)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg.data(using: .utf8)!); h.closeFile() }
+        else { try? dbg.write(toFile: "/tmp/nrime-debug.log", atomically: false, encoding: .utf8) }
+
         // 0. Re-posted events: immediately pass through to the host app.
         //    KeyEventReposter tags synthetic CGEvents so we don't re-intercept them.
         if let cgEvent = event.cgEvent {
@@ -83,7 +88,13 @@ class NRIMEInputController: IMKInputController {
         }
 
         // 4. Shortcut detection + engine routing
-        return routeEvent(event, client: client)
+        let result = routeEvent(event, client: client)
+        // DEBUG: log shortcut-worthy events (modifier keys)
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue & 0xFFFF0000 != 0 && event.type == .keyDown {
+            let dbg2 = "routeEvent result=\(result) keyCode=0x\(String(format:"%02X",event.keyCode)) flags=0x\(String(format:"%X",event.modifierFlags.rawValue))\n"
+            if let h = FileHandle(forWritingAtPath: "/tmp/nrime-debug.log") { h.seekToEndOfFile(); h.write(dbg2.data(using: .utf8)!); h.closeFile() }
+        }
+        return result
     }
 
     /// Handle all keyboard events during Japanese Mozc conversion.
@@ -99,9 +110,10 @@ class NRIMEInputController: IMKInputController {
             let handled = japaneseEngine.handleEvent(event, client: client)
             // Update candidate panel from engine's current state
             if let panel = NSApp.candidatePanel {
-                if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty
+                let candidates = japaneseEngine.candidateDisplayStrings
+                if !candidates.isEmpty
                     && japaneseEngine.isInConversionState {
-                    panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                    panel.show(candidates: candidates,
                                selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
                                client: client)
                 } else if panel.isVisible() {
@@ -128,9 +140,10 @@ class NRIMEInputController: IMKInputController {
             }
             // After number-key selection, only show panel if there are new candidates
             // (next segment). Otherwise the selection is final.
+            let candidates = japaneseEngine.candidateDisplayStrings
             if japaneseEngine.isInConversionState
-                && !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty {
-                panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                && !candidates.isEmpty {
+                panel.show(candidates: candidates,
                            selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
                            client: client)
             } else {
@@ -197,9 +210,10 @@ class NRIMEInputController: IMKInputController {
 
         // Update candidate panel from Mozc's current state
         if let panel = NSApp.candidatePanel {
-            if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty
+            let candidates = japaneseEngine.candidateDisplayStrings
+            if !candidates.isEmpty
                 && japaneseEngine.isInConversionState {
-                panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+                panel.show(candidates: candidates,
                            selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
                            client: client)
             } else if panel.isVisible() {
@@ -444,8 +458,9 @@ class NRIMEInputController: IMKInputController {
             // Update preedit display to reflect the highlighted candidate
             japaneseEngine.processMozcResult(result, client: client)
             // Update panel to show Mozc's synced state
-            if !japaneseEngine.mozcConverter.currentCandidateStrings.isEmpty {
-                panel.show(candidates: japaneseEngine.mozcConverter.currentCandidateStrings,
+            let candidates = japaneseEngine.candidateDisplayStrings
+            if !candidates.isEmpty {
+                panel.show(candidates: candidates,
                            selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
                            client: client)
             }
@@ -527,16 +542,17 @@ class NRIMEInputController: IMKInputController {
             let previousMode = StateManager.shared.currentMode
 
             switch action {
-            case .toggleEnglish, .switchKorean, .switchJapanese:
+            case .toggleEnglish, .toggleNonEnglish, .switchKorean, .switchJapanese:
                 if previousMode == .korean {
                     self.koreanEngine.forceCommit(client: client)
                 } else if previousMode == .japanese {
                     self.japaneseEngine.forceCommit(client: client)
                 }
                 switch action {
-                case .toggleEnglish: StateManager.shared.toggleEnglish()
-                case .switchKorean:  StateManager.shared.switchTo(.korean)
-                case .switchJapanese: StateManager.shared.switchTo(.japanese)
+                case .toggleEnglish:    StateManager.shared.toggleEnglish()
+                case .toggleNonEnglish: StateManager.shared.toggleNonEnglish()
+                case .switchKorean:     StateManager.shared.switchTo(.korean)
+                case .switchJapanese:   StateManager.shared.switchTo(.japanese)
                 default: break
                 }
                 self.logControllerEvent("shortcutAction", client: client, extra: [

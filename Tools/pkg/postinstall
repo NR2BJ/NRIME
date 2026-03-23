@@ -6,16 +6,8 @@ APP_PATH="$INSTALL_DIR/NRIME.app"
 SETTINGS_PATH="$INSTALL_DIR/NRIMESettings.app"
 RESTORE_HELPER_PATH="$INSTALL_DIR/NRIMERestoreHelper.app"
 LAUNCH_AGENT_PATH="/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist"
+MOZC_LAUNCH_AGENT_PATH="/Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
-
-# Deregister all existing NRIME input sources to prevent duplicates on reinstall
-swift -e '
-import Carbon
-let conditions = [kTISPropertyBundleID: "com.nrime.inputmethod.app" as CFString] as CFDictionary
-if let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource] {
-    for source in sources { TISDisableInputSource(source) }
-}
-' 2>&1 || true
 
 # Kill existing processes
 killall NRIME 2>/dev/null || true
@@ -23,6 +15,16 @@ killall NRIMESettings 2>/dev/null || true
 killall NRIMERestoreHelper 2>/dev/null || true
 killall mozc_server 2>/dev/null || true
 sleep 1
+
+# Clean stale mozc lock files (read-only, chmod first)
+CONSOLE_USER="$(stat -f "%Su" /dev/console 2>/dev/null || true)"
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+    MOZC_DIR="$(eval echo "~$CONSOLE_USER")/Library/Application Support/Mozc"
+    mkdir -p "$MOZC_DIR"
+    chown "$CONSOLE_USER":staff "$MOZC_DIR" 2>/dev/null || true
+    chmod 644 "$MOZC_DIR/.server.lock" 2>/dev/null || true
+    rm -f "$MOZC_DIR/.server.lock" "$MOZC_DIR/.session.ipc" 2>/dev/null || true
+fi
 
 # Remove quarantine
 xattr -cr "$APP_PATH" 2>/dev/null || true
@@ -34,14 +36,30 @@ xattr -cr "$RESTORE_HELPER_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
 "$LSREGISTER" "$RESTORE_HELPER_PATH" 2>/dev/null || true
 
-# Reload login restore agent for the current console user so the next login
-# and immediate post-install session both use the latest helper.
-CONSOLE_USER="$(stat -f "%Su" /dev/console 2>/dev/null || true)"
+# Re-enable input sources (macOS auto-registers them from the bundle)
+swift -e '
+import Carbon
+let conditions = [kTISPropertyBundleID: "com.nrime.inputmethod.app" as CFString] as CFDictionary
+if let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource] {
+    for source in sources { TISEnableInputSource(source) }
+}
+' 2>&1 || true
+
+# Reload login restore agent
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -f "$LAUNCH_AGENT_PATH" ]; then
     CONSOLE_UID="$(id -u "$CONSOLE_USER" 2>/dev/null || true)"
     if [ -n "$CONSOLE_UID" ]; then
         launchctl bootout "gui/$CONSOLE_UID" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
         launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
+    fi
+fi
+
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -f "$MOZC_LAUNCH_AGENT_PATH" ]; then
+    CONSOLE_UID="$(id -u "$CONSOLE_USER" 2>/dev/null || true)"
+    if [ -n "$CONSOLE_UID" ]; then
+        launchctl bootout "gui/$CONSOLE_UID" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
+        launchctl bootstrap "gui/$CONSOLE_UID" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
+        launchctl kickstart -k "gui/$CONSOLE_UID/com.nrime.inputmethod.mozcserver" 2>/dev/null || true
     fi
 fi
 

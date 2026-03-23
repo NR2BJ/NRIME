@@ -13,6 +13,7 @@ SETTINGS_APP="NRIMESettings.app"
 RESTORE_HELPER_APP="NRIMERestoreHelper.app"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.loginrestore.plist"
+MOZC_LAUNCH_AGENT_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.mozcserver.plist"
 
 echo "=== NRIME Installer ==="
 
@@ -108,6 +109,39 @@ cat > "$LAUNCH_AGENT_PATH" <<EOF
 EOF
 launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
+
+echo "Installing Mozc server LaunchAgent..."
+cat > "$MOZC_LAUNCH_AGENT_PATH" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nrime.inputmethod.mozcserver</string>
+    <key>LimitLoadToSessionType</key>
+    <array>
+        <string>Aqua</string>
+    </array>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$INSTALL_DIR/$APP_NAME/Contents/Resources/mozc_server</string>
+        <string>--nodetach</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/nrime-mozc-server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/nrime-mozc-server.log</string>
+</dict>
+</plist>
+EOF
+mkdir -p "$HOME/Library/Application Support/Mozc"
+launchctl bootout "gui/$(id -u)" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
+launchctl kickstart -k "gui/$(id -u)/com.nrime.inputmethod.mozcserver" 2>/dev/null || true
 
 # Enable and select NRIME input source via TIS API
 echo "Activating NRIME input source..."

@@ -9,4 +9,7 @@ static inline mach_msg_bits_t nrime_mach_msgh_bits(mach_msg_bits_t remote, mach_
     return (remote) | ((local) << 8);
 }
 
+// Mozc Mach IPC — C implementation matching upstream mach_ipc.cc
+#include "nrime_mozc_ipc.h"
+
 #endif

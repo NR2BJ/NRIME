@@ -36,6 +36,7 @@ final class Settings {
               let config = try? JSONDecoder().decode(ShortcutConfig.self, from: data) else {
             switch key {
             case "toggleEnglish": return .defaultToggleEnglish
+            case "toggleNonEnglish": return .defaultToggleNonEnglish
             case "switchKorean": return .defaultSwitchKorean
             case "switchJapanese": return .defaultSwitchJapanese
             case "hanjaConvert": return .defaultHanjaConvert

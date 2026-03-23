@@ -21,6 +21,7 @@ final class SettingsStore: ObservableObject {
         _perAppModeType = Published(initialValue: "whitelist")
         _perAppModeList = Published(initialValue: [])
         _toggleEnglishShortcut = Published(initialValue: .defaultToggleEnglish)
+        _toggleNonEnglishShortcut = Published(initialValue: .defaultToggleNonEnglish)
         _switchKoreanShortcut = Published(initialValue: .defaultSwitchKorean)
         _switchJapaneseShortcut = Published(initialValue: .defaultSwitchJapanese)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
@@ -39,6 +40,9 @@ final class SettingsStore: ObservableObject {
     }
     @Published var switchJapaneseShortcut: ShortcutConfig {
         didSet { saveShortcut(switchJapaneseShortcut, for: "switchJapanese") }
+    }
+    @Published var toggleNonEnglishShortcut: ShortcutConfig {
+        didSet { saveShortcut(toggleNonEnglishShortcut, for: "toggleNonEnglish") }
     }
     @Published var hanjaConvertShortcut: ShortcutConfig {
         didSet { saveShortcut(hanjaConvertShortcut, for: "hanjaConvert") }
@@ -127,6 +131,7 @@ final class SettingsStore: ObservableObject {
         perAppModeList = defaults.stringArray(forKey: "perAppModeList") ?? []
 
         toggleEnglishShortcut = Self.loadShortcut("toggleEnglish", from: defaults) ?? .defaultToggleEnglish
+        toggleNonEnglishShortcut = Self.loadShortcut("toggleNonEnglish", from: defaults) ?? .defaultToggleNonEnglish
         switchKoreanShortcut = Self.loadShortcut("switchKorean", from: defaults) ?? .defaultSwitchKorean
         switchJapaneseShortcut = Self.loadShortcut("switchJapanese", from: defaults) ?? .defaultSwitchJapanese
         hanjaConvertShortcut = Self.loadShortcut("hanjaConvert", from: defaults) ?? .defaultHanjaConvert

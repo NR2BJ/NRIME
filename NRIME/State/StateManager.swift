@@ -18,6 +18,20 @@ final class StateManager {
         previousNonEnglishMode = Settings.shared.lastNonEnglishMode
     }
 
+    /// Cycle between non-English modes (Korean ↔ Japanese).
+    /// If currently English, switches to the opposite of previousNonEnglishMode.
+    func toggleNonEnglish() {
+        switch currentMode {
+        case .korean:
+            switchTo(.japanese)
+        case .japanese:
+            switchTo(.korean)
+        case .english:
+            let opposite: InputMode = previousNonEnglishMode == .korean ? .japanese : .korean
+            switchTo(opposite)
+        }
+    }
+
     /// Toggle between English and the previous non-English mode.
     func toggleEnglish() {
         if currentMode == .english {
