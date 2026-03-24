@@ -6,7 +6,7 @@ APP_PATH="$INSTALL_DIR/NRIME.app"
 SETTINGS_PATH="$INSTALL_DIR/NRIMESettings.app"
 RESTORE_HELPER_PATH="$INSTALL_DIR/NRIMERestoreHelper.app"
 LAUNCH_AGENT_PATH="/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist"
-MOZC_LAUNCH_AGENT_PATH="/Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist"
+# mozc_server is now managed on-demand by NRIME — no LaunchAgent needed
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
 # Kill existing processes
@@ -54,13 +54,14 @@ if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -f "$LAUNCH_AGEN
     fi
 fi
 
-if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -f "$MOZC_LAUNCH_AGENT_PATH" ]; then
+# Clean up old mozc LaunchAgent if present (from previous versions)
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
     CONSOLE_UID="$(id -u "$CONSOLE_USER" 2>/dev/null || true)"
     if [ -n "$CONSOLE_UID" ]; then
-        launchctl bootout "gui/$CONSOLE_UID" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
-        launchctl bootstrap "gui/$CONSOLE_UID" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
-        launchctl kickstart -k "gui/$CONSOLE_UID/com.nrime.inputmethod.mozcserver" 2>/dev/null || true
+        launchctl bootout "gui/$CONSOLE_UID" "/Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist" 2>/dev/null || true
     fi
+    rm -f "/Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist" 2>/dev/null || true
+    rm -f "$(eval echo "~$CONSOLE_USER")/Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist" 2>/dev/null || true
 fi
 
 exit 0

@@ -83,6 +83,7 @@ nihongo → にほんご → Space → 日本語
 | Electron 앱 (VS Code, Slack, Discord 등) | 정상 동작 |
 | 키 리매핑 (Karabiner, BetterTouchTool) | 충돌 없음 |
 | 비밀번호 필드 | 자동 감지, 시스템에 위임 |
+| 백그라운드 프로세스 | 없음 (LaunchAgent 미사용) |
 
 ## 제거
 
@@ -98,7 +99,7 @@ bash Tools/uninstall.sh
 ```bash
 killall NRIME NRIMESettings NRIMERestoreHelper mozc_server 2>/dev/null
 
-# LaunchAgent 제거
+# 이전 버전 LaunchAgent 정리
 launchctl bootout gui/$(id -u) /Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist 2>/dev/null
 launchctl bootout gui/$(id -u) /Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist 2>/dev/null
 

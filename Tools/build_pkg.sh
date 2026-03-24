@@ -41,8 +41,7 @@ xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
 NRIME_APP="$BUILD_DIR/Release/NRIME.app"
 SETTINGS_APP="$BUILD_DIR/Release/NRIMESettings.app"
 RESTORE_HELPER_APP="$BUILD_DIR/Release/NRIMERestoreHelper.app"
-LAUNCH_AGENT_PLIST="$SCRIPTS_DIR/com.nrime.inputmethod.loginrestore.plist"
-MOZC_LAUNCH_AGENT_PLIST="$SCRIPTS_DIR/com.nrime.inputmethod.mozcserver.plist"
+# LaunchAgents removed — NRIME handles recovery and mozc_server internally
 
 if [ ! -d "$NRIME_APP" ]; then
     echo "ERROR: NRIME.app not found at $NRIME_APP"
@@ -61,7 +60,7 @@ echo "Resolved app version: $VERSION"
 echo "Preparing PKG payload..."
 rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR/payload/Library/Input Methods"
-mkdir -p "$PKG_DIR/payload/Library/LaunchAgents"
+# No LaunchAgents — NRIME handles recovery and mozc on-demand
 mkdir -p "$PKG_DIR/scripts"
 
 # Use ditto to avoid ._* resource fork files in payload
@@ -70,8 +69,6 @@ if [ -d "$SETTINGS_APP" ]; then
     ditto "$SETTINGS_APP" "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app"
 fi
 ditto "$RESTORE_HELPER_APP" "$PKG_DIR/payload/Library/Input Methods/NRIMERestoreHelper.app"
-cp "$LAUNCH_AGENT_PLIST" "$PKG_DIR/payload/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist"
-cp "$MOZC_LAUNCH_AGENT_PLIST" "$PKG_DIR/payload/Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist"
 
 # Ad-hoc code sign (inside-out to avoid broken nested signatures)
 echo "Ad-hoc signing apps..."

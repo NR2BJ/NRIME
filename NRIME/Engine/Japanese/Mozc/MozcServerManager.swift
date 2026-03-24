@@ -5,7 +5,6 @@ import Foundation
 final class MozcServerManager {
     static let shared = MozcServerManager()
 
-    private let launchAgentLabel = "com.nrime.inputmethod.mozcserver"
     private var serverProcess: Process?
     private let serverProcessLock = NSLock()
     private let launchQueue = DispatchQueue(label: "com.nrime.mozc.launch")
@@ -63,7 +62,7 @@ final class MozcServerManager {
     func restartServer() -> Bool {
         let launched = withLaunchQueue { () -> Bool in
             killStaleServers()
-            return launchServerViaLaunchAgent() || launchServer()
+            return launchServer()
         }
         guard launched else {
             return false
@@ -73,7 +72,6 @@ final class MozcServerManager {
 
     /// Shuts down the managed mozc_server process.
     func shutdownServer() {
-        _ = stopLaunchAgentServer()
         serverProcessLock.lock()
         guard let process = serverProcess, process.isRunning else {
             serverProcessLock.unlock()
@@ -101,7 +99,7 @@ final class MozcServerManager {
             }
 
             killStaleServers()
-            let launched = launchServerViaLaunchAgent() || launchServer()
+            let launched = launchServer()
             if launched {
                 DeveloperLogger.shared.log("MozcServer", "Server launched successfully")
             } else {
@@ -121,8 +119,6 @@ final class MozcServerManager {
     /// Kill any existing mozc_server processes that are not managed by this instance.
     /// This handles stale servers left behind after NRIME is reinstalled/restarted.
     private func killStaleServers() {
-        _ = stopLaunchAgentServer()
-
         let killTask = Process()
         killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
         killTask.arguments = ["mozc_server"]
@@ -206,56 +202,6 @@ final class MozcServerManager {
         } catch {
             NSLog("NRIME: Failed to launch mozc_server: \(error)")
             return false
-        }
-    }
-
-    private func launchServerViaLaunchAgent() -> Bool {
-        guard let plistPath = installedLaunchAgentPlistPath() else {
-            DeveloperLogger.shared.log("MozcServer", "LaunchAgent plist not found — skipping launchctl path")
-            return false
-        }
-
-        let domain = "gui/\(getuid())"
-        _ = runLaunchCtl(arguments: ["bootout", domain, plistPath])
-        let bootstrapStatus = runLaunchCtl(arguments: ["bootstrap", domain, plistPath])
-
-        let kickstartStatus = runLaunchCtl(arguments: ["kickstart", "-k", "\(domain)/\(launchAgentLabel)"])
-        let success = kickstartStatus == 0 || bootstrapStatus == 0
-        DeveloperLogger.shared.log("MozcServer", "LaunchAgent launch \(success ? "succeeded" : "failed")",
-                                   metadata: ["bootstrapStatus": "\(bootstrapStatus)",
-                                              "kickstartStatus": "\(kickstartStatus)"])
-        return success
-    }
-
-    @discardableResult
-    private func stopLaunchAgentServer() -> Bool {
-        let domain = "gui/\(getuid())"
-        let killStatus = runLaunchCtl(arguments: ["kill", "TERM", "\(domain)/\(launchAgentLabel)"])
-        return killStatus == 0
-    }
-
-    private func installedLaunchAgentPlistPath() -> String? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = [
-            "\(home)/Library/LaunchAgents/\(launchAgentLabel).plist",
-            "/Library/LaunchAgents/\(launchAgentLabel).plist"
-        ]
-        return candidates.first(where: { FileManager.default.fileExists(atPath: $0) })
-    }
-
-    @discardableResult
-    private func runLaunchCtl(arguments: [String]) -> Int32 {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        task.arguments = arguments
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-        do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus
-        } catch {
-            return -1
         }
     }
 

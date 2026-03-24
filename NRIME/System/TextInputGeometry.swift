@@ -19,44 +19,59 @@ enum TextInputGeometry {
         let rect: NSRect
         let source: CaretSource
     }
+
+    /// Memorize last good caret position to prevent jumping to (0,0) on failure.
+    /// (Inspired by fcitx5-macos coordinate memorization strategy.)
+    private static var lastGoodResult: CaretResult?
+
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
-        guard let client else { return nil }
+        guard let client else { return lastGoodResult }
 
-        // 1. Accessibility API — most accurate across all apps.
-        //    Uses AXUIElementSetMessagingTimeout to cap latency at 10ms.
-        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
-            return CaretResult(rect: axRect, source: .accessibility)
-        }
-
-        // 2. Try firstRect — precise positioning for well-behaving apps.
+        // 1. Try firstRect — precise positioning for well-behaving apps.
         //    Reject suspiciously wide rects (Electron apps return the entire input field).
         for range in candidateRanges(for: client) {
             var actualRange = NSRange(location: NSNotFound, length: 0)
             let rect = client.firstRect(forCharacterRange: range, actualRange: &actualRange)
             if isUsableCaretRect(rect)
                 && !shouldDeferSuspiciousFirstRect(rect, requestedRange: range, actualRange: actualRange) {
-                return CaretResult(rect: rect, source: .precise)
+                let result = CaretResult(rect: rect, source: .precise)
+                lastGoodResult = result
+                return result
             }
         }
 
-        // 3. Fallback: attributes at caret index.
+        // 2. Fallback: attributes at caret index (fcitx5/Squirrel primary method).
         if let index = caretIndex(for: client) {
             var lineHeightRect = NSRect.zero
             client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
             if isUsableCaretRect(lineHeightRect) {
-                return CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
+                let result = CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
+                lastGoodResult = result
+                return result
             }
         }
 
-        // 4. Fallback: attributes at index 0.
+        // 3. Fallback: attributes at index 0.
         //    Only Y and height are reliable — X points to the line start, not the caret.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         if isUsableCaretRect(zeroRect) {
-            return CaretResult(rect: zeroRect, source: .attributesAtZero)
+            let result = CaretResult(rect: zeroRect, source: .attributesAtZero)
+            lastGoodResult = result
+            return result
         }
 
-        return nil
+        // 4. Accessibility API fallback — most accurate but can be slow.
+        //    Uses length:1 to work around macOS zero-length selection bug.
+        //    Sets AXEnhancedUserInterface for Electron/Chromium apps.
+        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
+            let result = CaretResult(rect: axRect, source: .accessibility)
+            lastGoodResult = result
+            return result
+        }
+
+        // All methods failed: return last known good position
+        return lastGoodResult
     }
 
     static func screenFrame(containing rect: NSRect) -> NSRect? {
@@ -175,14 +190,21 @@ enum TextInputGeometry {
     // MARK: - Accessibility API
 
     /// Query the focused UI element's caret bounds via AXUIElement.
-    /// Uses PID-direct access and 50ms messaging timeout for speed.
+    /// Uses PID-direct access with 10ms timeout.
+    /// Applies Input Source Pro's techniques:
+    ///   - length:1 to work around macOS zero-length kAXBoundsForRange bug
+    ///   - AXEnhancedUserInterface for Electron/Chromium apps
     private static func accessibilityCaretRect() -> NSRect? {
-        // Use PID-direct access instead of system-wide traversal (saves one IPC hop)
-        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
-            return nil
-        }
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return nil }
+        let pid = frontApp.processIdentifier
+
         let appElement = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(appElement, 0.01) // 10ms timeout
+        AXUIElementSetMessagingTimeout(appElement, 0.01) // 10ms
+
+        // Activate AX on Electron/Chromium apps (they hide their AX tree by default)
+        if let bundleId = frontApp.bundleIdentifier, !bundleId.hasPrefix("com.apple.") {
+            AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, true as CFTypeRef)
+        }
 
         var focusedElementValue: AnyObject?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedElementValue) == .success else {
@@ -190,7 +212,12 @@ enum TextInputGeometry {
         }
         let focusedElement = focusedElementValue as! AXUIElement
 
-        // Get selected text range
+        // Try WebKit/Chromium-specific text markers first (Input Source Pro strategy)
+        if let webRect = webAreaCaretRect(focusedElement) {
+            return webRect
+        }
+
+        // Standard AX: selected text range → bounds
         var rangeValue: AnyObject?
         guard AXUIElementCopyAttributeValue(focusedElement, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success else {
             return nil
@@ -201,13 +228,13 @@ enum TextInputGeometry {
             return nil
         }
 
-        // Use a zero-length range at the caret position for precise bounds
-        var caretRange = CFRange(location: range.location, length: 0)
+        // Use length:1 instead of length:0 to work around macOS bug
+        // where kAXBoundsForRangeParameterizedAttribute returns kAXErrorNoValue for zero-length.
+        var caretRange = CFRange(location: max(range.location, 0), length: 1)
         guard let caretRangeValue = AXValueCreate(.cfRange, &caretRange) else {
             return nil
         }
 
-        // Get bounds for the caret position
         var boundsValue: AnyObject?
         guard AXUIElementCopyParameterizedAttributeValue(
             focusedElement,
@@ -223,14 +250,45 @@ enum TextInputGeometry {
             return nil
         }
 
-        // AX uses top-left origin; convert to AppKit bottom-left origin
-        guard let screenHeight = NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: axBounds.midX, y: 0)) })?.frame.height
-                ?? NSScreen.main?.frame.height else {
+        return convertFromQuartz(axBounds)
+    }
+
+    /// WebKit/Chromium-specific caret detection using text markers.
+    /// (Input Source Pro's findWebAreaCursor strategy)
+    private static func webAreaCaretRect(_ element: AXUIElement) -> NSRect? {
+        var markerRangeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, "AXSelectedTextMarkerRange" as CFString, &markerRangeValue) == .success else {
             return nil
         }
 
-        let flippedY = screenHeight - axBounds.origin.y - axBounds.size.height
-        return NSRect(x: axBounds.origin.x, y: flippedY, width: max(axBounds.size.width, 1), height: axBounds.size.height)
+        var boundsValue: AnyObject?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            "AXBoundsForTextMarkerRange" as CFString,
+            markerRangeValue!,
+            &boundsValue
+        ) == .success else {
+            return nil
+        }
+
+        var axBounds = CGRect.zero
+        guard AXValueGetValue(boundsValue as! AXValue, .cgRect, &axBounds) else {
+            return nil
+        }
+
+        return convertFromQuartz(axBounds)
+    }
+
+    /// Convert Quartz (top-left origin) coordinates to AppKit (bottom-left origin).
+    private static func convertFromQuartz(_ quartzRect: CGRect) -> NSRect? {
+        guard let screenHeight = NSScreen.screens.first(where: {
+            $0.frame.contains(NSPoint(x: quartzRect.midX, y: 0))
+        })?.frame.height ?? NSScreen.main?.frame.height else {
+            return nil
+        }
+
+        let flippedY = screenHeight - quartzRect.origin.y - quartzRect.size.height
+        return NSRect(x: quartzRect.origin.x, y: flippedY, width: max(quartzRect.size.width, 1), height: quartzRect.size.height)
     }
 
     private static func isUsableCaretRect(_ rect: NSRect) -> Bool {
