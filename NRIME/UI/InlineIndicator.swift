@@ -78,10 +78,15 @@ final class InlineIndicator {
             let lineHeightRect = result.rect
             let gap: CGFloat = 4
 
-            // For attributesAtZero fallback, X is unreliable — keep current position if visible.
+            // For attributesAtZero fallback, X is unreliable (points to line start).
+            // Use current panel position if visible, or mouse X as last resort.
             let x: CGFloat
-            if result.source == .attributesAtZero, let panel, panel.isVisible {
-                x = panel.frame.origin.x
+            if result.source == .attributesAtZero {
+                if let panel, panel.isVisible {
+                    x = panel.frame.origin.x
+                } else {
+                    x = NSEvent.mouseLocation.x + gap
+                }
             } else {
                 x = TextInputGeometry.indicatorAnchorX(for: lineHeightRect) + gap
             }

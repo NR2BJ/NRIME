@@ -27,6 +27,16 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }
 
+        let markedRange = client.markedRange()
+        let isComposing = markedRange.location != NSNotFound && markedRange.length > 0
+
+        // During active composition, many apps return bogus caret positions
+        // (e.g., field start instead of cursor). If we have a known good position,
+        // keep it stable until composition ends.
+        if isComposing, let last = lastGoodResult {
+            return last
+        }
+
         // 1. Try firstRect — precise positioning for well-behaving apps.
         //    Reject suspiciously wide rects (Electron apps return the entire input field).
         for range in candidateRanges(for: client) {
@@ -53,12 +63,11 @@ enum TextInputGeometry {
 
         // 3. Fallback: attributes at index 0.
         //    Only Y and height are reliable — X points to the line start, not the caret.
+        //    Do NOT save as lastGoodResult — the unreliable X would poison future lookups.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         if isUsableCaretRect(zeroRect) {
-            let result = CaretResult(rect: zeroRect, source: .attributesAtZero)
-            lastGoodResult = result
-            return result
+            return CaretResult(rect: zeroRect, source: .attributesAtZero)
         }
 
         // 4. Accessibility API fallback — most accurate but can be slow.
@@ -126,6 +135,8 @@ enum TextInputGeometry {
         let selectedRange = client.selectedRange()
         let markedRange = client.markedRange()
 
+        // During composition (markedRange exists), prefer selectedRange within marked text.
+        // Many apps return the field start for markedRange end position, so avoid that.
         if isPreferredSelectedRange(selectedRange, relativeTo: markedRange) {
             ranges.append(selectedRange)
             if selectedRange.length == 0 {
@@ -133,10 +144,11 @@ enum TextInputGeometry {
             }
         }
 
-        if markedRange.location != NSNotFound {
+        // Only use markedRange as fallback when selectedRange is unavailable
+        if ranges.isEmpty, markedRange.location != NSNotFound {
             let caretLocation = markedRange.location + markedRange.length
             ranges.append(NSRange(location: caretLocation, length: 0))
-            ranges.append(markedRange)
+            ranges.append(NSRange(location: caretLocation, length: 1))
         }
 
         if selectedRange.location != NSNotFound && !isPreferredSelectedRange(selectedRange, relativeTo: markedRange) {
