@@ -119,17 +119,19 @@ final class KoreanEngine: InputEngine {
 
     /// Force commit any composing text (called from deactivateServer).
     func forceCommit(client: (any IMKTextInput)?) {
-        guard let client = client, automata.isComposing else { return }
-        let text = automata.flush()
-        clearHanjaSession()
-        if !text.isEmpty {
-            client.setMarkedText(
-                "" as NSString,
-                selectionRange: NSRange(location: 0, length: 0),
-                replacementRange: replacementRange()
-            )
-            client.insertText(text as NSString, replacementRange: replacementRange())
+        guard let client = client else {
+            DeveloperLogger.shared.log("Korean", "forceCommit: no client")
+            return
         }
+        guard automata.isComposing else {
+            DeveloperLogger.shared.log("Korean", "forceCommit: not composing")
+            return
+        }
+        let composingText = automata.currentComposingText()
+        DeveloperLogger.shared.log("Korean", "forceCommit: committing",
+                                   metadata: ["text": composingText, "length": "\(composingText.count)"])
+        clearHanjaSession()
+        commitComposing(client: client)
     }
 
     // MARK: - Private
