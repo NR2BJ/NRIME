@@ -99,8 +99,12 @@ final class ShortcutHandler {
                 guard capsNowOn && !capsWasOn else { return false }
                 // Shift+CapsLock = real Caps Lock, don't intercept
                 if newFlags.contains(.shift) { return false }
-                if checkModifierOnlyTap(keyCode) { return true }
-                return checkPlainKeyShortcut(keyCode)
+                let matched = checkModifierOnlyTap(keyCode) || checkPlainKeyShortcut(keyCode)
+                if matched {
+                    // Undo the system Caps Lock toggle so LED stays off
+                    toggleCapsLock()
+                }
+                return matched
             }
             return false
         }
