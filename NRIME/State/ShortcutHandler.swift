@@ -34,31 +34,7 @@ final class ShortcutHandler {
     // Double-Shift tracking for Caps Lock toggle
     private var lastShiftTapTime: Date?
     private var lastShiftTapKeyCode: UInt16?
-    private let doubleTapWindow: TimeInterval = 0.3
-
-    /// When true, the active modifier key is registered as a dedicated switch key.
-    /// The controller should strip its modifier flag from keyDown events
-    /// so the engine receives base characters (e.g., 'ㄱ' not 'ㄲ').
-    var shouldStripActiveModifier: Bool {
-        guard Settings.shared.dedicatedModifierMode,
-              let activeKey = activeModifierKeyCode,
-              let flag = ShortcutConfig.modifierFlag(for: activeKey) else {
-            return false
-        }
-        // Check if this modifier is registered as a tap shortcut
-        for (key, _) in Self.allShortcuts {
-            let config = Settings.shared.shortcut(for: key)
-            guard !config.disabled, config.isModifierOnlyTap else { continue }
-            if config.keyCode == activeKey { return true }
-        }
-        return false
-    }
-
-    /// The modifier flag to strip from events when shouldStripActiveModifier is true.
-    var activeModifierFlag: NSEvent.ModifierFlags? {
-        guard let activeKey = activeModifierKeyCode else { return nil }
-        return ShortcutConfig.modifierFlag(for: activeKey)
-    }
+    private var doubleTapWindow: TimeInterval { Settings.shared.doubleTapWindow }
 
     /// Process an event for shortcut detection.
     /// Returns true if the event was consumed as a shortcut action.
@@ -166,8 +142,7 @@ final class ShortcutHandler {
         }
 
         // 2. If a modifier is held for tap tracking, mark it as used
-        //    Exception: dedicated modifier mode — the modifier is always a tap, never a combo
-        if activeModifierKeyCode != nil && !shouldStripActiveModifier {
+        if activeModifierKeyCode != nil {
             modifierWasUsedAsCombo = true
         }
 

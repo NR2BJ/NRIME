@@ -15,7 +15,6 @@ final class SettingsStore: ObservableObject {
 
         _inlineIndicatorEnabled = Published(initialValue: true)
         _tapThreshold = Published(initialValue: 0.2)
-        _dedicatedModifierMode = Published(initialValue: false)
         _preventABCSwitch = Published(initialValue: false)
         _developerModeEnabled = Published(initialValue: false)
         _perAppModeEnabled = Published(initialValue: false)
@@ -26,6 +25,8 @@ final class SettingsStore: ObservableObject {
         _switchKoreanShortcut = Published(initialValue: .defaultSwitchKorean)
         _switchJapaneseShortcut = Published(initialValue: .defaultSwitchJapanese)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
+        _doubleTapWindow = Published(initialValue: 0.3)
+        _shiftEnterDelay = Published(initialValue: 0.015)
         _japaneseKeyConfig = Published(initialValue: .default)
 
         reloadFromDefaults()
@@ -67,8 +68,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(tapThreshold, forKey: "tapThreshold") }
     }
 
-    @Published var dedicatedModifierMode: Bool {
-        didSet { defaults.set(dedicatedModifierMode, forKey: "dedicatedModifierMode") }
+    @Published var doubleTapWindow: Double {
+        didSet { defaults.set(doubleTapWindow, forKey: "doubleTapWindow") }
+    }
+
+    @Published var shiftEnterDelay: Double {
+        didSet { defaults.set(shiftEnterDelay, forKey: "shiftEnterDelay") }
     }
 
     // MARK: - Per-App Mode
@@ -128,8 +133,10 @@ final class SettingsStore: ObservableObject {
 
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2
-        dedicatedModifierMode = defaults.bool(forKey: "dedicatedModifierMode")
-
+        let dtVal = defaults.double(forKey: "doubleTapWindow")
+        doubleTapWindow = dtVal > 0 ? dtVal : 0.3
+        let seVal = defaults.double(forKey: "shiftEnterDelay")
+        shiftEnterDelay = seVal > 0 ? seVal : 0.015
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")
         perAppModeEnabled = defaults.bool(forKey: "perAppModeEnabled")

@@ -7,21 +7,21 @@ struct PerAppTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enable per-app language mode memory", isOn: $store.perAppModeEnabled)
+                Toggle(String(localized: "perApp.enableMemory"), isOn: $store.perAppModeEnabled)
 
                 if store.perAppModeEnabled {
-                    Picker("Mode", selection: $store.perAppModeType) {
-                        Text("Whitelist — remember only listed apps").tag("whitelist")
-                        Text("Blacklist — remember all except listed apps").tag("blacklist")
+                    Picker(String(localized: "perApp.mode"), selection: $store.perAppModeType) {
+                        Text("perApp.whitelist").tag("whitelist")
+                        Text("perApp.blacklist").tag("blacklist")
                     }
                     .pickerStyle(.radioGroup)
                 }
             }
 
             if store.perAppModeEnabled {
-                Section(store.perAppModeType == "whitelist" ? "Remembered Apps" : "Excluded Apps") {
+                Section(store.perAppModeType == "whitelist" ? String(localized: "perApp.rememberedApps") : String(localized: "perApp.excludedApps")) {
                     if store.perAppModeList.isEmpty {
-                        Text("No apps added yet.")
+                        Text("perApp.noApps")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(store.perAppModeList, id: \.self) { bundleId in
@@ -47,7 +47,7 @@ struct PerAppTab: View {
                         }
                     }
 
-                    Button("Add App...") {
+                    Button(String(localized: "perApp.addApp")) {
                         showingAppPicker = true
                     }
                     .fileImporter(

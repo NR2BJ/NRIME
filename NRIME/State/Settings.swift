@@ -62,11 +62,24 @@ final class Settings {
         set { defaults.set(newValue, forKey: "tapThreshold") }
     }
 
-    /// When true, modifier keys registered as tap shortcuts are dedicated switch keys.
-    /// They never combine with other keys (e.g., RShift+ㄱ → ㄱ not ㄲ).
-    var dedicatedModifierMode: Bool {
-        get { defaults.bool(forKey: "dedicatedModifierMode") }
-        set { defaults.set(newValue, forKey: "dedicatedModifierMode") }
+    // MARK: - Double-Tap Window (Shift double-tap → Caps Lock)
+
+    var doubleTapWindow: TimeInterval {
+        get {
+            let val = defaults.double(forKey: "doubleTapWindow")
+            return val > 0 ? val : 0.3
+        }
+        set { defaults.set(newValue, forKey: "doubleTapWindow") }
+    }
+
+    // MARK: - Electron Shift+Enter Delay
+
+    var shiftEnterDelay: TimeInterval {
+        get {
+            let val = defaults.double(forKey: "shiftEnterDelay")
+            return val > 0 ? val : 0.015
+        }
+        set { defaults.set(newValue, forKey: "shiftEnterDelay") }
     }
 
     // MARK: - Input Source Recovery

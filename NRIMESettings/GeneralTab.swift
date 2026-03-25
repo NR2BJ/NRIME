@@ -7,30 +7,30 @@ struct GeneralTab: View {
 
     var body: some View {
         Form {
-            Section("Shortcuts") {
+            Section(String(localized: "section.shortcuts")) {
                 ShortcutRow(
-                    title: "Toggle English",
+                    title: String(localized: "shortcut.toggleEnglish"),
                     shortcut: $store.toggleEnglishShortcut
                 )
                 ShortcutRow(
-                    title: "Toggle Non-English Mode",
+                    title: String(localized: "shortcut.toggleNonEnglish"),
                     shortcut: $store.toggleNonEnglishShortcut
                 )
                 ShortcutRow(
-                    title: "Switch to Korean",
+                    title: String(localized: "shortcut.switchKorean"),
                     shortcut: $store.switchKoreanShortcut
                 )
                 ShortcutRow(
-                    title: "Switch to Japanese",
+                    title: String(localized: "shortcut.switchJapanese"),
                     shortcut: $store.switchJapaneseShortcut
                 )
                 ShortcutRow(
-                    title: "Hanja Conversion",
+                    title: String(localized: "shortcut.hanjaConversion"),
                     shortcut: $store.hanjaConvertShortcut
                 )
             }
 
-            Section("Tap Threshold") {
+            Section(String(localized: "section.tapThreshold")) {
                 VStack(alignment: .leading, spacing: 4) {
                     let needsThreshold = store.toggleEnglishShortcut.isModifierOnlyTap
                         || store.toggleNonEnglishShortcut.isModifierOnlyTap
@@ -44,39 +44,58 @@ struct GeneralTab: View {
                                 .frame(width: 50, alignment: .trailing)
                             Slider(value: $store.tapThreshold, in: 0.1...0.5, step: 0.01)
                         }
-                        Text("How long a modifier key can be held before it's no longer recognized as a tap.")
+                        Text("tapThreshold.description")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Not applicable — no shortcuts use modifier-only tap.")
+                        Text("tapThreshold.notApplicable")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            Section("Modifier Behavior") {
+            Section(String(localized: "section.shiftDoubleTap")) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Dedicated switch key mode", isOn: $store.dedicatedModifierMode)
-                    Text("When enabled, modifier keys registered as tap shortcuts (e.g. Right Shift) will never combine with other keys. Shifted characters (ㄲ, uppercase) must use the other Shift key.")
+                    HStack {
+                        Text("\(String(format: "%.2f", store.doubleTapWindow))s")
+                            .monospacedDigit()
+                            .frame(width: 50, alignment: .trailing)
+                        Slider(value: $store.doubleTapWindow, in: 0.15...0.6, step: 0.05)
+                    }
+                    Text("shiftDoubleTap.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Display") {
-                Toggle("Show inline indicator on mode switch", isOn: $store.inlineIndicatorEnabled)
+            Section(String(localized: "section.shiftEnterDelay")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("\(Int(store.shiftEnterDelay * 1000))ms")
+                            .monospacedDigit()
+                            .frame(width: 50, alignment: .trailing)
+                        Slider(value: $store.shiftEnterDelay, in: 0.005...0.05, step: 0.005)
+                    }
+                    Text("shiftEnterDelay.description")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(String(localized: "section.display")) {
+                Toggle(String(localized: "display.inlineIndicator"), isOn: $store.inlineIndicatorEnabled)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Prevent switching to ABC", isOn: $store.preventABCSwitch)
-                    Text("Automatically switch back to NRIME when another input source is selected, keep trying during the first ~15 seconds after login or wake, and rely on NRIME's internal EN/KO/JA shortcuts afterward so system input-source switching is rarely needed.")
+                    Toggle(String(localized: "display.preventABC"), isOn: $store.preventABCSwitch)
+                    Text("display.preventABC.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Candidate Font Size")
+                        Text("display.candidateFontSize")
                         Spacer()
                         Text("\(Int(store.japaneseKeyConfig.candidateFontSize))pt")
                             .monospacedDigit()
@@ -91,38 +110,38 @@ struct GeneralTab: View {
                         )
                         .frame(width: 150)
                     }
-                    Text("Adjusts the text size in the candidate panel")
+                    Text("display.candidateFontSize.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Conversion Trigger Keys")
-                    Toggle("Space", isOn: Binding(
+                    Text("display.conversionTriggerKeys")
+                    Toggle(String(localized: "common.space"), isOn: Binding(
                         get: { store.japaneseKeyConfig.conversionTriggerSpace },
                         set: { store.japaneseKeyConfig.conversionTriggerSpace = $0 }
                     ))
-                    Toggle("Tab", isOn: Binding(
+                    Toggle(String(localized: "common.tab"), isOn: Binding(
                         get: { store.japaneseKeyConfig.conversionTriggerTab },
                         set: { store.japaneseKeyConfig.conversionTriggerTab = $0 }
                     ))
-                    Toggle("↓ Arrow", isOn: Binding(
+                    Toggle(String(localized: "common.downArrow"), isOn: Binding(
                         get: { store.japaneseKeyConfig.conversionTriggerDownArrow },
                         set: { store.japaneseKeyConfig.conversionTriggerDownArrow = $0 }
                     ))
-                    Text("Choose which keys start Japanese conversion while composing")
+                    Text("display.conversionTriggerKeys.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Developer") {
+            Section(String(localized: "section.developer")) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Enable Developer Mode", isOn: $store.developerModeEnabled)
-                    Text("Writes local-only diagnostic logs for lifecycle and input-source events.")
+                    Toggle(String(localized: "developer.enableMode"), isOn: $store.developerModeEnabled)
+                    Text("developer.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Typed text is not recorded automatically, and nothing is uploaded unless the user shares the file manually.")
+                    Text("developer.privacyNote")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -130,13 +149,13 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Button("Open Log") {
+                        Button(String(localized: "developer.openLog")) {
                             DeveloperLogTools.openLog()
                         }
-                        Button("Reveal in Finder") {
+                        Button(String(localized: "developer.revealInFinder")) {
                             DeveloperLogTools.revealLog()
                         }
-                        Button("Clear Log") {
+                        Button(String(localized: "developer.clearLog")) {
                             DeveloperLogTools.clearLog()
                         }
                     }
@@ -147,18 +166,18 @@ struct GeneralTab: View {
                 }
             }
 
-            Section("Backup & Restore") {
+            Section(String(localized: "section.backupRestore")) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Button("Export Settings...") {
+                        Button(String(localized: "backup.export")) {
                             exportSettings()
                         }
-                        Button("Import Settings...") {
+                        Button(String(localized: "backup.import")) {
                             importSettings()
                         }
                     }
 
-                    Text("Exports shortcuts, Japanese settings, per-app mode memory, and remembered Hanja candidate priority as a JSON file.")
+                    Text("backup.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -177,7 +196,7 @@ struct GeneralTab: View {
     private func exportSettings() {
         do {
             if let url = try store.exportSettingsInteractively() {
-                transferStatusMessage = "Exported settings to \(url.path)"
+                transferStatusMessage = String(format: String(localized: "backup.exported"), url.path)
                 transferStatusIsError = false
             }
         } catch {
@@ -189,7 +208,7 @@ struct GeneralTab: View {
     private func importSettings() {
         do {
             if let url = try store.importSettingsInteractively() {
-                transferStatusMessage = "Imported settings from \(url.path)"
+                transferStatusMessage = String(format: String(localized: "backup.imported"), url.path)
                 transferStatusIsError = false
             }
         } catch {
@@ -211,26 +230,26 @@ struct ShortcutRow: View {
             Text(title)
             Spacer()
             if isRecording {
-                Text("Press keys...")
+                Text("shortcutRow.pressKeys")
                     .foregroundStyle(.orange)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.orange.opacity(0.15))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
-                Text(shortcut.disabled ? "None" : shortcut.label)
+                Text(shortcut.disabled ? String(localized: "shortcutRow.none") : shortcut.label)
                     .foregroundStyle(shortcut.disabled ? .secondary : .primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.secondary.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
-            Button(isRecording ? "Cancel" : "Record") {
+            Button(isRecording ? String(localized: "shortcutRow.cancel") : String(localized: "shortcutRow.record")) {
                 isRecording.toggle()
             }
             .buttonStyle(.borderless)
             if !isRecording && !shortcut.disabled {
-                Button("Clear") {
+                Button(String(localized: "shortcutRow.clear")) {
                     var cleared = shortcut
                     cleared.disabled = true
                     cleared.label = "None"

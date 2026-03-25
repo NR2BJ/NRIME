@@ -256,7 +256,7 @@ final class JapaneseEngine: InputEngine {
             if wasComposing && isShifted {
                 commitComposing(client: client)
                 let capturedClient = client
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
                     capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
                 }
                 return true
@@ -664,7 +664,7 @@ final class JapaneseEngine: InputEngine {
         if (keyCode == 0x24 || keyCode == 0x4C) && isShifted {
             commitConversion(client: client)
             let capturedClient = client
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
                 capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
             }
             return true

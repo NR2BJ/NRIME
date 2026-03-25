@@ -1,0 +1,182 @@
+/* SettingsView - Tab Names */
+"tab.general" = "일반";
+"tab.japanese" = "일본어";
+"tab.dictionary" = "사전";
+"tab.perApp" = "앱별";
+"tab.about" = "정보";
+
+/* GeneralTab - Shortcuts */
+"section.shortcuts" = "단축키";
+"shortcut.toggleEnglish" = "영어 전환";
+"shortcut.toggleNonEnglish" = "비영어 모드 전환";
+"shortcut.switchKorean" = "한국어로 전환";
+"shortcut.switchJapanese" = "일본어로 전환";
+"shortcut.hanjaConversion" = "한자 변환";
+
+/* GeneralTab - Tap Threshold */
+"section.tapThreshold" = "탭 인식 시간";
+"tapThreshold.description" = "보조 키를 누르고 있을 때 탭으로 인식하는 최대 시간입니다.";
+"tapThreshold.notApplicable" = "해당 없음 - 보조 키 단독 탭을 사용하는 단축키가 없습니다.";
+
+/* GeneralTab - Double Tap */
+"section.shiftDoubleTap" = "Shift 두 번 탭 → Caps Lock";
+"shiftDoubleTap.description" = "Caps Lock을 전환하기 위한 두 번의 Shift 탭 사이 최대 간격입니다. Shift+CapsLock으로도 직접 전환할 수 있습니다.";
+
+/* GeneralTab - Shift Enter Delay */
+"section.shiftEnterDelay" = "Shift+Enter 지연 (Electron)";
+"shiftEnterDelay.description" = "텍스트 확정과 줄바꿈 삽입 사이의 지연 시간입니다. Electron 앱(VS Code, Discord 등)에서 조합 중인 텍스트가 사라지면 값을 높여보세요.";
+
+/* GeneralTab - Display */
+"section.display" = "표시";
+"display.inlineIndicator" = "모드 전환 시 인라인 표시기 보기";
+"display.preventABC" = "ABC로 전환 방지";
+"display.preventABC.description" = "다른 입력 소스가 선택되면 자동으로 NRIME으로 전환합니다. 로그인/깨우기 후 약 15초간 계속 시도하며, 이후에는 NRIME 내부 EN/KO/JA 단축키를 사용합니다.";
+"display.candidateFontSize" = "후보 글꼴 크기";
+"display.candidateFontSize.description" = "후보 패널의 텍스트 크기를 조절합니다.";
+"display.conversionTriggerKeys" = "변환 트리거 키";
+"display.conversionTriggerKeys.description" = "일본어 입력 중 변환을 시작할 키를 선택합니다.";
+
+/* GeneralTab - Developer */
+"section.developer" = "개발자";
+"developer.enableMode" = "개발자 모드 활성화";
+"developer.description" = "생명주기 및 입력 소스 이벤트에 대한 로컬 진단 로그를 기록합니다.";
+"developer.privacyNote" = "입력 텍스트는 자동으로 기록되지 않으며, 사용자가 직접 파일을 공유하지 않는 한 어디에도 업로드되지 않습니다.";
+"developer.openLog" = "로그 열기";
+"developer.revealInFinder" = "Finder에서 보기";
+"developer.clearLog" = "로그 지우기";
+
+/* GeneralTab - Backup & Restore */
+"section.backupRestore" = "백업 및 복원";
+"backup.export" = "설정 내보내기...";
+"backup.import" = "설정 가져오기...";
+"backup.description" = "단축키, 일본어 설정, 앱별 모드 기억, 한자 후보 우선순위를 JSON 파일로 내보냅니다.";
+"backup.exported" = "설정을 내보냈습니다: %@";
+"backup.imported" = "설정을 가져왔습니다: %@";
+
+/* ShortcutRow */
+"shortcutRow.pressKeys" = "키를 누르세요...";
+"shortcutRow.none" = "없음";
+"shortcutRow.record" = "기록";
+"shortcutRow.cancel" = "취소";
+"shortcutRow.clear" = "지우기";
+
+/* JapaneseTab - Conversion Keys */
+"section.conversionKeys" = "변환 키";
+"conversionKeys.description" = "입력 중 히라가나를 다른 문자 유형으로 변환하는 키입니다.";
+"japanese.hiragana" = "히라가나";
+"japanese.fullKatakana" = "전각 가타카나";
+"japanese.halfKatakana" = "반각 가타카나";
+"japanese.fullRomaji" = "전각 로마자";
+"japanese.halfRomaji" = "반각 로마자";
+
+/* JapaneseTab - Key Behavior */
+"section.keyBehavior" = "키 동작";
+"keyBehavior.capsLockAction" = "Caps Lock 동작";
+"capsLock.default" = "Caps Lock (기본)";
+"capsLock.katakana" = "가타카나로 변환";
+"capsLock.romaji" = "로마자로 변환";
+"keyBehavior.shiftKeyAction" = "Shift 키 동작";
+"shiftKey.none" = "없음 (기본)";
+"shiftKey.katakana" = "가타카나 입력";
+"shiftKey.romaji" = "로마자 입력";
+
+/* JapaneseTab - Space */
+"section.space" = "스페이스";
+"space.width" = "스페이스 너비";
+"space.halfWidth" = "반각 (U+0020)";
+"space.fullWidth" = "전각 (U+3000)";
+"space.description" = "조합 중이 아닐 때 적용됩니다. 조합 중에는 스페이스가 변환을 시작합니다.";
+
+/* JapaneseTab - Punctuation */
+"section.punctuation" = "구두점 및 기호";
+"punctuation.style" = "구두점 스타일";
+"punctuation.japanese" = "일본어  。、";
+"punctuation.western" = "서양식  ．，";
+"punctuation.slashToNakaguro" = "/ 키 → ・ (나카구로)";
+"punctuation.slashDescription" = "슬래시가 가운뎃점을 입력합니다";
+"punctuation.yenKey" = "\\ 키 → ¥ (엔 기호)";
+"punctuation.yenDescription" = "백슬래시가 엔 기호를 입력합니다";
+
+/* JapaneseTab - Input Features */
+"section.inputFeatures" = "입력 기능";
+"inputFeatures.liveConversion" = "실시간 변환";
+"inputFeatures.liveConversion.description" = "입력하는 동안 실시간으로 변환 결과를 표시합니다";
+"inputFeatures.prediction" = "예측 입력";
+"inputFeatures.prediction.description" = "텍스트를 확정한 후 다음 단어를 예측하여 표시합니다";
+
+/* JapaneseTab - Conversion History */
+"section.conversionHistory" = "변환 이력";
+"conversionHistory.clear" = "변환 이력 지우기";
+"conversionHistory.clear.description" = "학습된 변환 환경설정과 예측 데이터를 초기화합니다";
+"conversionHistory.clearButton" = "지우기";
+"conversionHistory.confirmTitle" = "변환 이력을 지우시겠습니까?";
+"conversionHistory.confirmMessage" = "학습된 모든 변환 환경설정이 초기화됩니다. Mozc가 기본 사전 데이터로 새로 시작합니다.";
+"conversionHistory.clearedTitle" = "이력 삭제 완료";
+"conversionHistory.clearedMessage" = "변환 이력이 삭제되었습니다. 다음 변환부터 적용됩니다.";
+
+/* JapaneseTab - Conversion Shortcuts */
+"section.conversionShortcuts" = "변환 단축키";
+"convShortcut.startConversion" = "변환 시작";
+"convShortcut.moveSegments" = "세그먼트 이동";
+"convShortcut.resizeSegment" = "세그먼트 크기 조절";
+"convShortcut.navigateCandidates" = "후보 탐색";
+"convShortcut.confirmConversion" = "변환 확정";
+"convShortcut.cancelConversion" = "변환 취소";
+"convShortcut.selectPrediction" = "예측 선택 / 격자 전환";
+
+/* JapaneseTab - Key Recorder */
+"keyRecorder.pressKey" = "키를 누르세요...";
+"keyRecorder.none" = "없음";
+"keyRecorder.record" = "기록";
+"keyRecorder.cancel" = "취소";
+"keyRecorder.clear" = "지우기";
+
+/* DictionaryTab */
+"dictionary.search" = "검색...";
+"dictionary.entriesCount" = "%lld개 항목";
+"dictionary.addEntry" = "항목 추가";
+"dictionary.deleteSelected" = "선택 항목 삭제";
+"dictionary.loading" = "불러오는 중...";
+"dictionary.noEntries" = "사전 항목 없음";
+"dictionary.addHint" = "+를 눌러 단어를 추가하세요";
+"dictionary.columnReading" = "읽기";
+"dictionary.columnWord" = "단어";
+"dictionary.columnPOS" = "품사";
+"dictionary.columnComment" = "코멘트";
+"dictionary.edit" = "편집...";
+"dictionary.delete" = "삭제";
+"dictionary.deleteConfirm" = "%lld개 항목을 삭제하시겠습니까?";
+"dictionary.deleteMessage" = "이 작업은 되돌릴 수 없습니다. 사용자 사전에서 해당 단어가 삭제됩니다.";
+"dictionary.autoLearnInfo" = "자동 학습된 변환은 해시로 저장되어 목록에 표시할 수 없습니다. 삭제하려면 **일본어** 탭 → 변환 이력 지우기를 이용하세요.";
+"dictionary.addTitle" = "항목 추가";
+"dictionary.editTitle" = "항목 편집";
+"dictionary.fieldReading" = "읽기 (히라가나):";
+"dictionary.fieldWord" = "단어 (변환):";
+"dictionary.fieldPOS" = "품사:";
+"dictionary.fieldComment" = "코멘트 (선택):";
+"dictionary.save" = "저장";
+
+/* PerAppTab */
+"perApp.enableMemory" = "앱별 언어 모드 기억 활성화";
+"perApp.mode" = "모드";
+"perApp.whitelist" = "허용 목록 — 등록된 앱만 기억";
+"perApp.blacklist" = "차단 목록 — 등록된 앱 제외 전부 기억";
+"perApp.rememberedApps" = "기억할 앱";
+"perApp.excludedApps" = "제외할 앱";
+"perApp.noApps" = "추가된 앱이 없습니다.";
+"perApp.addApp" = "앱 추가...";
+
+/* AboutTab */
+"about.title" = "NRIME";
+"about.subtitle" = "올인원 입력기";
+"about.languages" = "한국어 / 영어 / 일본어";
+"about.github" = "GitHub";
+"about.language" = "언어";
+"about.languageRestart" = "언어를 변경하면 앱을 다시 열어야 적용됩니다.";
+
+/* Common */
+"common.cancel" = "취소";
+"common.ok" = "확인";
+"common.space" = "Space";
+"common.tab" = "Tab";
+"common.downArrow" = "↓ 화살표";

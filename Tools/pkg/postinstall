@@ -4,9 +4,7 @@
 INSTALL_DIR="/Library/Input Methods"
 APP_PATH="$INSTALL_DIR/NRIME.app"
 SETTINGS_PATH="$INSTALL_DIR/NRIMESettings.app"
-RESTORE_HELPER_PATH="$INSTALL_DIR/NRIMERestoreHelper.app"
-LAUNCH_AGENT_PATH="/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist"
-# mozc_server is now managed on-demand by NRIME — no LaunchAgent needed
+# NRIMERestoreHelper removed — NRIME handles input source recovery internally
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
 # Kill existing processes
@@ -29,12 +27,10 @@ fi
 # Remove quarantine
 xattr -cr "$APP_PATH" 2>/dev/null || true
 xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
-xattr -cr "$RESTORE_HELPER_PATH" 2>/dev/null || true
 
 # Register with LaunchServices
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
-"$LSREGISTER" "$RESTORE_HELPER_PATH" 2>/dev/null || true
 
 # Re-enable input sources (macOS auto-registers them from the bundle)
 swift -e '
@@ -45,13 +41,15 @@ if let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue()
 }
 ' 2>&1 || true
 
-# Reload login restore agent
-if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -f "$LAUNCH_AGENT_PATH" ]; then
+# Clean up old loginrestore LaunchAgent (from previous versions — no longer needed)
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
     CONSOLE_UID="$(id -u "$CONSOLE_USER" 2>/dev/null || true)"
     if [ -n "$CONSOLE_UID" ]; then
-        launchctl bootout "gui/$CONSOLE_UID" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
-        launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
+        launchctl bootout "gui/$CONSOLE_UID" "/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist" 2>/dev/null || true
+        launchctl bootout "gui/$CONSOLE_UID" "$(eval echo "~$CONSOLE_USER")/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist" 2>/dev/null || true
     fi
+    rm -f "/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist" 2>/dev/null || true
+    rm -f "$(eval echo "~$CONSOLE_USER")/Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist" 2>/dev/null || true
 fi
 
 # Clean up old mozc LaunchAgent if present (from previous versions)

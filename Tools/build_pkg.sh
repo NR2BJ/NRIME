@@ -31,25 +31,14 @@ xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
     SYMROOT="$BUILD_DIR" \
     build
 
-echo "Building NRIMERestoreHelper (Release)..."
-xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
-    -scheme NRIMERestoreHelper -configuration Release \
-    SYMROOT="$BUILD_DIR" \
-    build
+# NRIMERestoreHelper removed — NRIME handles input source recovery internally
 
 # Verify build products exist
 NRIME_APP="$BUILD_DIR/Release/NRIME.app"
 SETTINGS_APP="$BUILD_DIR/Release/NRIMESettings.app"
-RESTORE_HELPER_APP="$BUILD_DIR/Release/NRIMERestoreHelper.app"
-# LaunchAgents removed — NRIME handles recovery and mozc_server internally
 
 if [ ! -d "$NRIME_APP" ]; then
     echo "ERROR: NRIME.app not found at $NRIME_APP"
-    exit 1
-fi
-
-if [ ! -d "$RESTORE_HELPER_APP" ]; then
-    echo "ERROR: NRIMERestoreHelper.app not found at $RESTORE_HELPER_APP"
     exit 1
 fi
 
@@ -68,18 +57,14 @@ ditto "$NRIME_APP" "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
 if [ -d "$SETTINGS_APP" ]; then
     ditto "$SETTINGS_APP" "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app"
 fi
-ditto "$RESTORE_HELPER_APP" "$PKG_DIR/payload/Library/Input Methods/NRIMERestoreHelper.app"
-
 # Ad-hoc code sign (inside-out to avoid broken nested signatures)
 echo "Ad-hoc signing apps..."
 find "$PKG_DIR/payload" -name "*.bundle" -exec codesign -s - --force {} \;
 codesign -s - --force "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
 codesign -s - --force "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
-codesign -s - --force "$PKG_DIR/payload/Library/Input Methods/NRIMERestoreHelper.app"
 echo "Verifying signatures..."
 codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIME.app" && echo "  NRIME.app: OK" || echo "  NRIME.app: FAILED"
 codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" && echo "  NRIMESettings.app: OK" || echo "  NRIMESettings.app: FAILED"
-codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIMERestoreHelper.app" && echo "  NRIMERestoreHelper.app: OK" || echo "  NRIMERestoreHelper.app: FAILED"
 
 # Copy postinstall script
 cp "$SCRIPTS_DIR/postinstall" "$PKG_DIR/scripts/postinstall"

@@ -24,25 +24,25 @@ struct DictionaryTab: View {
         VStack(spacing: 0) {
             // Toolbar
             HStack {
-                TextField("Search...", text: $searchText)
+                TextField(String(localized: "dictionary.search"), text: $searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 220)
 
                 Spacer()
 
-                Text("\(manager.entries.count) entries")
+                Text("\(manager.entries.count) \(String(localized: "dictionary.entriesCount"))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 Button(action: { showingAddSheet = true }) {
                     Image(systemName: "plus")
                 }
-                .help("Add Entry")
+                .help(String(localized: "dictionary.addEntry"))
 
                 Button(action: { showingDeleteConfirmation = true }) {
                     Image(systemName: "minus")
                 }
-                .help("Delete Selected")
+                .help(String(localized: "dictionary.deleteSelected"))
                 .disabled(selection.isEmpty)
             }
             .padding(.horizontal, 12)
@@ -53,7 +53,7 @@ struct DictionaryTab: View {
             // Table
             if manager.isLoading {
                 Spacer()
-                ProgressView("Loading...")
+                ProgressView(String(localized: "dictionary.loading"))
                 Spacer()
             } else if manager.entries.isEmpty {
                 Spacer()
@@ -61,34 +61,34 @@ struct DictionaryTab: View {
                     Image(systemName: "book.closed")
                         .font(.system(size: 36))
                         .foregroundStyle(.secondary)
-                    Text("No dictionary entries")
+                    Text("dictionary.noEntries")
                         .font(.headline)
                         .foregroundStyle(.secondary)
-                    Text("Click + to add a word")
+                    Text("dictionary.addHint")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
             } else {
                 Table(filteredEntries, selection: $selection) {
-                    TableColumn("Reading") { entry in
+                    TableColumn(String(localized: "dictionary.columnReading")) { entry in
                         Text(entry.key)
                     }
                     .width(min: 80, ideal: 120)
 
-                    TableColumn("Word") { entry in
+                    TableColumn(String(localized: "dictionary.columnWord")) { entry in
                         Text(entry.value)
                     }
                     .width(min: 80, ideal: 120)
 
-                    TableColumn("POS") { entry in
+                    TableColumn(String(localized: "dictionary.columnPOS")) { entry in
                         Text(entry.pos.japaneseLabel)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 60, ideal: 80)
 
-                    TableColumn("Comment") { entry in
+                    TableColumn(String(localized: "dictionary.columnComment")) { entry in
                         Text(entry.comment)
                             .foregroundStyle(.secondary)
                     }
@@ -97,11 +97,11 @@ struct DictionaryTab: View {
                 .contextMenu(forSelectionType: UUID.self) { ids in
                     if ids.count == 1, let id = ids.first,
                        let entry = manager.entries.first(where: { $0.id == id }) {
-                        Button("Edit...") {
+                        Button(String(localized: "dictionary.edit")) {
                             editingEntry = entry
                         }
                     }
-                    Button("Delete", role: .destructive) {
+                    Button(String(localized: "dictionary.delete"), role: .destructive) {
                         selection = ids
                         showingDeleteConfirmation = true
                     }
@@ -120,7 +120,7 @@ struct DictionaryTab: View {
             HStack(spacing: 6) {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
-                Text("Auto-learned conversions are stored as hashes and cannot be listed. To clear them, go to the **Japanese** tab → Clear Conversion History.")
+                Text("dictionary.autoLearnInfo")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -156,14 +156,14 @@ struct DictionaryTab: View {
                 manager.updateEntry(id: entry.id, key: key, value: value, pos: pos, comment: comment)
             }
         }
-        .alert("Delete \(selection.count) entry(ies)?", isPresented: $showingDeleteConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
+        .alert(String(format: String(localized: "dictionary.deleteConfirm"), selection.count), isPresented: $showingDeleteConfirmation) {
+            Button(String(localized: "common.cancel"), role: .cancel) { }
+            Button(String(localized: "dictionary.delete"), role: .destructive) {
                 manager.deleteEntries(ids: selection)
                 selection.removeAll()
             }
         } message: {
-            Text("This cannot be undone. The word(s) will be removed from your user dictionary.")
+            Text("dictionary.deleteMessage")
         }
     }
 }
@@ -188,8 +188,8 @@ private struct DictionaryEntryEditor: View {
 
     private var title: String {
         switch mode {
-        case .add: return "Add Entry"
-        case .edit: return "Edit Entry"
+        case .add: return String(localized: "dictionary.addTitle")
+        case .edit: return String(localized: "dictionary.editTitle")
         }
     }
 
@@ -207,34 +207,34 @@ private struct DictionaryEntryEditor: View {
                 .padding(.bottom, 12)
 
             Form {
-                TextField("Reading (hiragana):", text: $key)
+                TextField(String(localized: "dictionary.fieldReading"), text: $key)
                     .textFieldStyle(.roundedBorder)
 
-                TextField("Word (conversion):", text: $value)
+                TextField(String(localized: "dictionary.fieldWord"), text: $value)
                     .textFieldStyle(.roundedBorder)
 
-                Picker("Part of Speech:", selection: $pos) {
+                Picker(String(localized: "dictionary.fieldPOS"), selection: $pos) {
                     ForEach(UserDictionaryManager.PosType.allCases) { posType in
                         Text("\(posType.rawValue) (\(posType.japaneseLabel))")
                             .tag(posType)
                     }
                 }
 
-                TextField("Comment (optional):", text: $comment)
+                TextField(String(localized: "dictionary.fieldComment"), text: $comment)
                     .textFieldStyle(.roundedBorder)
             }
             .padding(.horizontal, 20)
 
             // Buttons
             HStack {
-                Button("Cancel") {
+                Button(String(localized: "common.cancel")) {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                Button("Save") {
+                Button(String(localized: "dictionary.save")) {
                     onSave(
                         key.trimmingCharacters(in: .whitespaces),
                         value.trimmingCharacters(in: .whitespaces),

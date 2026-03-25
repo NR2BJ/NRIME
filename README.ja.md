@@ -4,46 +4,88 @@
 
 macOS用オールインワン入力メソッド。韓国語・英語・日本語を**1つの入力ソース**で処理します。
 
-- 入力ソースの切り替え不要 — ショートカットで即座に言語変更
-- 完全オフライン動作
+- ショートカットで即座に言語変更（入力ソースの切り替え不要）
+- 完全オフライン動作（ネットワーク不要）
+- Electronアプリ完全対応（VS Code、Slack、Discordなど）
 - 日本語変換は [Google Mozc](https://github.com/google/mozc) エンジンを使用（BSDライセンス）
 
 ## インストール
 
-### PKGインストール（推奨）
+[Releases](https://github.com/NR2BJ/NRIME/releases) ページから最新の `.pkg` をダウンロードしてインストールします。
 
-[Releases](https://github.com/NR2BJ/NRIME/releases) ページから最新の `.pkg` ファイルをダウンロードし、ダブルクリックでインストールします。
-
-インストール後、メニューバーにNRIMEが表示されます。
+インストール後、メニューバーにNRIMEアイコンが表示されます。
 表示されない場合は、ログアウト/ログイン後 **システム設定 → キーボード → 入力ソース → 編集 → +** からNRIMEを追加してください。
 
-### ソースからビルド
+## 使い方
+
+### 言語切り替え
+
+2つの方式をサポートしています：
+
+**選択方式** — 指定した言語に直接切り替え
+| 機能 | デフォルトショートカット |
+|------|------------------------|
+| 韓国語に切り替え | `Right Shift + 1` |
+| 日本語に切り替え | `Right Shift + 2` |
+
+**トグル方式** — 英語 ↔ 非英語間の切り替え
+| 機能 | デフォルトショートカット |
+|------|------------------------|
+| 英語 ↔ 前の言語トグル | `Right Shift` タップ |
+| 非英語モードトグル | （未設定 — 設定で指定） |
+
+すべてのショートカットは設定で変更・**無効化**可能。選択方式のみ、トグル方式のみ、または両方使用できます。
+
+### 韓国語
+
+ドゥボルシク配列。漢字変換：入力中に `Option + Enter`（またはテキスト選択後に `Option + Enter`）
+
+### 日本語
+
+ローマ字入力 → ひらがなリアルタイム変換 → `Space` で漢字変換
+
+```
+nihongo → にほんご → Space → 日本語
+```
+
+変換中：`↑↓` で移動、`1-9` で直接選択、`Enter` で確定、`Escape` でキャンセル
 
 <details>
-<summary>開発者向け</summary>
+<summary>変換キー詳細</summary>
 
-**必要環境:**
-- macOS 13.0 (Ventura) 以上
-- Xcode 15+
-- [xcodegen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
-
-```bash
-git clone https://github.com/NR2BJ/NRIME.git
-cd NRIME
-bash Tools/install.sh
-```
-
-PKGビルド:
-```bash
-bash Tools/build_pkg.sh
-# 出力: build/NRIME-<version>.pkg
-```
+| キー | 機能 |
+|------|------|
+| Space / Tab / ↓ | 変換候補表示（各キーON/OFF設定可能） |
+| F6 | ひらがな |
+| F7 | 全角カタカナ |
+| F8 | 半角カタカナ |
+| F9 | 全角ローマ字 |
+| F10 | 半角ローマ字 |
 
 </details>
 
-### アンインストール
+## 設定
 
-アンインストールスクリプトですべての痕跡を完全に削除します:
+メニューバーのNRIMEアイコンをクリックして設定アプリを開きます。
+
+| タブ | 内容 |
+|------|------|
+| General | ショートカット変更/無効化、インラインインジケーター、変換トリガー選択 |
+| Japanese | Caps Lock/Shift動作、句読点スタイル、ライブ変換、全角スペース |
+| Per-App | アプリごとに最後に使った言語を記憶 |
+| Developer | 診断ログ（ローカル専用、アップロードなし） |
+
+## 互換性
+
+| 環境 | 状態 |
+|------|------|
+| ネイティブmacOSアプリ | 正常動作 |
+| Electronアプリ（VS Code、Slack、Discordなど） | 正常動作 |
+| キーリマッピング（Karabiner、BetterTouchTool） | 競合なし |
+| パスワードフィールド | 自動検出、システムに委任 |
+| バックグラウンドプロセス | なし（LaunchAgent未使用） |
+
+## アンインストール
 
 ```bash
 bash Tools/uninstall.sh
@@ -51,85 +93,43 @@ bash Tools/uninstall.sh
 
 ログアウト/ログインで完全に削除されます。
 
-スクリプトなしでターミナルから直接削除する場合:
+<details>
+<summary>手動アンインストール</summary>
 
 ```bash
-killall NRIME NRIMESettings mozc_server 2>/dev/null; sudo rm -rf ~/Library/Input\ Methods/NRIME.app ~/Library/Input\ Methods/NRIMESettings.app /Library/Input\ Methods/NRIME.app /Library/Input\ Methods/NRIMESettings.app; defaults delete com.nrime.inputmethod.app 2>/dev/null; defaults delete com.nrime.settings 2>/dev/null; defaults delete group.com.nrime.inputmethod 2>/dev/null; rm -rf ~/Library/Application\ Support/Mozc ~/Library/Caches/com.nrime.inputmethod.app ~/Library/Caches/com.nrime.settings
+killall NRIME NRIMESettings NRIMERestoreHelper mozc_server 2>/dev/null
+
+# 旧バージョンのLaunchAgent削除
+launchctl bootout gui/$(id -u) /Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist 2>/dev/null
+launchctl bootout gui/$(id -u) /Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist 2>/dev/null
+
+# アプリ削除
+rm -rf ~/Library/Input\ Methods/NRIME.app ~/Library/Input\ Methods/NRIMESettings.app ~/Library/Input\ Methods/NRIMERestoreHelper.app
+sudo rm -rf /Library/Input\ Methods/NRIME.app /Library/Input\ Methods/NRIMESettings.app /Library/Input\ Methods/NRIMERestoreHelper.app
+sudo rm -f /Library/LaunchAgents/com.nrime.inputmethod.loginrestore.plist /Library/LaunchAgents/com.nrime.inputmethod.mozcserver.plist
+
+# 設定/データ削除
+defaults delete com.nrime.inputmethod.app 2>/dev/null
+defaults delete com.nrime.settings 2>/dev/null
+defaults delete group.com.nrime.inputmethod 2>/dev/null
+rm -rf ~/Library/Application\ Support/Mozc ~/Library/Caches/com.nrime.inputmethod.app ~/Library/Caches/com.nrime.settings ~/Library/Group\ Containers/group.com.nrime
 ```
 
-## デフォルトショートカット
+</details>
 
-| 機能 | デフォルトショートカット |
-|------|------------------------|
-| 英語 ↔ 前の言語トグル | `Right Shift` タップ |
-| 韓国語に切り替え | `Right Shift + 1` |
-| 日本語に切り替え | `Right Shift + 2` |
-| 漢字変換 | `Option + Enter` |
+<details>
+<summary>ソースからビルド（開発者向け）</summary>
 
-すべてのショートカットは設定アプリで変更できます。左右のShift、Ctrl、Option、Cmdを個別に区別します。
+**必要環境:** macOS 13.0+、Xcode 15+、[xcodegen](https://github.com/yonaskolb/XcodeGen)
 
-## 使い方
-
-### 英語
-
-システムキーボードと同じ動作です（パススルー）。
-
-### 韓国語
-
-ドゥボルシク配列。入力中の文字は下線で表示され、次の文字入力時に自動確定されます。
-
-**漢字変換:**
-- 入力中に `Option + Enter` → 候補ウィンドウ表示
-- またはテキストをドラッグで選択してから `Option + Enter`
-- `↑↓` で移動、`1-9` で番号選択、`Enter` で確定
-
-### 日本語
-
-ローマ字入力 → ひらがなリアルタイム変換 → Spaceで漢字変換。
-
-```
-入力: nihongo → にほんご → Space → 日本語
+```bash
+git clone https://github.com/NR2BJ/NRIME.git
+cd NRIME
+bash Tools/build_pkg.sh
+# 出力: build/NRIME-<version>.pkg
 ```
 
-**変換の流れ:**
-1. ローマ字入力 → ひらがなでリアルタイム表示
-2. `Space` または `↓` → 変換候補を表示
-3. `↑↓` で候補移動、`1-9` で直接選択
-4. `Enter` で確定、`Escape` でキャンセル
-
-**Shift / Caps Lock の動作（設定で変更可能）:**
-
-| 設定 | 動作 |
-|------|------|
-| Katakana | キーを押しながらタイプするとカタカナで入力 |
-| Romaji | キーを押しながらタイプするとローマ字で直接入力 |
-
-**変換キー（入力中に使用）:**
-
-| キー | 機能 |
-|------|------|
-| F6 | ひらがな |
-| F7 | 全角カタカナ |
-| F8 | 半角カタカナ |
-| F9 | 全角ローマ字 |
-| F10 | 半角ローマ字 |
-
-## 設定
-
-メニューバーのNRIMEアイコンをクリックすると設定アプリが開きます。
-
-| タブ | 内容 |
-|------|------|
-| General | ショートカット変更、インラインモード表示 ON/OFF |
-| Japanese | F6-F10キー設定、Caps Lock/Shift動作、句読点スタイル |
-| Per-App | アプリごとに最後に使った言語を記憶（ホワイトリスト/ブラックリスト） |
-| About | バージョン情報 |
-
-## 互換性
-
-- **キーリマッピングアプリ**: Karabiner-Elements、BetterTouchTool等と競合なし（キー入力監視用CGEventTap未使用）
-- **リモートデスクトップ**: 正常動作
-- **パスワードフィールド**: 自動検出してシステムに委任
+</details>
 
 ## ライセンス
 

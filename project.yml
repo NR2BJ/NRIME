@@ -6,6 +6,7 @@ options:
   xcodeVersion: "16.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
+  developmentLanguage: ko
 
 packages:
   SwiftProtobuf:
@@ -37,6 +38,8 @@ targets:
       - path: Shared/SettingsTransfer.swift
         type: file
       - path: Shared/SettingsModels.swift
+        type: file
+      - path: Shared/UpdateManager.swift
         type: file
       - path: NRIME/Resources/mozc_server
         buildPhase: resources
@@ -75,6 +78,8 @@ targets:
       - path: Shared/SettingsTransfer.swift
         type: file
       - path: Shared/SettingsModels.swift
+        type: file
+      - path: Shared/UpdateManager.swift
         type: file
       - path: NRIME/Engine/Japanese/Proto/user_dictionary_storage.pb.swift
         type: file

@@ -72,7 +72,7 @@ final class KoreanEngine: InputEngine {
             // Capture client locally — the proxy may become stale if the user switches
             // away within the 10ms window, in which case IMKit silently ignores the call.
             let capturedClient = client
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
                 capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
             }
             return true

@@ -1,29 +1,32 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage("appLanguage") private var appLanguage: String = "ko"
+
     var body: some View {
         TabView {
             GeneralTab()
                 .tabItem {
-                    Label("General", systemImage: "gear")
+                    Label(String(localized: "tab.general"), systemImage: "gear")
                 }
             JapaneseTab()
                 .tabItem {
-                    Label("Japanese", systemImage: "character.ja")
+                    Label(String(localized: "tab.japanese"), systemImage: "character.ja")
                 }
             DictionaryTab()
                 .tabItem {
-                    Label("Dictionary", systemImage: "book")
+                    Label(String(localized: "tab.dictionary"), systemImage: "book")
                 }
             PerAppTab()
                 .tabItem {
-                    Label("Per-App", systemImage: "app.badge.checkmark")
+                    Label(String(localized: "tab.perApp"), systemImage: "app.badge.checkmark")
                 }
             AboutTab()
                 .tabItem {
-                    Label("About", systemImage: "info.circle")
+                    Label(String(localized: "tab.about"), systemImage: "info.circle")
                 }
         }
         .padding()
+        .environment(\.locale, Locale(identifier: appLanguage))
     }
 }

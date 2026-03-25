@@ -1,0 +1,182 @@
+/* SettingsView - Tab Names */
+"tab.general" = "一般";
+"tab.japanese" = "日本語";
+"tab.dictionary" = "辞書";
+"tab.perApp" = "アプリ別";
+"tab.about" = "情報";
+
+/* GeneralTab - Shortcuts */
+"section.shortcuts" = "ショートカット";
+"shortcut.toggleEnglish" = "英語に切替";
+"shortcut.toggleNonEnglish" = "非英語モード切替";
+"shortcut.switchKorean" = "韓国語に切替";
+"shortcut.switchJapanese" = "日本語に切替";
+"shortcut.hanjaConversion" = "漢字変換";
+
+/* GeneralTab - Tap Threshold */
+"section.tapThreshold" = "タップ認識時間";
+"tapThreshold.description" = "修飾キーを押してからタップと認識されなくなるまでの最大時間です。";
+"tapThreshold.notApplicable" = "該当なし — 修飾キー単独タップを使用するショートカットがありません。";
+
+/* GeneralTab - Double Tap */
+"section.shiftDoubleTap" = "Shift ダブルタップ → Caps Lock";
+"shiftDoubleTap.description" = "Caps Lockを切り替えるための2回のShiftタップの最大間隔です。Shift+CapsLockでも直接切り替えできます。";
+
+/* GeneralTab - Shift Enter Delay */
+"section.shiftEnterDelay" = "Shift+Enter 遅延 (Electron)";
+"shiftEnterDelay.description" = "テキスト確定と改行挿入の間の遅延時間です。Electronアプリ（VS Code、Discordなど）で入力中のテキストが消える場合は値を上げてください。";
+
+/* GeneralTab - Display */
+"section.display" = "表示";
+"display.inlineIndicator" = "モード切替時にインライン表示";
+"display.preventABC" = "ABCへの切替を防止";
+"display.preventABC.description" = "他の入力ソースが選択されると自動的にNRIMEに戻します。ログイン/復帰後約15秒間は切り替えを試み続け、以降はNRIME内蔵のEN/KO/JAショートカットを使用します。";
+"display.candidateFontSize" = "候補フォントサイズ";
+"display.candidateFontSize.description" = "候補パネルのテキストサイズを調整します";
+"display.conversionTriggerKeys" = "変換トリガーキー";
+"display.conversionTriggerKeys.description" = "入力中に日本語変換を開始するキーを選択します";
+
+/* GeneralTab - Developer */
+"section.developer" = "開発者";
+"developer.enableMode" = "開発者モードを有効化";
+"developer.description" = "ライフサイクルと入力ソースイベントのローカル診断ログを記録します。";
+"developer.privacyNote" = "入力テキストは自動的に記録されず、ユーザーが手動でファイルを共有しない限りアップロードされません。";
+"developer.openLog" = "ログを開く";
+"developer.revealInFinder" = "Finderで表示";
+"developer.clearLog" = "ログをクリア";
+
+/* GeneralTab - Backup & Restore */
+"section.backupRestore" = "バックアップと復元";
+"backup.export" = "設定をエクスポート...";
+"backup.import" = "設定をインポート...";
+"backup.description" = "ショートカット、日本語設定、アプリ別モード記憶、漢字候補の優先順位をJSONファイルとしてエクスポートします。";
+"backup.exported" = "設定をエクスポートしました: %@";
+"backup.imported" = "設定をインポートしました: %@";
+
+/* ShortcutRow */
+"shortcutRow.pressKeys" = "キーを押してください...";
+"shortcutRow.none" = "なし";
+"shortcutRow.record" = "記録";
+"shortcutRow.cancel" = "キャンセル";
+"shortcutRow.clear" = "クリア";
+
+/* JapaneseTab - Conversion Keys */
+"section.conversionKeys" = "変換キー";
+"conversionKeys.description" = "入力中にひらがなを他の文字種に変換するキーです。";
+"japanese.hiragana" = "ひらがな";
+"japanese.fullKatakana" = "全角カタカナ";
+"japanese.halfKatakana" = "半角カタカナ";
+"japanese.fullRomaji" = "全角ローマ字";
+"japanese.halfRomaji" = "半角ローマ字";
+
+/* JapaneseTab - Key Behavior */
+"section.keyBehavior" = "キー動作";
+"keyBehavior.capsLockAction" = "Caps Lock 動作";
+"capsLock.default" = "Caps Lock（デフォルト）";
+"capsLock.katakana" = "カタカナに変換";
+"capsLock.romaji" = "ローマ字に変換";
+"keyBehavior.shiftKeyAction" = "Shift キー動作";
+"shiftKey.none" = "なし（デフォルト）";
+"shiftKey.katakana" = "カタカナ入力";
+"shiftKey.romaji" = "ローマ字入力";
+
+/* JapaneseTab - Space */
+"section.space" = "スペース";
+"space.width" = "スペース幅";
+"space.halfWidth" = "半角 (U+0020)";
+"space.fullWidth" = "全角 (U+3000)";
+"space.description" = "未入力時に適用されます。入力中はスペースキーで変換を開始します。";
+
+/* JapaneseTab - Punctuation */
+"section.punctuation" = "句読点と記号";
+"punctuation.style" = "句読点スタイル";
+"punctuation.japanese" = "日本語  。、";
+"punctuation.western" = "欧文  ．，";
+"punctuation.slashToNakaguro" = "/ キー → ・（中黒）";
+"punctuation.slashDescription" = "スラッシュで中黒を入力";
+"punctuation.yenKey" = "\\ キー → ¥（円記号）";
+"punctuation.yenDescription" = "バックスラッシュで円記号を入力";
+
+/* JapaneseTab - Input Features */
+"section.inputFeatures" = "入力機能";
+"inputFeatures.liveConversion" = "ライブ変換";
+"inputFeatures.liveConversion.description" = "入力中にリアルタイムで変換結果を表示します";
+"inputFeatures.prediction" = "予測入力";
+"inputFeatures.prediction.description" = "テキスト確定後に次の単語を予測して表示します";
+
+/* JapaneseTab - Conversion History */
+"section.conversionHistory" = "変換履歴";
+"conversionHistory.clear" = "変換履歴をクリア";
+"conversionHistory.clear.description" = "学習した変換設定と予測データをリセットします";
+"conversionHistory.clearButton" = "クリア";
+"conversionHistory.confirmTitle" = "変換履歴をクリアしますか？";
+"conversionHistory.confirmMessage" = "学習した変換設定がすべてリセットされます。Mozcはデフォルトの辞書データで再開します。";
+"conversionHistory.clearedTitle" = "履歴を消去しました";
+"conversionHistory.clearedMessage" = "変換履歴がクリアされました。次回の変換から反映されます。";
+
+/* JapaneseTab - Conversion Shortcuts */
+"section.conversionShortcuts" = "変換ショートカット";
+"convShortcut.startConversion" = "変換開始";
+"convShortcut.moveSegments" = "文節間を移動";
+"convShortcut.resizeSegment" = "文節サイズを変更";
+"convShortcut.navigateCandidates" = "候補を選択";
+"convShortcut.confirmConversion" = "変換を確定";
+"convShortcut.cancelConversion" = "変換をキャンセル";
+"convShortcut.selectPrediction" = "予測を選択 / グリッド切替";
+
+/* JapaneseTab - Key Recorder */
+"keyRecorder.pressKey" = "キーを押してください...";
+"keyRecorder.none" = "なし";
+"keyRecorder.record" = "記録";
+"keyRecorder.cancel" = "キャンセル";
+"keyRecorder.clear" = "クリア";
+
+/* DictionaryTab */
+"dictionary.search" = "検索...";
+"dictionary.entriesCount" = "%lld件";
+"dictionary.addEntry" = "項目を追加";
+"dictionary.deleteSelected" = "選択項目を削除";
+"dictionary.loading" = "読み込み中...";
+"dictionary.noEntries" = "辞書項目がありません";
+"dictionary.addHint" = "+を押して単語を追加";
+"dictionary.columnReading" = "読み";
+"dictionary.columnWord" = "単語";
+"dictionary.columnPOS" = "品詞";
+"dictionary.columnComment" = "コメント";
+"dictionary.edit" = "編集...";
+"dictionary.delete" = "削除";
+"dictionary.deleteConfirm" = "%lld件の項目を削除しますか？";
+"dictionary.deleteMessage" = "この操作は取り消せません。ユーザー辞書から単語が削除されます。";
+"dictionary.autoLearnInfo" = "自動学習された変換はハッシュとして保存されるため一覧表示できません。クリアするには**日本語**タブ→変換履歴をクリアを使用してください。";
+"dictionary.addTitle" = "項目を追加";
+"dictionary.editTitle" = "項目を編集";
+"dictionary.fieldReading" = "読み（ひらがな）:";
+"dictionary.fieldWord" = "単語（変換）:";
+"dictionary.fieldPOS" = "品詞:";
+"dictionary.fieldComment" = "コメント（任意）:";
+"dictionary.save" = "保存";
+
+/* PerAppTab */
+"perApp.enableMemory" = "アプリ別言語モード記憶を有効化";
+"perApp.mode" = "モード";
+"perApp.whitelist" = "ホワイトリスト — リストのアプリのみ記憶";
+"perApp.blacklist" = "ブラックリスト — リスト以外のアプリを記憶";
+"perApp.rememberedApps" = "記憶するアプリ";
+"perApp.excludedApps" = "除外するアプリ";
+"perApp.noApps" = "アプリが追加されていません。";
+"perApp.addApp" = "アプリを追加...";
+
+/* AboutTab */
+"about.title" = "NRIME";
+"about.subtitle" = "オールインワン入力メソッド";
+"about.languages" = "韓国語 / 英語 / 日本語";
+"about.github" = "GitHub";
+"about.language" = "言語";
+"about.languageRestart" = "言語を変更するにはアプリを再起動する必要があります。";
+
+/* Common */
+"common.cancel" = "キャンセル";
+"common.ok" = "OK";
+"common.space" = "スペース";
+"common.tab" = "Tab";
+"common.downArrow" = "↓ 矢印";

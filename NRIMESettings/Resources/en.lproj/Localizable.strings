@@ -1,0 +1,182 @@
+/* SettingsView - Tab Names */
+"tab.general" = "General";
+"tab.japanese" = "Japanese";
+"tab.dictionary" = "Dictionary";
+"tab.perApp" = "Per-App";
+"tab.about" = "About";
+
+/* GeneralTab - Shortcuts */
+"section.shortcuts" = "Shortcuts";
+"shortcut.toggleEnglish" = "Toggle English";
+"shortcut.toggleNonEnglish" = "Toggle Non-English Mode";
+"shortcut.switchKorean" = "Switch to Korean";
+"shortcut.switchJapanese" = "Switch to Japanese";
+"shortcut.hanjaConversion" = "Hanja Conversion";
+
+/* GeneralTab - Tap Threshold */
+"section.tapThreshold" = "Tap Threshold";
+"tapThreshold.description" = "How long a modifier key can be held before it's no longer recognized as a tap.";
+"tapThreshold.notApplicable" = "Not applicable — no shortcuts use modifier-only tap.";
+
+/* GeneralTab - Double Tap */
+"section.shiftDoubleTap" = "Shift Double-Tap → Caps Lock";
+"shiftDoubleTap.description" = "Maximum interval between two Shift taps to toggle Caps Lock. Shift+CapsLock also toggles Caps Lock directly.";
+
+/* GeneralTab - Shift Enter Delay */
+"section.shiftEnterDelay" = "Shift+Enter Delay (Electron)";
+"shiftEnterDelay.description" = "Delay between committing text and inserting newline on Shift+Enter. Increase if composing text disappears in Electron apps (VS Code, Discord, etc.).";
+
+/* GeneralTab - Display */
+"section.display" = "Display";
+"display.inlineIndicator" = "Show inline indicator on mode switch";
+"display.preventABC" = "Prevent switching to ABC";
+"display.preventABC.description" = "Automatically switch back to NRIME when another input source is selected, keep trying during the first ~15 seconds after login or wake, and rely on NRIME's internal EN/KO/JA shortcuts afterward so system input-source switching is rarely needed.";
+"display.candidateFontSize" = "Candidate Font Size";
+"display.candidateFontSize.description" = "Adjusts the text size in the candidate panel";
+"display.conversionTriggerKeys" = "Conversion Trigger Keys";
+"display.conversionTriggerKeys.description" = "Choose which keys start Japanese conversion while composing";
+
+/* GeneralTab - Developer */
+"section.developer" = "Developer";
+"developer.enableMode" = "Enable Developer Mode";
+"developer.description" = "Writes local-only diagnostic logs for lifecycle and input-source events.";
+"developer.privacyNote" = "Typed text is not recorded automatically, and nothing is uploaded unless the user shares the file manually.";
+"developer.openLog" = "Open Log";
+"developer.revealInFinder" = "Reveal in Finder";
+"developer.clearLog" = "Clear Log";
+
+/* GeneralTab - Backup & Restore */
+"section.backupRestore" = "Backup & Restore";
+"backup.export" = "Export Settings...";
+"backup.import" = "Import Settings...";
+"backup.description" = "Exports shortcuts, Japanese settings, per-app mode memory, and remembered Hanja candidate priority as a JSON file.";
+"backup.exported" = "Exported settings to %@";
+"backup.imported" = "Imported settings from %@";
+
+/* ShortcutRow */
+"shortcutRow.pressKeys" = "Press keys...";
+"shortcutRow.none" = "None";
+"shortcutRow.record" = "Record";
+"shortcutRow.cancel" = "Cancel";
+"shortcutRow.clear" = "Clear";
+
+/* JapaneseTab - Conversion Keys */
+"section.conversionKeys" = "Conversion Keys";
+"conversionKeys.description" = "Keys for converting hiragana to other character types during input.";
+"japanese.hiragana" = "Hiragana";
+"japanese.fullKatakana" = "Full-width Katakana";
+"japanese.halfKatakana" = "Half-width Katakana";
+"japanese.fullRomaji" = "Full-width Romaji";
+"japanese.halfRomaji" = "Half-width Romaji";
+
+/* JapaneseTab - Key Behavior */
+"section.keyBehavior" = "Key Behavior";
+"keyBehavior.capsLockAction" = "Caps Lock Action";
+"capsLock.default" = "Caps Lock (Default)";
+"capsLock.katakana" = "Convert to Katakana";
+"capsLock.romaji" = "Convert to Romaji";
+"keyBehavior.shiftKeyAction" = "Shift Key Action";
+"shiftKey.none" = "None (Default)";
+"shiftKey.katakana" = "Input Katakana";
+"shiftKey.romaji" = "Input Romaji";
+
+/* JapaneseTab - Space */
+"section.space" = "Space";
+"space.width" = "Space Width";
+"space.halfWidth" = "Half-width (U+0020)";
+"space.fullWidth" = "Full-width (U+3000)";
+"space.description" = "Applies when not composing. During composition, Space triggers conversion.";
+
+/* JapaneseTab - Punctuation */
+"section.punctuation" = "Punctuation & Symbols";
+"punctuation.style" = "Punctuation Style";
+"punctuation.japanese" = "Japanese  。、";
+"punctuation.western" = "Western  ．，";
+"punctuation.slashToNakaguro" = "/ key → ・ (Nakaguro)";
+"punctuation.slashDescription" = "Slash produces middle dot";
+"punctuation.yenKey" = "\\ key → ¥ (Yen Sign)";
+"punctuation.yenDescription" = "Backslash produces yen sign";
+
+/* JapaneseTab - Input Features */
+"section.inputFeatures" = "Input Features";
+"inputFeatures.liveConversion" = "Live Conversion";
+"inputFeatures.liveConversion.description" = "Show conversion results in real-time as you type";
+"inputFeatures.prediction" = "Predictive Input";
+"inputFeatures.prediction.description" = "Show predicted next words after committing text";
+
+/* JapaneseTab - Conversion History */
+"section.conversionHistory" = "Conversion History";
+"conversionHistory.clear" = "Clear Conversion History";
+"conversionHistory.clear.description" = "Reset learned conversion preferences and prediction data";
+"conversionHistory.clearButton" = "Clear";
+"conversionHistory.confirmTitle" = "Clear Conversion History?";
+"conversionHistory.confirmMessage" = "This will reset all learned conversion preferences. Mozc will start fresh with default dictionary data.";
+"conversionHistory.clearedTitle" = "History Cleared";
+"conversionHistory.clearedMessage" = "Conversion history has been cleared. Changes will take effect with the next conversion.";
+
+/* JapaneseTab - Conversion Shortcuts */
+"section.conversionShortcuts" = "Conversion Shortcuts";
+"convShortcut.startConversion" = "Start conversion";
+"convShortcut.moveSegments" = "Move between segments";
+"convShortcut.resizeSegment" = "Resize segment";
+"convShortcut.navigateCandidates" = "Navigate candidates";
+"convShortcut.confirmConversion" = "Confirm conversion";
+"convShortcut.cancelConversion" = "Cancel conversion";
+"convShortcut.selectPrediction" = "Select prediction / Toggle grid";
+
+/* JapaneseTab - Key Recorder */
+"keyRecorder.pressKey" = "Press a key...";
+"keyRecorder.none" = "None";
+"keyRecorder.record" = "Record";
+"keyRecorder.cancel" = "Cancel";
+"keyRecorder.clear" = "Clear";
+
+/* DictionaryTab */
+"dictionary.search" = "Search...";
+"dictionary.entriesCount" = "%lld entries";
+"dictionary.addEntry" = "Add Entry";
+"dictionary.deleteSelected" = "Delete Selected";
+"dictionary.loading" = "Loading...";
+"dictionary.noEntries" = "No dictionary entries";
+"dictionary.addHint" = "Click + to add a word";
+"dictionary.columnReading" = "Reading";
+"dictionary.columnWord" = "Word";
+"dictionary.columnPOS" = "POS";
+"dictionary.columnComment" = "Comment";
+"dictionary.edit" = "Edit...";
+"dictionary.delete" = "Delete";
+"dictionary.deleteConfirm" = "Delete %lld entry(ies)?";
+"dictionary.deleteMessage" = "This cannot be undone. The word(s) will be removed from your user dictionary.";
+"dictionary.autoLearnInfo" = "Auto-learned conversions are stored as hashes and cannot be listed. To clear them, go to the **Japanese** tab → Clear Conversion History.";
+"dictionary.addTitle" = "Add Entry";
+"dictionary.editTitle" = "Edit Entry";
+"dictionary.fieldReading" = "Reading (hiragana):";
+"dictionary.fieldWord" = "Word (conversion):";
+"dictionary.fieldPOS" = "Part of Speech:";
+"dictionary.fieldComment" = "Comment (optional):";
+"dictionary.save" = "Save";
+
+/* PerAppTab */
+"perApp.enableMemory" = "Enable per-app language mode memory";
+"perApp.mode" = "Mode";
+"perApp.whitelist" = "Whitelist — remember only listed apps";
+"perApp.blacklist" = "Blacklist — remember all except listed apps";
+"perApp.rememberedApps" = "Remembered Apps";
+"perApp.excludedApps" = "Excluded Apps";
+"perApp.noApps" = "No apps added yet.";
+"perApp.addApp" = "Add App...";
+
+/* AboutTab */
+"about.title" = "NRIME";
+"about.subtitle" = "All-in-One Input Method";
+"about.languages" = "Korean / English / Japanese";
+"about.github" = "GitHub";
+"about.language" = "Language";
+"about.languageRestart" = "Changing the language requires reopening the app.";
+
+/* Common */
+"common.cancel" = "Cancel";
+"common.ok" = "OK";
+"common.space" = "Space";
+"common.tab" = "Tab";
+"common.downArrow" = "↓ Arrow";

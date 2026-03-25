@@ -12,7 +12,6 @@ APP_NAME="NRIME.app"
 SETTINGS_APP="NRIMESettings.app"
 RESTORE_HELPER_APP="NRIMERestoreHelper.app"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
-LAUNCH_AGENT_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.loginrestore.plist"
 MOZC_LAUNCH_AGENT_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.mozcserver.plist"
 
 echo "=== NRIME Installer ==="
@@ -85,30 +84,13 @@ echo "Registering with LaunchServices..."
 "$LSREGISTER" -f "$INSTALL_DIR/$SETTINGS_APP"
 "$LSREGISTER" -f "$INSTALL_DIR/$RESTORE_HELPER_APP"
 
-echo "Installing login restore LaunchAgent..."
-mkdir -p "$LAUNCH_AGENTS_DIR"
-cat > "$LAUNCH_AGENT_PATH" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.nrime.inputmethod.loginrestore</string>
-    <key>LimitLoadToSessionType</key>
-    <array>
-        <string>Aqua</string>
-    </array>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$INSTALL_DIR/$RESTORE_HELPER_APP/Contents/MacOS/NRIMERestoreHelper</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>
-EOF
-launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT_PATH" 2>/dev/null || true
+# Clean up old loginrestore LaunchAgent if present (no longer needed)
+LOGINRESTORE_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.loginrestore.plist"
+if [ -f "$LOGINRESTORE_PATH" ]; then
+    launchctl bootout "gui/$(id -u)" "$LOGINRESTORE_PATH" 2>/dev/null || true
+    rm -f "$LOGINRESTORE_PATH"
+    echo "  Removed old loginrestore LaunchAgent"
+fi
 
 echo "Installing Mozc server LaunchAgent..."
 cat > "$MOZC_LAUNCH_AGENT_PATH" <<EOF
