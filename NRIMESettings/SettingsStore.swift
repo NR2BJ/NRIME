@@ -15,6 +15,7 @@ final class SettingsStore: ObservableObject {
 
         _inlineIndicatorEnabled = Published(initialValue: true)
         _tapThreshold = Published(initialValue: 0.2)
+        _dedicatedModifierMode = Published(initialValue: false)
         _preventABCSwitch = Published(initialValue: false)
         _developerModeEnabled = Published(initialValue: false)
         _perAppModeEnabled = Published(initialValue: false)
@@ -64,6 +65,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var tapThreshold: Double {
         didSet { defaults.set(tapThreshold, forKey: "tapThreshold") }
+    }
+
+    @Published var dedicatedModifierMode: Bool {
+        didSet { defaults.set(dedicatedModifierMode, forKey: "dedicatedModifierMode") }
     }
 
     // MARK: - Per-App Mode
@@ -123,6 +128,7 @@ final class SettingsStore: ObservableObject {
 
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2
+        dedicatedModifierMode = defaults.bool(forKey: "dedicatedModifierMode")
 
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")

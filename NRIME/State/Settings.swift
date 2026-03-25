@@ -62,6 +62,13 @@ final class Settings {
         set { defaults.set(newValue, forKey: "tapThreshold") }
     }
 
+    /// When true, modifier keys registered as tap shortcuts are dedicated switch keys.
+    /// They never combine with other keys (e.g., RShift+ㄱ → ㄱ not ㄲ).
+    var dedicatedModifierMode: Bool {
+        get { defaults.bool(forKey: "dedicatedModifierMode") }
+        set { defaults.set(newValue, forKey: "dedicatedModifierMode") }
+    }
+
     // MARK: - Input Source Recovery
 
     var preventABCSwitch: Bool {

@@ -31,6 +31,35 @@ final class ShortcutHandler {
     private var modifierWasUsedAsCombo = false
     private var previousModifierFlags: NSEvent.ModifierFlags = []
 
+    // Double-Shift tracking for Caps Lock toggle
+    private var lastShiftTapTime: Date?
+    private var lastShiftTapKeyCode: UInt16?
+    private let doubleTapWindow: TimeInterval = 0.3
+
+    /// When true, the active modifier key is registered as a dedicated switch key.
+    /// The controller should strip its modifier flag from keyDown events
+    /// so the engine receives base characters (e.g., 'ㄱ' not 'ㄲ').
+    var shouldStripActiveModifier: Bool {
+        guard Settings.shared.dedicatedModifierMode,
+              let activeKey = activeModifierKeyCode,
+              let flag = ShortcutConfig.modifierFlag(for: activeKey) else {
+            return false
+        }
+        // Check if this modifier is registered as a tap shortcut
+        for (key, _) in Self.allShortcuts {
+            let config = Settings.shared.shortcut(for: key)
+            guard !config.disabled, config.isModifierOnlyTap else { continue }
+            if config.keyCode == activeKey { return true }
+        }
+        return false
+    }
+
+    /// The modifier flag to strip from events when shouldStripActiveModifier is true.
+    var activeModifierFlag: NSEvent.ModifierFlags? {
+        guard let activeKey = activeModifierKeyCode else { return nil }
+        return ShortcutConfig.modifierFlag(for: activeKey)
+    }
+
     /// Process an event for shortcut detection.
     /// Returns true if the event was consumed as a shortcut action.
     func handleEvent(_ event: NSEvent) -> Bool {
@@ -62,8 +91,14 @@ final class ShortcutHandler {
 
         // Determine if this modifier key went down or up
         guard let flag = ShortcutConfig.modifierFlag(for: keyCode) else {
-            // Caps Lock: try modifier-only tap first, then plain-key shortcut
+            // Caps Lock: fires on BOTH press and release. Only trigger on press (capsLock flag SET).
             if keyCode == ShortcutConfig.keyCodeCapsLock {
+                let capsNowOn = newFlags.contains(.capsLock)
+                let capsWasOn = oldFlags.contains(.capsLock)
+                // Only trigger when Caps Lock transitions OFF → ON (press, not release)
+                guard capsNowOn && !capsWasOn else { return false }
+                // Shift+CapsLock = real Caps Lock, don't intercept
+                if newFlags.contains(.shift) { return false }
                 if checkModifierOnlyTap(keyCode) { return true }
                 return checkPlainKeyShortcut(keyCode)
             }
@@ -89,6 +124,21 @@ final class ShortcutHandler {
             modifierDownTime = nil
 
             if !modifierWasUsedAsCombo && elapsed < Settings.shared.tapThreshold {
+                // Double-Shift tap → toggle Caps Lock
+                let isShiftKey = (keyCode == ShortcutConfig.keyCodeLeftShift ||
+                                  keyCode == ShortcutConfig.keyCodeRightShift)
+                if isShiftKey,
+                   let lastTime = lastShiftTapTime,
+                   Date().timeIntervalSince(lastTime) < doubleTapWindow {
+                    lastShiftTapTime = nil
+                    lastShiftTapKeyCode = nil
+                    toggleCapsLock()
+                    return true
+                }
+                if isShiftKey {
+                    lastShiftTapTime = Date()
+                    lastShiftTapKeyCode = keyCode
+                }
                 // Solo tap — check modifier-only shortcuts
                 return checkModifierOnlyTap(keyCode)
             }
@@ -112,7 +162,8 @@ final class ShortcutHandler {
         }
 
         // 2. If a modifier is held for tap tracking, mark it as used
-        if activeModifierKeyCode != nil {
+        //    Exception: dedicated modifier mode — the modifier is always a tap, never a combo
+        if activeModifierKeyCode != nil && !shouldStripActiveModifier {
             modifierWasUsedAsCombo = true
         }
 
@@ -208,6 +259,17 @@ final class ShortcutHandler {
 
     private func hasAnyModifier(_ flags: NSEvent.ModifierFlags) -> Bool {
         return !flags.intersection([.shift, .control, .option, .command]).isEmpty
+    }
+
+    /// Toggle Caps Lock by posting a synthetic key event.
+    private func toggleCapsLock() {
+        DeveloperLogger.shared.log("Shortcut", "Double-Shift → toggling Caps Lock")
+        DispatchQueue.main.async {
+            guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0x39, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: nil, virtualKey: 0x39, keyDown: false) else { return }
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
     }
 
 }

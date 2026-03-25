@@ -63,17 +63,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func updateStatusIcon(for mode: InputMode) {
         guard let button = statusItem?.button else { return }
+        button.image = makeStatusIcon(text: mode.label)
+        button.title = ""
+    }
 
-        if let icon = NSImage(named: mode.iconName) {
-            icon.isTemplate = true
-            icon.size = NSSize(width: 18, height: 18)
-            button.image = icon
-            button.title = ""
-        } else {
-            // Fallback: use text label
-            button.image = nil
-            button.title = mode.label
+    /// Render menu bar icon at runtime — handles Retina/non-HiDPI automatically.
+    private func makeStatusIcon(text: String) -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let font = NSFont.systemFont(ofSize: 14, weight: .medium)
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: NSColor.black
+            ]
+            let str = NSAttributedString(string: text, attributes: attrs)
+            let textSize = str.size()
+            str.draw(at: NSPoint(
+                x: (rect.width - textSize.width) / 2,
+                y: (rect.height - textSize.height) / 2
+            ))
+            return true
         }
+        image.isTemplate = true
+        return image
     }
 
     @objc private func openSettings() {

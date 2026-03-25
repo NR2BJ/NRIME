@@ -510,13 +510,37 @@ class NRIMEInputController: IMKInputController {
         if shortcutHandler.handleEvent(event) {
             return true
         }
+
+        // Dedicated modifier mode: strip the active modifier's flag from the event
+        // so the engine sees base characters (e.g., 'ㄱ' not 'ㄲ' when RShift is held).
+        var routedEvent = event
+        if shortcutHandler.shouldStripActiveModifier,
+           let flag = shortcutHandler.activeModifierFlag,
+           event.type == .keyDown {
+            let strippedFlags = event.modifierFlags.subtracting(flag)
+            if let modified = NSEvent.keyEvent(
+                with: event.type,
+                location: event.locationInWindow,
+                modifierFlags: strippedFlags,
+                timestamp: event.timestamp,
+                windowNumber: event.windowNumber,
+                context: nil,
+                characters: event.characters ?? "",
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+                isARepeat: event.isARepeat,
+                keyCode: event.keyCode
+            ) {
+                routedEvent = modified
+            }
+        }
+
         switch StateManager.shared.currentMode {
         case .english:
-            return englishEngine.handleEvent(event, client: client)
+            return englishEngine.handleEvent(routedEvent, client: client)
         case .korean:
-            return koreanEngine.handleEvent(event, client: client)
+            return koreanEngine.handleEvent(routedEvent, client: client)
         case .japanese:
-            return japaneseEngine.handleEvent(event, client: client)
+            return japaneseEngine.handleEvent(routedEvent, client: client)
         }
     }
 

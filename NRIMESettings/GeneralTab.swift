@@ -55,6 +55,15 @@ struct GeneralTab: View {
                 }
             }
 
+            Section("Modifier Behavior") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Dedicated switch key mode", isOn: $store.dedicatedModifierMode)
+                    Text("When enabled, modifier keys registered as tap shortcuts (e.g. Right Shift) will never combine with other keys. Shifted characters (ㄲ, uppercase) must use the other Shift key.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Display") {
                 Toggle("Show inline indicator on mode switch", isOn: $store.inlineIndicatorEnabled)
 

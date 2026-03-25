@@ -13,11 +13,4 @@ enum InputMode: String, CaseIterable {
         }
     }
 
-    var iconName: String {
-        switch self {
-        case .english: return "icon_en"
-        case .korean: return "icon_ko"
-        case .japanese: return "icon_ja"
-        }
-    }
 }
