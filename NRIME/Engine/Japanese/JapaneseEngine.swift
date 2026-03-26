@@ -48,16 +48,35 @@ final class JapaneseEngine: InputEngine {
         guard event.type == .keyDown else { return false }
 
         // Modifier keys (Cmd, Ctrl, Option) while active:
-        // Commit composing text and let the system handle the shortcut.
+        // Commit text, then repost via CGEvent so the app receives the shortcut.
         let mods = event.modifierFlags
         if mods.contains(.command) || mods.contains(.control) || mods.contains(.option) {
             if showingPrediction {
                 dismissPrediction()
             }
+            let wasActive = conversionState == .converting || composer.isComposing
             if conversionState == .converting {
                 commitConversion(client: client)
             } else if composer.isComposing {
                 commitComposing(client: client)
+            }
+            if wasActive {
+                let delay = Settings.shared.shiftEnterDelay / 1000.0
+                let keyCode = event.keyCode
+                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
+                    keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+                    keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                    keyDown.post(tap: .cghidEventTap)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                        guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+                        keyUp.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+                        keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                        keyUp.post(tap: .cghidEventTap)
+                    }
+                }
+                return true
             }
             return false
         }

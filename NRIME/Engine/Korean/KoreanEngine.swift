@@ -36,11 +36,27 @@ final class KoreanEngine: InputEngine {
         guard event.type == .keyDown else { return false }
 
         // Modifier keys (Cmd, Ctrl, Option) while composing:
-        // Commit composing text and let the system handle the shortcut.
-        // return false tells IMKit we didn't handle it, so the app gets the event.
+        // Commit text, then repost via CGEvent so the app receives the shortcut.
+        // performKeyEquivalent path means return false won't forward Cmd+key.
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || event.modifierFlags.contains(.option) {
             if automata.isComposing {
                 commitComposing(client: client)
+                let delay = Settings.shared.shiftEnterDelay / 1000.0
+                let keyCode = event.keyCode
+                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
+                    keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+                    keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                    keyDown.post(tap: .cghidEventTap)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                        guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+                        keyUp.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+                        keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                        keyUp.post(tap: .cghidEventTap)
+                    }
+                }
+                return true
             }
             return false
         }
