@@ -32,14 +32,9 @@ xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
 
-# Re-enable input sources (macOS auto-registers them from the bundle)
-swift -e '
-import Carbon
-let conditions = [kTISPropertyBundleID: "com.nrime.inputmethod.app" as CFString] as CFDictionary
-if let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource] {
-    for source in sources { TISEnableInputSource(source) }
-}
-' 2>&1 || true
+# Re-enable input sources using pre-compiled tool (avoids swift-frontend notification)
+SCRIPT_DIR="$(dirname "$0")"
+"$SCRIPT_DIR/enable_input_source" 2>/dev/null || true
 
 # Clean up old loginrestore LaunchAgent (from previous versions — no longer needed)
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then

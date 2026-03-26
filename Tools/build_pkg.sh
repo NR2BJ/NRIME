@@ -66,9 +66,14 @@ echo "Verifying signatures..."
 codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIME.app" && echo "  NRIME.app: OK" || echo "  NRIME.app: FAILED"
 codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" && echo "  NRIMESettings.app: OK" || echo "  NRIMESettings.app: FAILED"
 
-# Copy postinstall script
+# Copy postinstall script and pre-compiled helper
 cp "$SCRIPTS_DIR/postinstall" "$PKG_DIR/scripts/postinstall"
 chmod +x "$PKG_DIR/scripts/postinstall"
+
+# Compile enable_input_source tool (avoids swift-frontend notification during install)
+echo "Compiling enable_input_source helper..."
+swiftc -O -o "$PKG_DIR/scripts/enable_input_source" "$SCRIPTS_DIR/enable_input_source.swift"
+chmod +x "$PKG_DIR/scripts/enable_input_source"
 
 # 4. Generate component plist and disable relocation
 #    Without this, the installer searches the entire filesystem for existing
