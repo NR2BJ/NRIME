@@ -57,20 +57,15 @@ struct GeneralTab: View {
                 }
             }
 
-            Section(L("section.shiftDoubleTap")) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle(L("shiftDoubleTap.enable"), isOn: $store.shiftDoubleTapEnabled)
-                    if store.shiftDoubleTapEnabled {
-                        HStack {
-                            Text("\(String(format: "%.2f", store.doubleTapWindow))s")
-                                .monospacedDigit()
-                                .frame(width: 50, alignment: .trailing)
-                            Slider(value: $store.doubleTapWindow, in: 0.15...0.6, step: 0.05)
-                        }
+            Section {
+                Toggle(L("section.shiftDoubleTap"), isOn: $store.shiftDoubleTapEnabled)
+                if store.shiftDoubleTapEnabled {
+                    HStack {
+                        Text("\(String(format: "%.2f", store.doubleTapWindow))s")
+                            .monospacedDigit()
+                            .frame(width: 50, alignment: .trailing)
+                        Slider(value: $store.doubleTapWindow, in: 0.15...0.6, step: 0.05)
                     }
-                    Text(L("shiftDoubleTap.description"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
 
