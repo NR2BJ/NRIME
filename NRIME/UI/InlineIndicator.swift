@@ -69,11 +69,13 @@ final class InlineIndicator {
             return
         }
 
-        DeveloperLogger.shared.log("Indicator", "show", metadata: [
-            "mode": mode.label,
-            "origin": String(format: "(%.0f, %.0f)", origin.x, origin.y),
-            "source": String(describing: TextInputGeometry.caretRect(for: client)?.source ?? .attributesAtZero)
-        ])
+        // Don't show at screen corners — indicates positioning failure
+        if origin.x < 20 && origin.y < 20 {
+            DeveloperLogger.shared.log("Indicator", "suppressed — origin near (0,0)", metadata: [
+                "origin": String(format: "(%.0f, %.0f)", origin.x, origin.y)
+            ])
+            return
+        }
 
         panel.setFrameOrigin(origin)
         isFading = false
