@@ -92,6 +92,7 @@
 "punctuation.style" = "Punctuation Style";
 "punctuation.japanese" = "Japanese  。、";
 "punctuation.western" = "Western  ．，";
+"punctuation.fullWidthWestern" = "Full-width Western (．，)";
 "punctuation.slashToNakaguro" = "/ key → ・ (Nakaguro)";
 "punctuation.slashDescription" = "Slash produces middle dot";
 "punctuation.yenKey" = "\\ key → ¥ (Yen Sign)";

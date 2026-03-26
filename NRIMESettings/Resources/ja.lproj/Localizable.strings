@@ -92,6 +92,7 @@
 "punctuation.style" = "句読点スタイル";
 "punctuation.japanese" = "日本語  。、";
 "punctuation.western" = "欧文  ．，";
+"punctuation.fullWidthWestern" = "全角西洋式 (．，)";
 "punctuation.slashToNakaguro" = "/ キー → ・（中黒）";
 "punctuation.slashDescription" = "スラッシュで中黒を入力";
 "punctuation.yenKey" = "\\ キー → ¥（円記号）";

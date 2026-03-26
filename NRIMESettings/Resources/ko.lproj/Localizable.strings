@@ -92,6 +92,7 @@
 "punctuation.style" = "구두점 스타일";
 "punctuation.japanese" = "일본어  。、";
 "punctuation.western" = "서양식  ．，";
+"punctuation.fullWidthWestern" = "전각 서양식 (．，)";
 "punctuation.slashToNakaguro" = "/ 키 → ・ (나카구로)";
 "punctuation.slashDescription" = "슬래시가 가운뎃점을 입력합니다";
 "punctuation.yenKey" = "\\ 키 → ¥ (엔 기호)";
