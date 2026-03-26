@@ -85,8 +85,8 @@ class NRIMEInputController: IMKInputController {
         // 4. Shortcut detection + engine routing
         let result = routeEvent(event, client: client)
 
-        // 5. Update indicator position while visible, or resolve pending show
-        if InlineIndicator.shared.isVisible || InlineIndicator.shared.hasPendingShow {
+        // 5. Update indicator position while visible
+        if InlineIndicator.shared.isVisible {
             InlineIndicator.shared.updatePosition(client: client)
         }
 

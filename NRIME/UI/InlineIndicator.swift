@@ -8,7 +8,6 @@ final class InlineIndicator {
     private var textField: NSTextField?
     private var fadeTimer: Timer?
     private var isFading = false
-    private var pendingMode: InputMode?  // set when show() can't find caret position
     private let displayDuration: TimeInterval = 1.0
     private let fadeDuration: TimeInterval = 0.3
 
@@ -20,33 +19,18 @@ final class InlineIndicator {
         return panel.isVisible && panel.alphaValue > 0 && !isFading
     }
 
-    /// Whether we have a pending show waiting for a valid caret position.
-    var hasPendingShow: Bool { pendingMode != nil }
-
     /// Update position while visible (e.g., on keystroke). Does not reset fade timer.
-    /// Also resolves pending shows if a valid caret position is found.
     func updatePosition(client: (any IMKTextInput)?) {
-        // Resolve pending show first
-        if let mode = pendingMode {
-            if let result = TextInputGeometry.caretRect(for: client),
-               result.source != .attributesAtZero {
-                pendingMode = nil
-                showAtPosition(result: result)
-            }
-            return
-        }
-
         guard isVisible, let panel = panel else { return }
         // During composition, many apps return bogus caret positions (field start).
-        // Freeze indicator position until composition ends.
         if let client = client {
             let markedRange = client.markedRange()
             if markedRange.location != NSNotFound && markedRange.length > 0 {
                 return
             }
         }
-        // Only update if we get a real caret position
         guard let result = TextInputGeometry.caretRect(for: client) else { return }
+        // attributesAtZero has unreliable X — skip position update
         if result.source == .attributesAtZero { return }
 
         let panelSize = panel.frame.size
@@ -62,43 +46,41 @@ final class InlineIndicator {
     }
 
     /// Show the mode indicator near the caret position.
-    /// If caret position can't be determined, defers display until updatePosition resolves it.
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
         fadeTimer?.invalidate()
-        pendingMode = nil
 
-        ensurePanel(for: mode)
+        let labelWidth: CGFloat = mode.label.count > 1 ? 36 : 26
+        let panelSize = NSSize(width: labelWidth, height: 24)
 
-        // Try to get a precise caret position
-        if let result = TextInputGeometry.caretRect(for: client),
-           result.source != .attributesAtZero {
-            showAtPosition(result: result)
-        } else {
-            // Can't find caret — defer until updatePosition gets a valid position
-            pendingMode = mode
-            // Set a timeout: if no valid position within displayDuration, cancel
-            fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
-                self?.pendingMode = nil
-            }
-        }
-    }
-
-    // MARK: - Private
-
-    private func showAtPosition(result: TextInputGeometry.CaretResult) {
+        ensurePanel(for: mode, size: panelSize)
         guard let panel = panel else { return }
 
-        let panelSize = panel.frame.size
-        let gap: CGFloat = 4
-        let x = TextInputGeometry.indicatorAnchorX(for: result.rect) + gap
-        let aboveY = result.rect.origin.y + result.rect.height + gap
-
+        // Get position — use whatever caretRect returns, including attributesAtZero.
+        // Only skip if caretRect returns nil entirely.
         let origin: NSPoint
-        if let screenFrame = TextInputGeometry.screenFrame(containing: result.rect),
-           aboveY + panelSize.height > screenFrame.maxY {
-            origin = NSPoint(x: x, y: result.rect.origin.y - panelSize.height - gap)
+        if let result = TextInputGeometry.caretRect(for: client) {
+            let gap: CGFloat = 4
+            let x: CGFloat
+            if result.source == .attributesAtZero {
+                // Y is reliable, X is line start — use current panel X if visible, otherwise use rect X
+                if panel.isVisible {
+                    x = panel.frame.origin.x
+                } else {
+                    x = result.rect.origin.x + gap
+                }
+            } else {
+                x = TextInputGeometry.indicatorAnchorX(for: result.rect) + gap
+            }
+            let aboveY = result.rect.origin.y + result.rect.height + gap
+            if let screenFrame = TextInputGeometry.screenFrame(containing: result.rect),
+               aboveY + panelSize.height > screenFrame.maxY {
+                origin = NSPoint(x: x, y: result.rect.origin.y - panelSize.height - gap)
+            } else {
+                origin = NSPoint(x: x, y: aboveY)
+            }
         } else {
-            origin = NSPoint(x: x, y: aboveY)
+            // No caret info at all — don't show
+            return
         }
 
         panel.setFrameOrigin(origin)
@@ -106,8 +88,6 @@ final class InlineIndicator {
         panel.alphaValue = 1.0
         panel.orderFront(nil)
 
-        // Fade out after delay
-        fadeTimer?.invalidate()
         fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
             guard let self = self else { return }
             self.isFading = true
@@ -121,10 +101,9 @@ final class InlineIndicator {
         }
     }
 
-    private func ensurePanel(for mode: InputMode) {
-        let labelWidth: CGFloat = mode.label.count > 1 ? 36 : 26
-        let panelSize = NSSize(width: labelWidth, height: 24)
+    // MARK: - Private
 
+    private func ensurePanel(for mode: InputMode, size panelSize: NSSize) {
         if panel == nil {
             let p = NSPanel(
                 contentRect: NSRect(origin: .zero, size: panelSize),
