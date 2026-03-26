@@ -557,17 +557,13 @@ class NRIMEInputController: IMKInputController {
 
             switch action {
             case .toggleEnglish, .toggleNonEnglish, .switchKorean, .switchJapanese:
-                // Capture caret position BEFORE forceCommit — during composition,
-                // apps return accurate coordinates. After commit, coordinates go stale.
-                let preCommitRect = TextInputGeometry.caretRect(for: client)
+                // Capture caret position BEFORE forceCommit using fast IMKit call only (no AX).
+                // During composition, attributesAtCaret returns accurate coordinates.
+                TextInputGeometry.capturePreCommitPosition(for: client)
                 if previousMode == .korean {
                     self.koreanEngine.forceCommit(client: client)
                 } else if previousMode == .japanese {
                     self.japaneseEngine.forceCommit(client: client)
-                }
-                // Store pre-commit position for the indicator to use
-                if let rect = preCommitRect, rect.source != .attributesAtZero {
-                    TextInputGeometry.setLastGoodResult(rect)
                 }
                 switch action {
                 case .toggleEnglish:    StateManager.shared.toggleEnglish()

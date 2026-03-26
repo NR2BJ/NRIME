@@ -32,6 +32,21 @@ enum TextInputGeometry {
     /// Manually set last good result (e.g., pre-commit position capture).
     static func setLastGoodResult(_ result: CaretResult) { lastGoodResult = result }
 
+    /// Fast pre-commit position capture using IMKit only (no AX).
+    /// Called before forceCommit when composition is still active.
+    static func capturePreCommitPosition(for client: (any IMKTextInput)?) {
+        guard let client else { return }
+        if let index = caretIndex(for: client) {
+            var rect = NSRect.zero
+            client.attributes(forCharacterIndex: index, lineHeightRectangle: &rect)
+            if isUsableRect(rect) {
+                lastGoodResult = CaretResult(rect: rect, source: .attributesAtCaret)
+                return
+            }
+        }
+        // If attributesAtCaret fails, don't overwrite existing lastGoodResult
+    }
+
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }
 
@@ -216,7 +231,7 @@ enum TextInputGeometry {
         let pid = frontApp.processIdentifier
 
         let appElement = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(appElement, 0.05) // 50ms — 10ms was too short for Firefox
+        AXUIElementSetMessagingTimeout(appElement, 0.01) // 10ms — fast timeout, preCommitCapture handles composition
 
         // Activate AX on Electron/Chromium apps (they hide their AX tree by default)
         if let bundleId = frontApp.bundleIdentifier, !bundleId.hasPrefix("com.apple.") {
