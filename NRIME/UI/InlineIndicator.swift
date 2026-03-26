@@ -17,7 +17,8 @@ final class InlineIndicator {
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
         fadeTimer?.invalidate()
 
-        let panelSize = NSSize(width: 36, height: 28)
+        let labelWidth: CGFloat = mode.label.count > 1 ? 36 : 26
+        let panelSize = NSSize(width: labelWidth, height: 24)
 
         // Build panel once, reuse thereafter
         if panel == nil {
@@ -52,8 +53,11 @@ final class InlineIndicator {
 
         guard let panel = panel, let textField = textField else { return }
 
-        // Update label and show
+        // Update label, resize, and show
         textField.stringValue = mode.label
+        panel.setContentSize(panelSize)
+        panel.contentView?.frame = NSRect(origin: .zero, size: panelSize)
+        textField.frame = NSRect(origin: .zero, size: panelSize)
         let origin = caretOrigin(from: client, panelSize: panelSize)
         panel.setFrameOrigin(origin)
         panel.alphaValue = 1.0

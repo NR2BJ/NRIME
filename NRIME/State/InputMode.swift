@@ -7,7 +7,7 @@ enum InputMode: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .english: return "EN"
+        case .english: return "A"
         case .korean: return "한"
         case .japanese: return "あ"
         }

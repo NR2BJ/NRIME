@@ -240,15 +240,19 @@ final class ShortcutHandler {
         return !flags.intersection([.shift, .control, .option, .command]).isEmpty
     }
 
-    /// Toggle Caps Lock by posting a synthetic key event.
+    /// Track Caps Lock state ourselves since IOHIDGetModifierLockState returns stale values.
+    private var capsLockIsOn = false
+
+    /// Toggle Caps Lock using IOKit (no Accessibility permission needed).
     private func toggleCapsLock() {
-        DeveloperLogger.shared.log("Shortcut", "Double-Shift → toggling Caps Lock")
-        DispatchQueue.main.async {
-            guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0x39, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: nil, virtualKey: 0x39, keyDown: false) else { return }
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-        }
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching(kIOHIDSystemClass))
+        guard service != IO_OBJECT_NULL else { return }
+        defer { IOObjectRelease(service) }
+
+        capsLockIsOn.toggle()
+        IOHIDSetModifierLockState(service, Int32(kIOHIDCapsLockState), capsLockIsOn)
+        DeveloperLogger.shared.log("Shortcut", "Double-Shift → Caps Lock toggled",
+                                   metadata: ["now": "\(capsLockIsOn)"])
     }
 
 }
