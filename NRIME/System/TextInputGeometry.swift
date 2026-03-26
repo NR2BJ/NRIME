@@ -26,6 +26,12 @@ enum TextInputGeometry {
     /// Public read-only access for InlineIndicator's attributesAtZero X fallback.
     static var lastGoodCaretRect: CaretResult? { lastGoodResult }
 
+    /// Reset cached position (e.g., on text field switch).
+    static func resetCache() { lastGoodResult = nil }
+
+    /// Manually set last good result (e.g., pre-commit position capture).
+    static func setLastGoodResult(_ result: CaretResult) { lastGoodResult = result }
+
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }
 

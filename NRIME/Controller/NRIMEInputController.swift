@@ -384,18 +384,19 @@ class NRIMEInputController: IMKInputController {
         koreanEngine.clearAutomataState()
         japaneseEngine.clearState()
 
+        // Reset cached caret position — stale coordinates from previous text field
+        // would cause the indicator to appear at wrong locations.
+        TextInputGeometry.resetCache()
+
         wireUpShortcutHandler()
 
         // Wire up mode change callback for inline indicator
         StateManager.shared.onModeChanged = { [weak self] mode in
             if Settings.shared.inlineIndicatorEnabled {
-                // Delay show() to let apps (especially Electron) process any
-                // preceding commit before AX queries the caret position.
-                let delay = Settings.shared.shiftEnterDelay / 1000.0
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    let client = self?.resolvedClient()
-                    InlineIndicator.shared.show(for: mode, client: client)
-                }
+                // Pre-commit position was already captured in shortcutAction.
+                // show() will use lastGoodResult which has the accurate pre-commit coords.
+                let client = self?.resolvedClient()
+                InlineIndicator.shared.show(for: mode, client: client)
             }
         }
 
@@ -556,10 +557,17 @@ class NRIMEInputController: IMKInputController {
 
             switch action {
             case .toggleEnglish, .toggleNonEnglish, .switchKorean, .switchJapanese:
+                // Capture caret position BEFORE forceCommit — during composition,
+                // apps return accurate coordinates. After commit, coordinates go stale.
+                let preCommitRect = TextInputGeometry.caretRect(for: client)
                 if previousMode == .korean {
                     self.koreanEngine.forceCommit(client: client)
                 } else if previousMode == .japanese {
                     self.japaneseEngine.forceCommit(client: client)
+                }
+                // Store pre-commit position for the indicator to use
+                if let rect = preCommitRect, rect.source != .attributesAtZero {
+                    TextInputGeometry.setLastGoodResult(rect)
                 }
                 switch action {
                 case .toggleEnglish:    StateManager.shared.toggleEnglish()
