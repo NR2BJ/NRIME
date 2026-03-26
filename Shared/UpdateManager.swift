@@ -155,6 +155,10 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
 
                 await MainActor.run {
                     if process.terminationStatus == 0 {
+                        // Save installed PKG size for same-version change detection
+                        if let asset = self?.latestRelease?.assets.first(where: { $0.name.hasSuffix(".pkg") }) {
+                            self?.defaults?.set(asset.size, forKey: "lastInstalledPkgSize")
+                        }
                         // Clean up downloaded PKG
                         try? FileManager.default.removeItem(atPath: path)
                         self?.state = .idle
@@ -241,14 +245,27 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
                 ? String(release.tagName.dropFirst())
                 : release.tagName
 
-            let hasUpdate = compareVersions(current: currentVersion, remote: remoteVersion)
+            let newerVersion = compareVersions(current: currentVersion, remote: remoteVersion)
+            let pkgAsset = release.assets.first(where: { $0.name.hasSuffix(".pkg") })
+            let pkgSize = pkgAsset?.size ?? 0
+
+            // Detect same-version re-uploads by comparing asset size
+            let sameVersionChanged: Bool = {
+                guard !newerVersion, let asset = pkgAsset else { return false }
+                let savedSize = defaults?.integer(forKey: "lastInstalledPkgSize") ?? 0
+                return savedSize > 0 && asset.size != savedSize
+            }()
 
             await MainActor.run {
                 self.latestRelease = release
-                if hasUpdate {
-                    let size = release.assets.first(where: { $0.name.hasSuffix(".pkg") })?.size ?? 0
-                    state = .available(version: remoteVersion, notes: release.body ?? "", size: Int64(size))
+                if newerVersion || sameVersionChanged {
+                    let label = sameVersionChanged ? "\(remoteVersion) (updated)" : remoteVersion
+                    state = .available(version: label, notes: release.body ?? "", size: Int64(pkgSize))
                 } else {
+                    // Record current PKG size for future same-version change detection
+                    if let asset = pkgAsset, (defaults?.integer(forKey: "lastInstalledPkgSize") ?? 0) == 0 {
+                        defaults?.set(asset.size, forKey: "lastInstalledPkgSize")
+                    }
                     state = .upToDate
                 }
             }
