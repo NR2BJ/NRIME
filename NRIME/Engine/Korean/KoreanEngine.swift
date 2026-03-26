@@ -36,13 +36,11 @@ final class KoreanEngine: InputEngine {
         guard event.type == .keyDown else { return false }
 
         // Modifier keys (Cmd, Ctrl, Option) while composing:
-        // Cmd+key goes through performKeyEquivalent (not keyDown), so return false
-        // won't forward it. Commit text, then repost the event via CGEvent with a tag
-        // so our controller detects it and passes it through to the host app.
+        // Commit composing text and let the system handle the shortcut.
+        // return false tells IMKit we didn't handle it, so the app gets the event.
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || event.modifierFlags.contains(.option) {
             if automata.isComposing {
-                commitAndRepostEvent(event: event, client: client)
-                return true
+                commitComposing(client: client)
             }
             return false
         }

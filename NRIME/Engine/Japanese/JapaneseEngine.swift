@@ -48,17 +48,16 @@ final class JapaneseEngine: InputEngine {
         guard event.type == .keyDown else { return false }
 
         // Modifier keys (Cmd, Ctrl, Option) while active:
-        // Flush internal state, commit text, and return false to let the original
-        // key event pass through to the app.
+        // Commit composing text and let the system handle the shortcut.
         let mods = event.modifierFlags
         if mods.contains(.command) || mods.contains(.control) || mods.contains(.option) {
-            let wasActive = showingPrediction || conversionState == .converting || composer.isComposing
             if showingPrediction {
                 dismissPrediction()
             }
-            if wasActive {
-                commitAndRepostEvent(event: event, client: client)
-                return true
+            if conversionState == .converting {
+                commitConversion(client: client)
+            } else if composer.isComposing {
+                commitComposing(client: client)
             }
             return false
         }
