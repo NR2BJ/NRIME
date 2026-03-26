@@ -76,20 +76,19 @@ final class KoreanEngine: InputEngine {
 
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
 
-        // Shift+Enter while composing: commit text, then insert newline after delay.
-        // Cannot use "commit + return false" — Shift+Return has no StandardKeyBinding.dict
-        // entry, so Chromium's oldHasMarkedText check misinterprets the forwarded event.
-        // Cannot use synchronous insertText("\n") — gets batched/swallowed by Chromium.
-        // Async insertText("\n") via IME client API avoids the interpretKeyEvents: path entirely.
+        // Shift+Enter while composing: commit text and insert newline.
+        // Chromium (Electron/CEF): async insertText("\n") to avoid oldHasMarkedText race.
+        // All other apps: commit + return false — system handles the original Enter event.
         if automata.isComposing && isShifted && Self.isEnterKey(event.keyCode) {
             commitComposing(client: client)
-            // Capture client locally — the proxy may become stale if the user switches
-            // away within the 10ms window, in which case IMKit silently ignores the call.
-            let capturedClient = client
-            DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
-                capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
+            if ChromiumDetector.isFrontmostAppChromium {
+                let capturedClient = client
+                DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
+                    capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
+                }
+                return true
             }
-            return true
+            return false
         }
 
         // All other non-jamo keys: commit and let the system handle the key.

@@ -267,17 +267,19 @@ final class JapaneseEngine: InputEngine {
         if keyCode == 0x24 || keyCode == 0x4C {
             let wasComposing = composer.isComposing || liveConversionActive
 
-            // Shift+Enter while composing: commit text, then insert newline after delay.
-            // Cannot use "commit + return false" — Shift+Return has no StandardKeyBinding.dict
-            // entry, so Chromium's oldHasMarkedText misinterprets the forwarded event.
-            // Async insertText("\n") via IME client API avoids interpretKeyEvents: entirely.
+            // Shift+Enter while composing: commit text and insert newline.
+            // Chromium: async insertText("\n") to avoid oldHasMarkedText race.
+            // All other apps: commit + return false — system handles the original Enter.
             if wasComposing && isShifted {
                 commitComposing(client: client)
-                let capturedClient = client
-                DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
-                    capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
+                if ChromiumDetector.isFrontmostAppChromium {
+                    let capturedClient = client
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
+                        capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
+                    }
+                    return true
                 }
-                return true
+                return false
             }
 
             if liveConversionActive {
@@ -709,14 +711,18 @@ final class JapaneseEngine: InputEngine {
         let keyCode = event.keyCode
         let isShifted = event.modifierFlags.contains(.shift)
 
-        // Shift+Enter — commit conversion, then insert newline after delay.
+        // Shift+Enter — commit conversion and insert newline.
+        // Chromium: async insertText("\n"). Others: commit + return false.
         if (keyCode == 0x24 || keyCode == 0x4C) && isShifted {
             commitConversion(client: client)
-            let capturedClient = client
-            DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
-                capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
+            if ChromiumDetector.isFrontmostAppChromium {
+                let capturedClient = client
+                DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
+                    capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
+                }
+                return true
             }
-            return true
+            return false
         }
 
         // Escape — revert to hiragana composing state (not Mozc converting).
