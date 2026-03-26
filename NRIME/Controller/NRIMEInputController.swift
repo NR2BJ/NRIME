@@ -389,8 +389,13 @@ class NRIMEInputController: IMKInputController {
         // Wire up mode change callback for inline indicator
         StateManager.shared.onModeChanged = { [weak self] mode in
             if Settings.shared.inlineIndicatorEnabled {
-                let client = self?.resolvedClient()
-                InlineIndicator.shared.show(for: mode, client: client)
+                // Delay show() to let apps (especially Electron) process any
+                // preceding commit before AX queries the caret position.
+                let delay = Settings.shared.shiftEnterDelay / 1000.0
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    let client = self?.resolvedClient()
+                    InlineIndicator.shared.show(for: mode, client: client)
+                }
             }
         }
 
