@@ -374,8 +374,24 @@ final class JapaneseEngine: InputEngine {
                 return true
             }
 
-            // Track caps-lock-katakana state (for commitComposing)
-            capsLockKatakanaActive = isCapsLockOn && capsAction == .katakana
+            // Caps Lock katakana: convert romaji to katakana and insert directly (no composition/candidates)
+            if isCapsLockOn && capsAction == .katakana {
+                let result = composer.input(char)
+                if !result.composing.isEmpty {
+                    let katakana = result.composing.applyingTransform(.hiraganaToKatakana, reverse: false) ?? result.composing
+                    client.insertText(katakana as NSString, replacementRange: replacementRange())
+                    // If pending romaji remains (e.g., "k" after "ka"), show as marked text
+                    if !result.pending.isEmpty {
+                        client.setMarkedText(result.pending as NSString, selectionRange: NSRange(location: result.pending.count, length: 0), replacementRange: replacementRange())
+                    }
+                } else if !result.pending.isEmpty {
+                    // Only pending (incomplete romaji like "k") — show as marked text
+                    client.setMarkedText(result.pending as NSString, selectionRange: NSRange(location: result.pending.count, length: 0), replacementRange: replacementRange())
+                }
+                capsLockKatakanaActive = true
+                return true
+            }
+            capsLockKatakanaActive = false
 
             // Track shift-katakana state
             if isShifted && shiftAction == .katakana {

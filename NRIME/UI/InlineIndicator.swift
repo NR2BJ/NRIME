@@ -7,15 +7,16 @@ final class InlineIndicator {
     private var panel: NSPanel?
     private var textField: NSTextField?
     private var fadeTimer: Timer?
+    private var isFading = false
     private let displayDuration: TimeInterval = 1.0
     private let fadeDuration: TimeInterval = 0.3
 
     private init() {}
 
-    /// Whether the indicator is currently visible (not yet faded out).
+    /// Whether the indicator is actively displayed (not fading or hidden).
     var isVisible: Bool {
         guard let panel = panel else { return false }
-        return panel.isVisible && panel.alphaValue > 0
+        return panel.isVisible && panel.alphaValue > 0 && !isFading
     }
 
     /// Update position while visible (e.g., on keystroke). Does not reset fade timer.
@@ -98,16 +99,19 @@ final class InlineIndicator {
         textField.frame = NSRect(origin: .zero, size: panelSize)
         let origin = caretOrigin(from: client, panelSize: panelSize)
         panel.setFrameOrigin(origin)
+        isFading = false
         panel.alphaValue = 1.0
         panel.orderFront(nil)
 
         // Fade out after delay
         fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
             guard let self = self else { return }
+            self.isFading = true
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = self.fadeDuration
                 self.panel?.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
+                self?.isFading = false
                 self?.panel?.orderOut(nil)
             })
         }
