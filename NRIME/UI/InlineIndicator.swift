@@ -7,7 +7,7 @@ final class InlineIndicator {
     private var panel: NSPanel?
     private var textField: NSTextField?
     private var fadeTimer: Timer?
-    private let displayDuration: TimeInterval = 0.5
+    private let displayDuration: TimeInterval = 1.0
     private let fadeDuration: TimeInterval = 0.3
 
     private init() {}
@@ -19,11 +19,27 @@ final class InlineIndicator {
     }
 
     /// Update position while visible (e.g., on keystroke). Does not reset fade timer.
+    /// Only moves if TextInputGeometry returns a valid caret rect (not mouse fallback).
     func updatePosition(client: (any IMKTextInput)?) {
         guard isVisible, let panel = panel else { return }
+        // Only update if we get a real caret position (not mouse fallback)
+        guard let result = TextInputGeometry.caretRect(for: client) else { return }
         let panelSize = panel.frame.size
-        let origin = caretOrigin(from: client, panelSize: panelSize)
-        panel.setFrameOrigin(origin)
+        let gap: CGFloat = 4
+        let x: CGFloat
+        if result.source == .attributesAtZero {
+            // X from attributesAtZero is unreliable — keep current position
+            return
+        } else {
+            x = TextInputGeometry.indicatorAnchorX(for: result.rect) + gap
+        }
+        let aboveY = result.rect.origin.y + result.rect.height + gap
+        if let screenFrame = TextInputGeometry.screenFrame(containing: result.rect),
+           aboveY + panelSize.height > screenFrame.maxY {
+            panel.setFrameOrigin(NSPoint(x: x, y: result.rect.origin.y - panelSize.height - gap))
+        } else {
+            panel.setFrameOrigin(NSPoint(x: x, y: aboveY))
+        }
     }
 
     /// Show the mode indicator near the caret position.
