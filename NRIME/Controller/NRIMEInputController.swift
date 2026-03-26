@@ -417,10 +417,11 @@ class NRIMEInputController: IMKInputController {
         // Electron/Chromium workaround: when Cmd+key triggers commitComposition,
         // Electron's oldHasMarkedText is still true, causing it to ignore the shortcut.
         // Repost the key after a delay so Electron has time to clear the flag.
-        if wasComposing, let currentEvent = CGEvent(source: nil) {
-            let cgFlags = currentEvent.flags
-            if cgFlags.contains(.maskCommand) || cgFlags.contains(.maskControl) {
-                let keyCode = UInt16(currentEvent.getIntegerValueField(.keyboardEventKeycode))
+        if wasComposing, let event = NSApp.currentEvent, event.type == .keyDown {
+            let flags = event.modifierFlags
+            if flags.contains(.command) || flags.contains(.control) {
+                let keyCode = event.keyCode
+                let cgFlags = CGEventFlags(rawValue: UInt64(flags.intersection(.deviceIndependentFlagsMask).rawValue))
                 let delay = Settings.shared.shiftEnterDelay / 1000.0
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                     guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
