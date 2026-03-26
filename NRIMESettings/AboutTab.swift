@@ -43,7 +43,7 @@ struct AboutTab: View {
                 .frame(maxWidth: 200)
 
             VStack(spacing: 8) {
-                Picker(String(localized: "about.language"), selection: $appLanguage) {
+                Picker(L("about.language"), selection: $appLanguage) {
                     Text(verbatim: "\u{D55C}\u{AD6D}\u{C5B4}").tag("ko")
                     Text(verbatim: "English").tag("en")
                     Text(verbatim: "\u{65E5}\u{672C}\u{8A9E}").tag("ja")

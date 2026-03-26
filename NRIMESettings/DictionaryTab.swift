@@ -24,25 +24,25 @@ struct DictionaryTab: View {
         VStack(spacing: 0) {
             // Toolbar
             HStack {
-                TextField(String(localized: "dictionary.search"), text: $searchText)
+                TextField(L("dictionary.search"), text: $searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 220)
 
                 Spacer()
 
-                Text("\(manager.entries.count) \(String(localized: "dictionary.entriesCount"))")
+                Text("\(manager.entries.count) \(L("dictionary.entriesCount"))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 Button(action: { showingAddSheet = true }) {
                     Image(systemName: "plus")
                 }
-                .help(String(localized: "dictionary.addEntry"))
+                .help(L("dictionary.addEntry"))
 
                 Button(action: { showingDeleteConfirmation = true }) {
                     Image(systemName: "minus")
                 }
-                .help(String(localized: "dictionary.deleteSelected"))
+                .help(L("dictionary.deleteSelected"))
                 .disabled(selection.isEmpty)
             }
             .padding(.horizontal, 12)
@@ -53,7 +53,7 @@ struct DictionaryTab: View {
             // Table
             if manager.isLoading {
                 Spacer()
-                ProgressView(String(localized: "dictionary.loading"))
+                ProgressView(L("dictionary.loading"))
                 Spacer()
             } else if manager.entries.isEmpty {
                 Spacer()
@@ -71,24 +71,24 @@ struct DictionaryTab: View {
                 Spacer()
             } else {
                 Table(filteredEntries, selection: $selection) {
-                    TableColumn(String(localized: "dictionary.columnReading")) { entry in
+                    TableColumn(L("dictionary.columnReading")) { entry in
                         Text(entry.key)
                     }
                     .width(min: 80, ideal: 120)
 
-                    TableColumn(String(localized: "dictionary.columnWord")) { entry in
+                    TableColumn(L("dictionary.columnWord")) { entry in
                         Text(entry.value)
                     }
                     .width(min: 80, ideal: 120)
 
-                    TableColumn(String(localized: "dictionary.columnPOS")) { entry in
+                    TableColumn(L("dictionary.columnPOS")) { entry in
                         Text(entry.pos.japaneseLabel)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 60, ideal: 80)
 
-                    TableColumn(String(localized: "dictionary.columnComment")) { entry in
+                    TableColumn(L("dictionary.columnComment")) { entry in
                         Text(entry.comment)
                             .foregroundStyle(.secondary)
                     }
@@ -97,11 +97,11 @@ struct DictionaryTab: View {
                 .contextMenu(forSelectionType: UUID.self) { ids in
                     if ids.count == 1, let id = ids.first,
                        let entry = manager.entries.first(where: { $0.id == id }) {
-                        Button(String(localized: "dictionary.edit")) {
+                        Button(L("dictionary.edit")) {
                             editingEntry = entry
                         }
                     }
-                    Button(String(localized: "dictionary.delete"), role: .destructive) {
+                    Button(L("dictionary.delete"), role: .destructive) {
                         selection = ids
                         showingDeleteConfirmation = true
                     }
@@ -156,9 +156,9 @@ struct DictionaryTab: View {
                 manager.updateEntry(id: entry.id, key: key, value: value, pos: pos, comment: comment)
             }
         }
-        .alert(String(format: String(localized: "dictionary.deleteConfirm"), selection.count), isPresented: $showingDeleteConfirmation) {
-            Button(String(localized: "common.cancel"), role: .cancel) { }
-            Button(String(localized: "dictionary.delete"), role: .destructive) {
+        .alert(String(format: L("dictionary.deleteConfirm"), selection.count), isPresented: $showingDeleteConfirmation) {
+            Button(L("common.cancel"), role: .cancel) { }
+            Button(L("dictionary.delete"), role: .destructive) {
                 manager.deleteEntries(ids: selection)
                 selection.removeAll()
             }
@@ -188,8 +188,8 @@ private struct DictionaryEntryEditor: View {
 
     private var title: String {
         switch mode {
-        case .add: return String(localized: "dictionary.addTitle")
-        case .edit: return String(localized: "dictionary.editTitle")
+        case .add: return L("dictionary.addTitle")
+        case .edit: return L("dictionary.editTitle")
         }
     }
 
@@ -207,34 +207,34 @@ private struct DictionaryEntryEditor: View {
                 .padding(.bottom, 12)
 
             Form {
-                TextField(String(localized: "dictionary.fieldReading"), text: $key)
+                TextField(L("dictionary.fieldReading"), text: $key)
                     .textFieldStyle(.roundedBorder)
 
-                TextField(String(localized: "dictionary.fieldWord"), text: $value)
+                TextField(L("dictionary.fieldWord"), text: $value)
                     .textFieldStyle(.roundedBorder)
 
-                Picker(String(localized: "dictionary.fieldPOS"), selection: $pos) {
+                Picker(L("dictionary.fieldPOS"), selection: $pos) {
                     ForEach(UserDictionaryManager.PosType.allCases) { posType in
                         Text("\(posType.rawValue) (\(posType.japaneseLabel))")
                             .tag(posType)
                     }
                 }
 
-                TextField(String(localized: "dictionary.fieldComment"), text: $comment)
+                TextField(L("dictionary.fieldComment"), text: $comment)
                     .textFieldStyle(.roundedBorder)
             }
             .padding(.horizontal, 20)
 
             // Buttons
             HStack {
-                Button(String(localized: "common.cancel")) {
+                Button(L("common.cancel")) {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                Button(String(localized: "dictionary.save")) {
+                Button(L("dictionary.save")) {
                     onSave(
                         key.trimmingCharacters(in: .whitespaces),
                         value.trimmingCharacters(in: .whitespaces),

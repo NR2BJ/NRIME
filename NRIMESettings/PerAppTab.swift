@@ -7,10 +7,10 @@ struct PerAppTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle(String(localized: "perApp.enableMemory"), isOn: $store.perAppModeEnabled)
+                Toggle(L("perApp.enableMemory"), isOn: $store.perAppModeEnabled)
 
                 if store.perAppModeEnabled {
-                    Picker(String(localized: "perApp.mode"), selection: $store.perAppModeType) {
+                    Picker(L("perApp.mode"), selection: $store.perAppModeType) {
                         Text("perApp.whitelist").tag("whitelist")
                         Text("perApp.blacklist").tag("blacklist")
                     }
@@ -19,7 +19,7 @@ struct PerAppTab: View {
             }
 
             if store.perAppModeEnabled {
-                Section(store.perAppModeType == "whitelist" ? String(localized: "perApp.rememberedApps") : String(localized: "perApp.excludedApps")) {
+                Section(store.perAppModeType == "whitelist" ? L("perApp.rememberedApps") : L("perApp.excludedApps")) {
                     if store.perAppModeList.isEmpty {
                         Text("perApp.noApps")
                             .foregroundStyle(.secondary)
@@ -47,7 +47,7 @@ struct PerAppTab: View {
                         }
                     }
 
-                    Button(String(localized: "perApp.addApp")) {
+                    Button(L("perApp.addApp")) {
                         showingAppPicker = true
                     }
                     .fileImporter(

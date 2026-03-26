@@ -7,30 +7,30 @@ struct GeneralTab: View {
 
     var body: some View {
         Form {
-            Section(String(localized: "section.shortcuts")) {
+            Section(L("section.shortcuts")) {
                 ShortcutRow(
-                    title: String(localized: "shortcut.toggleEnglish"),
+                    title: L("shortcut.toggleEnglish"),
                     shortcut: $store.toggleEnglishShortcut
                 )
                 ShortcutRow(
-                    title: String(localized: "shortcut.toggleNonEnglish"),
+                    title: L("shortcut.toggleNonEnglish"),
                     shortcut: $store.toggleNonEnglishShortcut
                 )
                 ShortcutRow(
-                    title: String(localized: "shortcut.switchKorean"),
+                    title: L("shortcut.switchKorean"),
                     shortcut: $store.switchKoreanShortcut
                 )
                 ShortcutRow(
-                    title: String(localized: "shortcut.switchJapanese"),
+                    title: L("shortcut.switchJapanese"),
                     shortcut: $store.switchJapaneseShortcut
                 )
                 ShortcutRow(
-                    title: String(localized: "shortcut.hanjaConversion"),
+                    title: L("shortcut.hanjaConversion"),
                     shortcut: $store.hanjaConvertShortcut
                 )
             }
 
-            Section(String(localized: "section.tapThreshold")) {
+            Section(L("section.tapThreshold")) {
                 VStack(alignment: .leading, spacing: 4) {
                     let needsThreshold = store.toggleEnglishShortcut.isModifierOnlyTap
                         || store.toggleNonEnglishShortcut.isModifierOnlyTap
@@ -55,7 +55,7 @@ struct GeneralTab: View {
                 }
             }
 
-            Section(String(localized: "section.shiftDoubleTap")) {
+            Section(L("section.shiftDoubleTap")) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("\(String(format: "%.2f", store.doubleTapWindow))s")
@@ -69,7 +69,7 @@ struct GeneralTab: View {
                 }
             }
 
-            Section(String(localized: "section.shiftEnterDelay")) {
+            Section(L("section.shiftEnterDelay")) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("\(Int(store.shiftEnterDelay * 1000))ms")
@@ -83,11 +83,11 @@ struct GeneralTab: View {
                 }
             }
 
-            Section(String(localized: "section.display")) {
-                Toggle(String(localized: "display.inlineIndicator"), isOn: $store.inlineIndicatorEnabled)
+            Section(L("section.display")) {
+                Toggle(L("display.inlineIndicator"), isOn: $store.inlineIndicatorEnabled)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle(String(localized: "display.preventABC"), isOn: $store.preventABCSwitch)
+                    Toggle(L("display.preventABC"), isOn: $store.preventABCSwitch)
                     Text("display.preventABC.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -117,15 +117,15 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("display.conversionTriggerKeys")
-                    Toggle(String(localized: "common.space"), isOn: Binding(
+                    Toggle(L("common.space"), isOn: Binding(
                         get: { store.japaneseKeyConfig.conversionTriggerSpace },
                         set: { store.japaneseKeyConfig.conversionTriggerSpace = $0 }
                     ))
-                    Toggle(String(localized: "common.tab"), isOn: Binding(
+                    Toggle(L("common.tab"), isOn: Binding(
                         get: { store.japaneseKeyConfig.conversionTriggerTab },
                         set: { store.japaneseKeyConfig.conversionTriggerTab = $0 }
                     ))
-                    Toggle(String(localized: "common.downArrow"), isOn: Binding(
+                    Toggle(L("common.downArrow"), isOn: Binding(
                         get: { store.japaneseKeyConfig.conversionTriggerDownArrow },
                         set: { store.japaneseKeyConfig.conversionTriggerDownArrow = $0 }
                     ))
@@ -135,9 +135,9 @@ struct GeneralTab: View {
                 }
             }
 
-            Section(String(localized: "section.developer")) {
+            Section(L("section.developer")) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle(String(localized: "developer.enableMode"), isOn: $store.developerModeEnabled)
+                    Toggle(L("developer.enableMode"), isOn: $store.developerModeEnabled)
                     Text("developer.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -149,13 +149,13 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Button(String(localized: "developer.openLog")) {
+                        Button(L("developer.openLog")) {
                             DeveloperLogTools.openLog()
                         }
-                        Button(String(localized: "developer.revealInFinder")) {
+                        Button(L("developer.revealInFinder")) {
                             DeveloperLogTools.revealLog()
                         }
-                        Button(String(localized: "developer.clearLog")) {
+                        Button(L("developer.clearLog")) {
                             DeveloperLogTools.clearLog()
                         }
                     }
@@ -166,13 +166,13 @@ struct GeneralTab: View {
                 }
             }
 
-            Section(String(localized: "section.backupRestore")) {
+            Section(L("section.backupRestore")) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Button(String(localized: "backup.export")) {
+                        Button(L("backup.export")) {
                             exportSettings()
                         }
-                        Button(String(localized: "backup.import")) {
+                        Button(L("backup.import")) {
                             importSettings()
                         }
                     }
@@ -196,7 +196,7 @@ struct GeneralTab: View {
     private func exportSettings() {
         do {
             if let url = try store.exportSettingsInteractively() {
-                transferStatusMessage = String(format: String(localized: "backup.exported"), url.path)
+                transferStatusMessage = String(format: L("backup.exported"), url.path)
                 transferStatusIsError = false
             }
         } catch {
@@ -208,7 +208,7 @@ struct GeneralTab: View {
     private func importSettings() {
         do {
             if let url = try store.importSettingsInteractively() {
-                transferStatusMessage = String(format: String(localized: "backup.imported"), url.path)
+                transferStatusMessage = String(format: L("backup.imported"), url.path)
                 transferStatusIsError = false
             }
         } catch {
@@ -237,19 +237,19 @@ struct ShortcutRow: View {
                     .background(Color.orange.opacity(0.15))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
-                Text(shortcut.disabled ? String(localized: "shortcutRow.none") : shortcut.label)
+                Text(shortcut.disabled ? L("shortcutRow.none") : shortcut.label)
                     .foregroundStyle(shortcut.disabled ? .secondary : .primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.secondary.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
-            Button(isRecording ? String(localized: "shortcutRow.cancel") : String(localized: "shortcutRow.record")) {
+            Button(isRecording ? L("shortcutRow.cancel") : L("shortcutRow.record")) {
                 isRecording.toggle()
             }
             .buttonStyle(.borderless)
             if !isRecording && !shortcut.disabled {
-                Button(String(localized: "shortcutRow.clear")) {
+                Button(L("shortcutRow.clear")) {
                     var cleared = shortcut
                     cleared.disabled = true
                     cleared.label = "None"

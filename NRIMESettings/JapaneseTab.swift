@@ -7,13 +7,13 @@ struct JapaneseTab: View {
 
     var body: some View {
         Form {
-            Section(String(localized: "section.conversionKeys")) {
+            Section(L("section.conversionKeys")) {
                 Text("conversionKeys.description")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 JapaneseKeyRow(
-                    title: String(localized: "japanese.hiragana"),
+                    title: L("japanese.hiragana"),
                     description: "\u{3072}\u{3089}\u{304C}\u{306A}",
                     keyCode: Binding(
                         get: { store.japaneseKeyConfig.hiraganaKeyCode },
@@ -21,7 +21,7 @@ struct JapaneseTab: View {
                     )
                 )
                 JapaneseKeyRow(
-                    title: String(localized: "japanese.fullKatakana"),
+                    title: L("japanese.fullKatakana"),
                     description: "\u{5168}\u{89D2}\u{30AB}\u{30BF}\u{30AB}\u{30CA}",
                     keyCode: Binding(
                         get: { store.japaneseKeyConfig.fullKatakanaKeyCode },
@@ -29,7 +29,7 @@ struct JapaneseTab: View {
                     )
                 )
                 JapaneseKeyRow(
-                    title: String(localized: "japanese.halfKatakana"),
+                    title: L("japanese.halfKatakana"),
                     description: "\u{534A}\u{89D2}\u{30AB}\u{30BF}\u{30AB}\u{30CA}",
                     keyCode: Binding(
                         get: { store.japaneseKeyConfig.halfKatakanaKeyCode },
@@ -37,7 +37,7 @@ struct JapaneseTab: View {
                     )
                 )
                 JapaneseKeyRow(
-                    title: String(localized: "japanese.fullRomaji"),
+                    title: L("japanese.fullRomaji"),
                     description: "\u{5168}\u{89D2}\u{30ED}\u{30FC}\u{30DE}\u{5B57}",
                     keyCode: Binding(
                         get: { store.japaneseKeyConfig.fullRomajiKeyCode },
@@ -45,7 +45,7 @@ struct JapaneseTab: View {
                     )
                 )
                 JapaneseKeyRow(
-                    title: String(localized: "japanese.halfRomaji"),
+                    title: L("japanese.halfRomaji"),
                     description: "\u{534A}\u{89D2}\u{30ED}\u{30FC}\u{30DE}\u{5B57}",
                     keyCode: Binding(
                         get: { store.japaneseKeyConfig.halfRomajiKeyCode },
@@ -54,8 +54,8 @@ struct JapaneseTab: View {
                 )
             }
 
-            Section(String(localized: "section.keyBehavior")) {
-                Picker(String(localized: "keyBehavior.capsLockAction"), selection: Binding(
+            Section(L("section.keyBehavior")) {
+                Picker(L("keyBehavior.capsLockAction"), selection: Binding(
                     get: { store.japaneseKeyConfig.capsLockAction },
                     set: { store.japaneseKeyConfig.capsLockAction = $0 }
                 )) {
@@ -64,7 +64,7 @@ struct JapaneseTab: View {
                     Text("capsLock.romaji").tag(CapsLockAction.romaji)
                 }
 
-                Picker(String(localized: "keyBehavior.shiftKeyAction"), selection: Binding(
+                Picker(L("keyBehavior.shiftKeyAction"), selection: Binding(
                     get: { store.japaneseKeyConfig.shiftKeyAction },
                     set: { store.japaneseKeyConfig.shiftKeyAction = $0 }
                 )) {
@@ -74,8 +74,8 @@ struct JapaneseTab: View {
                 }
             }
 
-            Section(String(localized: "section.space")) {
-                Picker(String(localized: "space.width"), selection: Binding(
+            Section(L("section.space")) {
+                Picker(L("space.width"), selection: Binding(
                     get: { store.japaneseKeyConfig.fullWidthSpace },
                     set: { store.japaneseKeyConfig.fullWidthSpace = $0 }
                 )) {
@@ -87,8 +87,8 @@ struct JapaneseTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "section.punctuation")) {
-                Picker(String(localized: "punctuation.style"), selection: Binding(
+            Section(L("section.punctuation")) {
+                Picker(L("punctuation.style"), selection: Binding(
                     get: { store.japaneseKeyConfig.punctuationStyle },
                     set: { store.japaneseKeyConfig.punctuationStyle = $0 }
                 )) {
@@ -121,7 +121,7 @@ struct JapaneseTab: View {
                 }
             }
 
-            Section(String(localized: "section.inputFeatures")) {
+            Section(L("section.inputFeatures")) {
                 Toggle(isOn: Binding(
                     get: { store.japaneseKeyConfig.liveConversion },
                     set: { store.japaneseKeyConfig.liveConversion = $0 }
@@ -147,7 +147,7 @@ struct JapaneseTab: View {
                 }
             }
 
-            Section(String(localized: "section.conversionHistory")) {
+            Section(L("section.conversionHistory")) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("conversionHistory.clear")
@@ -156,36 +156,36 @@ struct JapaneseTab: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button(String(localized: "conversionHistory.clearButton")) {
+                    Button(L("conversionHistory.clearButton")) {
                         showingClearConfirmation = true
                     }
                     .foregroundStyle(.red)
                 }
             }
 
-            Section(String(localized: "section.conversionShortcuts")) {
+            Section(L("section.conversionShortcuts")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    KeyboardHintRow(keys: "Space / \u{2193}", description: String(localized: "convShortcut.startConversion"))
-                    KeyboardHintRow(keys: "\u{2190} / \u{2192}", description: String(localized: "convShortcut.moveSegments"))
-                    KeyboardHintRow(keys: "Shift + \u{2190} / \u{2192}", description: String(localized: "convShortcut.resizeSegment"))
-                    KeyboardHintRow(keys: "\u{2191} / \u{2193}", description: String(localized: "convShortcut.navigateCandidates"))
-                    KeyboardHintRow(keys: "Enter", description: String(localized: "convShortcut.confirmConversion"))
-                    KeyboardHintRow(keys: "Escape", description: String(localized: "convShortcut.cancelConversion"))
-                    KeyboardHintRow(keys: "Tab", description: String(localized: "convShortcut.selectPrediction"))
+                    KeyboardHintRow(keys: "Space / \u{2193}", description: L("convShortcut.startConversion"))
+                    KeyboardHintRow(keys: "\u{2190} / \u{2192}", description: L("convShortcut.moveSegments"))
+                    KeyboardHintRow(keys: "Shift + \u{2190} / \u{2192}", description: L("convShortcut.resizeSegment"))
+                    KeyboardHintRow(keys: "\u{2191} / \u{2193}", description: L("convShortcut.navigateCandidates"))
+                    KeyboardHintRow(keys: "Enter", description: L("convShortcut.confirmConversion"))
+                    KeyboardHintRow(keys: "Escape", description: L("convShortcut.cancelConversion"))
+                    KeyboardHintRow(keys: "Tab", description: L("convShortcut.selectPrediction"))
                 }
             }
         }
         .formStyle(.grouped)
-        .alert(String(localized: "conversionHistory.confirmTitle"), isPresented: $showingClearConfirmation) {
-            Button(String(localized: "common.cancel"), role: .cancel) { }
-            Button(String(localized: "conversionHistory.clearButton"), role: .destructive) {
+        .alert(L("conversionHistory.confirmTitle"), isPresented: $showingClearConfirmation) {
+            Button(L("common.cancel"), role: .cancel) { }
+            Button(L("conversionHistory.clearButton"), role: .destructive) {
                 clearMozcHistory()
             }
         } message: {
             Text("conversionHistory.confirmMessage")
         }
-        .alert(String(localized: "conversionHistory.clearedTitle"), isPresented: $historyCleared) {
-            Button(String(localized: "common.ok")) { }
+        .alert(L("conversionHistory.clearedTitle"), isPresented: $historyCleared) {
+            Button(L("common.ok")) { }
         } message: {
             Text("conversionHistory.clearedMessage")
         }
@@ -248,18 +248,18 @@ private struct JapaneseKeyRow: View {
                     .padding(.vertical, 4)
             }
             if isRecording {
-                Button(String(localized: "keyRecorder.cancel")) {
+                Button(L("keyRecorder.cancel")) {
                     isRecording = false
                 }
                 .buttonStyle(.borderless)
             } else {
-                Button(String(localized: "keyRecorder.record")) {
+                Button(L("keyRecorder.record")) {
                     isRecording = true
                 }
                 .buttonStyle(.borderless)
 
                 if keyCode != nil {
-                    Button(String(localized: "keyRecorder.clear")) {
+                    Button(L("keyRecorder.clear")) {
                         keyCode = nil
                     }
                     .buttonStyle(.borderless)
