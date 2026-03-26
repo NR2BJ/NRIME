@@ -104,18 +104,20 @@ final class ShortcutHandler {
             modifierDownTime = nil
 
             if !modifierWasUsedAsCombo && elapsed < Settings.shared.tapThreshold {
-                // Double-Shift tap → toggle Caps Lock
+                // Double-Shift tap → toggle Caps Lock (only for shift keys NOT registered as shortcuts)
                 let isShiftKey = (keyCode == ShortcutConfig.keyCodeLeftShift ||
                                   keyCode == ShortcutConfig.keyCodeRightShift)
-                if isShiftKey,
+                let isRegisteredShortcut = isShiftKey && isKeyRegisteredAsShortcut(keyCode)
+                if isShiftKey && !isRegisteredShortcut,
                    let lastTime = lastShiftTapTime,
+                   lastShiftTapKeyCode == keyCode,
                    Date().timeIntervalSince(lastTime) < doubleTapWindow {
                     lastShiftTapTime = nil
                     lastShiftTapKeyCode = nil
                     toggleCapsLock()
                     return true
                 }
-                if isShiftKey {
+                if isShiftKey && !isRegisteredShortcut {
                     lastShiftTapTime = Date()
                     lastShiftTapKeyCode = keyCode
                 }
@@ -235,6 +237,15 @@ final class ShortcutHandler {
     }
 
     // MARK: - Helpers
+
+    private func isKeyRegisteredAsShortcut(_ keyCode: UInt16) -> Bool {
+        for (key, _) in Self.allShortcuts {
+            let config = Settings.shared.shortcut(for: key)
+            guard !config.disabled, config.isModifierOnlyTap else { continue }
+            if config.keyCode == keyCode { return true }
+        }
+        return false
+    }
 
     private func hasAnyModifier(_ flags: NSEvent.ModifierFlags) -> Bool {
         return !flags.intersection([.shift, .control, .option, .command]).isEmpty
