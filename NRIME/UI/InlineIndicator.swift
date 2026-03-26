@@ -78,8 +78,17 @@ final class InlineIndicator {
             } else {
                 origin = NSPoint(x: x, y: aboveY)
             }
+        } else if let client = client {
+            // caretRect failed — try raw firstRect at position 0 as last resort
+            var actual = NSRange(location: NSNotFound, length: 0)
+            let rawRect = client.firstRect(forCharacterRange: NSRange(location: 0, length: 0), actualRange: &actual)
+            if rawRect.height > 0 && !rawRect.equalTo(.zero) {
+                let gap: CGFloat = 4
+                origin = NSPoint(x: rawRect.origin.x + gap, y: rawRect.origin.y + rawRect.height + gap)
+            } else {
+                return
+            }
         } else {
-            // No caret info at all — don't show
             return
         }
 
