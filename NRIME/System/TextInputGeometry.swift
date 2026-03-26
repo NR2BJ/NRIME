@@ -29,15 +29,6 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }
 
-        // During composition, apps return stale/bogus caret positions.
-        // forceCommit may have just run but the app hasn't processed it yet.
-        // Use last known good position instead of querying.
-        let markedRange = client.markedRange()
-        if markedRange.location != NSNotFound && markedRange.length > 0,
-           let cached = lastGoodResult {
-            return cached
-        }
-
         // 1. Accessibility API — most accurate, works across all apps including Electron.
         //    Only called on mode switch (not per-keystroke), so 10ms overhead is acceptable.
         if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
