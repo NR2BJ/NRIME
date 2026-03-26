@@ -83,7 +83,14 @@ class NRIMEInputController: IMKInputController {
         }
 
         // 4. Shortcut detection + engine routing
-        return routeEvent(event, client: client)
+        let result = routeEvent(event, client: client)
+
+        // 5. Update indicator position while visible (tracks cursor on every keystroke)
+        if InlineIndicator.shared.isVisible {
+            InlineIndicator.shared.updatePosition(client: client)
+        }
+
+        return result
     }
 
     /// Handle all keyboard events during Japanese Mozc conversion.

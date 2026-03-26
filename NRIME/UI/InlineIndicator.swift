@@ -12,6 +12,20 @@ final class InlineIndicator {
 
     private init() {}
 
+    /// Whether the indicator is currently visible (not yet faded out).
+    var isVisible: Bool {
+        guard let panel = panel else { return false }
+        return panel.isVisible && panel.alphaValue > 0
+    }
+
+    /// Update position while visible (e.g., on keystroke). Does not reset fade timer.
+    func updatePosition(client: (any IMKTextInput)?) {
+        guard isVisible, let panel = panel else { return }
+        let panelSize = panel.frame.size
+        let origin = caretOrigin(from: client, panelSize: panelSize)
+        panel.setFrameOrigin(origin)
+    }
+
     /// Show the mode indicator near the caret position.
     /// `client` is used to obtain the caret rect from IMKTextInput.
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
