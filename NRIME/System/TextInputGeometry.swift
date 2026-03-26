@@ -49,7 +49,8 @@ enum TextInputGeometry {
         // 2. attributes at index 0 — simple fallback (Squirrel's approach).
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
-        if !zeroRect.equalTo(.zero) && zeroRect.height > 0 {
+        let zeroOnScreen = NSScreen.screens.contains { $0.frame.intersects(zeroRect.insetBy(dx: -50, dy: -50)) }
+        if !zeroRect.equalTo(.zero) && zeroRect.height > 0 && zeroOnScreen {
             DeveloperLogger.shared.log("Geometry", "attributesAtZero", metadata: [
                 "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", zeroRect.origin.x, zeroRect.origin.y, zeroRect.width, zeroRect.height)
             ])
@@ -190,7 +191,7 @@ enum TextInputGeometry {
         let pid = frontApp.processIdentifier
 
         let appElement = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(appElement, 0.01) // 10ms
+        AXUIElementSetMessagingTimeout(appElement, 0.05) // 50ms — 10ms was too short for Firefox
 
         // Activate AX on Electron/Chromium apps (they hide their AX tree by default)
         if let bundleId = frontApp.bundleIdentifier, !bundleId.hasPrefix("com.apple.") {
