@@ -292,10 +292,16 @@ enum TextInputGeometry {
         return NSRect(x: quartzRect.origin.x, y: flippedY, width: max(quartzRect.size.width, 1), height: quartzRect.size.height)
     }
 
-    /// Minimal validation: just check the rect has positive height and isn't all zeros.
-    /// Removed aggressive screen-containment and corner checks that rejected valid positions.
+    /// Validate the rect has positive height, isn't zero, and is within a visible screen.
     private static func isUsableRect(_ rect: NSRect) -> Bool {
-        !rect.equalTo(.zero) && rect.height > 0
+        guard !rect.equalTo(.zero) && rect.height > 0 else { return false }
+        // Reject rects at the screen origin (0,0) — common failure mode in Firefox/Chromium
+        if rect.origin.x == 0 && rect.origin.y == 0 { return false }
+        // Reject rects completely outside all screens
+        let onAnyScreen = NSScreen.screens.contains { screen in
+            screen.frame.intersects(rect.insetBy(dx: -50, dy: -50))
+        }
+        return onAnyScreen
     }
 
     private static func isPreferredSelectedRange(_ selectedRange: NSRange, relativeTo markedRange: NSRange) -> Bool {
