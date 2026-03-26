@@ -401,11 +401,40 @@ class NRIMEInputController: IMKInputController {
     }
 
     private func handleCommitComposition(_ sender: Any?) {
+        let wasComposing = koreanEngine.automata.isComposing || japaneseEngine.isComposing
+
         if let client = (sender as? (any IMKTextInput))
             ?? resolvedClient() {
             logControllerEvent("commitComposition", client: client)
             koreanEngine.forceCommit(client: client)
             japaneseEngine.forceCommit(client: client)
+        }
+
+        // Electron/Chromium workaround: when Cmd+key triggers commitComposition,
+        // macOS sends Cmd+key to the app immediately after. But Electron's
+        // oldHasMarkedText flag is still true, causing it to ignore the shortcut.
+        // Repost the Cmd+key after a delay so Electron has time to clear the flag.
+        // Electron/Chromium workaround: when Cmd+key triggers commitComposition,
+        // Electron's oldHasMarkedText is still true, causing it to ignore the shortcut.
+        // Repost the key after a delay so Electron has time to clear the flag.
+        if wasComposing, let currentEvent = CGEvent(source: nil) {
+            let cgFlags = currentEvent.flags
+            if cgFlags.contains(.maskCommand) || cgFlags.contains(.maskControl) {
+                let keyCode = UInt16(currentEvent.getIntegerValueField(.keyboardEventKeycode))
+                let delay = Settings.shared.shiftEnterDelay / 1000.0
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
+                    keyDown.flags = cgFlags
+                    keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                    keyDown.post(tap: .cghidEventTap)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                        guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+                        keyUp.flags = cgFlags
+                        keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
+                        keyUp.post(tap: .cghidEventTap)
+                    }
+                }
+            }
         }
     }
 
