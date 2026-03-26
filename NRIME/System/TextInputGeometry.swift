@@ -33,7 +33,10 @@ enum TextInputGeometry {
         //    Only called on mode switch (not per-keystroke), so 10ms overhead is acceptable.
         if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
             let result = CaretResult(rect: axRect, source: .accessibility)
-            lastGoodResult = result
+            // Only cache if X is meaningful — x≤1 means line start / failure
+            if axRect.origin.x > 1 {
+                lastGoodResult = result
+            }
             return result
         }
 
