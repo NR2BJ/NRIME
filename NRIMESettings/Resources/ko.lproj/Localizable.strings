@@ -182,3 +182,4 @@
 "common.tab" = "Tab";
 "common.downArrow" = "↓ 화살표";
 "punctuation.halfWidthWestern" = "반각 서양식 (.,)";
+"shiftDoubleTap.enable" = "Shift 더블탭으로 Caps Lock 전환";

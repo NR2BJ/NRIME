@@ -59,11 +59,14 @@ struct GeneralTab: View {
 
             Section(L("section.shiftDoubleTap")) {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("\(String(format: "%.2f", store.doubleTapWindow))s")
-                            .monospacedDigit()
-                            .frame(width: 50, alignment: .trailing)
-                        Slider(value: $store.doubleTapWindow, in: 0.15...0.6, step: 0.05)
+                    Toggle(L("shiftDoubleTap.enable"), isOn: $store.shiftDoubleTapEnabled)
+                    if store.shiftDoubleTapEnabled {
+                        HStack {
+                            Text("\(String(format: "%.2f", store.doubleTapWindow))s")
+                                .monospacedDigit()
+                                .frame(width: 50, alignment: .trailing)
+                            Slider(value: $store.doubleTapWindow, in: 0.15...0.6, step: 0.05)
+                        }
                     }
                     Text(L("shiftDoubleTap.description"))
                         .font(.caption)
@@ -74,10 +77,10 @@ struct GeneralTab: View {
             Section(L("section.shiftEnterDelay")) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("\(Int(store.shiftEnterDelay * 1000))ms")
+                        Text("\(Int(round(store.shiftEnterDelay * 1000)))ms")
                             .monospacedDigit()
                             .frame(width: 50, alignment: .trailing)
-                        Slider(value: $store.shiftEnterDelay, in: 0.005...0.05, step: 0.005)
+                        Slider(value: $store.shiftEnterDelay, in: 0.005...0.050, step: 0.005)
                     }
                     Text(L("shiftEnterDelay.description"))
                         .font(.caption)

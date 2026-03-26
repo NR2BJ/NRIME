@@ -182,3 +182,4 @@
 "common.tab" = "Tab";
 "common.downArrow" = "↓ Arrow";
 "punctuation.halfWidthWestern" = "Half-width Western (.,)";
+"shiftDoubleTap.enable" = "Toggle Caps Lock with Shift double-tap";

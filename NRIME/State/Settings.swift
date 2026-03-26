@@ -10,8 +10,9 @@ final class Settings {
     private let defaults: UserDefaults
 
     /// Cached JapaneseKeyConfig to avoid JSON decode on every keystroke.
-    /// Invalidated by `reloadJapaneseKeyConfig()` (called when settings change).
+    /// Auto-invalidates after 2 seconds so cross-process changes are picked up.
     private var _cachedJapaneseKeyConfig: JapaneseKeyConfig?
+    private var _configCacheTime: Date = .distantPast
 
     private var defaultsObserver: NSObjectProtocol?
 
@@ -60,6 +61,16 @@ final class Settings {
             return val > 0 ? val : 0.2
         }
         set { defaults.set(newValue, forKey: "tapThreshold") }
+    }
+
+    // MARK: - Shift Double-Tap → Caps Lock
+
+    var shiftDoubleTapEnabled: Bool {
+        get {
+            if defaults.object(forKey: "shiftDoubleTapEnabled") == nil { return true }
+            return defaults.bool(forKey: "shiftDoubleTapEnabled")
+        }
+        set { defaults.set(newValue, forKey: "shiftDoubleTapEnabled") }
     }
 
     // MARK: - Double-Tap Window (Shift double-tap → Caps Lock)
@@ -150,7 +161,8 @@ final class Settings {
 
     var japaneseKeyConfig: JapaneseKeyConfig {
         get {
-            if let cached = _cachedJapaneseKeyConfig {
+            if let cached = _cachedJapaneseKeyConfig,
+               Date().timeIntervalSince(_configCacheTime) < 2.0 {
                 return cached
             }
             guard let data = defaults.data(forKey: "japaneseKeyConfig"),
@@ -160,6 +172,7 @@ final class Settings {
                 return defaultConfig
             }
             _cachedJapaneseKeyConfig = config
+            _configCacheTime = Date()
             return config
         }
         set {

@@ -108,7 +108,7 @@ final class ShortcutHandler {
                 let isShiftKey = (keyCode == ShortcutConfig.keyCodeLeftShift ||
                                   keyCode == ShortcutConfig.keyCodeRightShift)
                 let isRegisteredShortcut = isShiftKey && isKeyRegisteredAsShortcut(keyCode)
-                if isShiftKey && !isRegisteredShortcut,
+                if isShiftKey && !isRegisteredShortcut && Settings.shared.shiftDoubleTapEnabled,
                    let lastTime = lastShiftTapTime,
                    lastShiftTapKeyCode == keyCode,
                    Date().timeIntervalSince(lastTime) < doubleTapWindow {

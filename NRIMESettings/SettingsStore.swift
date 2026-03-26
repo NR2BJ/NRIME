@@ -25,6 +25,7 @@ final class SettingsStore: ObservableObject {
         _switchKoreanShortcut = Published(initialValue: .defaultSwitchKorean)
         _switchJapaneseShortcut = Published(initialValue: .defaultSwitchJapanese)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
+        _shiftDoubleTapEnabled = Published(initialValue: true)
         _doubleTapWindow = Published(initialValue: 0.3)
         _shiftEnterDelay = Published(initialValue: 0.015)
         _japaneseKeyConfig = Published(initialValue: .default)
@@ -66,6 +67,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var tapThreshold: Double {
         didSet { defaults.set(tapThreshold, forKey: "tapThreshold") }
+    }
+
+    @Published var shiftDoubleTapEnabled: Bool {
+        didSet { defaults.set(shiftDoubleTapEnabled, forKey: "shiftDoubleTapEnabled") }
     }
 
     @Published var doubleTapWindow: Double {
@@ -133,6 +138,8 @@ final class SettingsStore: ObservableObject {
 
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2
+        shiftDoubleTapEnabled = defaults.object(forKey: "shiftDoubleTapEnabled") == nil
+            ? true : defaults.bool(forKey: "shiftDoubleTapEnabled")
         let dtVal = defaults.double(forKey: "doubleTapWindow")
         doubleTapWindow = dtVal > 0 ? dtVal : 0.3
         let seVal = defaults.double(forKey: "shiftEnterDelay")
