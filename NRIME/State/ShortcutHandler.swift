@@ -194,14 +194,11 @@ final class ShortcutHandler {
 
             // Left/right distinction: if the recorded shortcut includes a side-specific
             // flag (e.g., right shift 0x20004), verify the event also has the same side.
-            // Enforce left/right modifier distinction.
-            // NX_DEVICE* side flags: L/R Ctrl(0x01/0x2000), L/R Shift(0x02/0x04),
-            // L/R Cmd(0x08/0x10), L/R Option(0x20/0x40)
-            let sideFlags: UInt = 0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40 | 0x2000
-            let requiredSide = config.modifiers & sideFlags
-            let eventSide = UInt(event.modifierFlags.rawValue) & sideFlags
-            if requiredSide != 0 {
-                guard eventSide & requiredSide == requiredSide else { continue }
+            // Left/right modifier distinction via keyCode comparison.
+            // activeModifierKeyCode tracks which physical modifier key is held (e.g., 0x3C=RShift).
+            // config.modifierKeyCode stores the keyCode recorded during shortcut setup.
+            if config.modifierKeyCode != 0, let activeModifier = activeModifierKeyCode {
+                guard config.modifierKeyCode == activeModifier else { continue }
             }
 
             return performAction(action)
