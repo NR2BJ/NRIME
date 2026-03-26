@@ -43,10 +43,29 @@ enum TextInputGeometry {
             return result
         }
 
-        // AX failed — log reason
-        DeveloperLogger.shared.log("Geometry", "AX failed, trying attributesAtZero")
+        // AX failed — try attributes at caret index (fcitx5-macos approach)
+        DeveloperLogger.shared.log("Geometry", "AX failed, trying attributesAtCaret")
 
-        // 2. attributes at index 0 — simple fallback (Squirrel's approach).
+        // 2. attributes at caret index — works during composition in Firefox/native apps
+        if let index = caretIndex(for: client) {
+            var lineHeightRect = NSRect.zero
+            client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
+            if isUsableRect(lineHeightRect) {
+                let result = CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
+                lastGoodResult = result
+                DeveloperLogger.shared.log("Geometry", "attributesAtCaret success", metadata: [
+                    "index": "\(index)",
+                    "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", lineHeightRect.origin.x, lineHeightRect.origin.y, lineHeightRect.width, lineHeightRect.height)
+                ])
+                return result
+            }
+            DeveloperLogger.shared.log("Geometry", "attributesAtCaret failed", metadata: [
+                "index": "\(index)",
+                "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", lineHeightRect.origin.x, lineHeightRect.origin.y, lineHeightRect.width, lineHeightRect.height)
+            ])
+        }
+
+        // 3. attributes at index 0 — simple fallback (Squirrel's approach).
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         let zeroOnScreen = NSScreen.screens.contains { $0.frame.intersects(zeroRect.insetBy(dx: -50, dy: -50)) }
