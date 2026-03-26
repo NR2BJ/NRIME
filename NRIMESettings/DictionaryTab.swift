@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DictionaryTab: View {
+    @ObservedObject private var lang = LocalizedBundle.shared
     @ObservedObject private var manager = UserDictionaryManager.shared
     @State private var searchText = ""
     @State private var selection = Set<UUID>()
@@ -21,6 +22,7 @@ struct DictionaryTab: View {
     }
 
     var body: some View {
+        let _ = lang.revision
         VStack(spacing: 0) {
             // Toolbar
             HStack {

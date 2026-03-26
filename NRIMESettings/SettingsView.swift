@@ -41,15 +41,20 @@ struct SettingsView: View {
 // MARK: - Localization Helper
 
 /// Looks up a key from the lproj bundle matching the user's selected language.
-/// Works for String contexts (Section titles, Button labels, etc.) where
-/// SwiftUI's .environment(\.locale) doesn't reach.
 func L(_ key: String) -> String {
     LocalizedBundle.shared.string(for: key)
 }
 
-class LocalizedBundle {
+class LocalizedBundle: ObservableObject {
     static let shared = LocalizedBundle()
     private var bundle: Bundle = .main
+    /// Incremented on language change to trigger SwiftUI re-renders.
+    @Published var revision: Int = 0
+
+    init() {
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "ko"
+        update(language: lang)
+    }
 
     func update(language: String) {
         if let path = Bundle.main.path(forResource: language, ofType: "lproj"),
@@ -58,6 +63,7 @@ class LocalizedBundle {
         } else {
             bundle = .main
         }
+        revision += 1
     }
 
     func string(for key: String) -> String {

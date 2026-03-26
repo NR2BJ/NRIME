@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct JapaneseTab: View {
+    @ObservedObject private var lang = LocalizedBundle.shared
     @ObservedObject private var store = SettingsStore.shared
     @State private var showingClearConfirmation = false
     @State private var historyCleared = false
 
     var body: some View {
+        let _ = lang.revision
         Form {
             Section(L("section.conversionKeys")) {
                 Text(L("conversionKeys.description"))

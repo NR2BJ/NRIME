@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct GeneralTab: View {
+    @ObservedObject private var lang = LocalizedBundle.shared
     @ObservedObject private var store = SettingsStore.shared
     @State private var transferStatusMessage: String = ""
     @State private var transferStatusIsError = false
 
     var body: some View {
+        let _ = lang.revision
         Form {
             Section(L("section.shortcuts")) {
                 ShortcutRow(

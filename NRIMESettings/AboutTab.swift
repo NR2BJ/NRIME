@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AboutTab: View {
+    @ObservedObject private var lang = LocalizedBundle.shared
     @AppStorage("appLanguage") private var appLanguage: String = "ko"
     private let githubURL = "https://github.com/NR2BJ/NRIME"
     @StateObject private var updateManager = UpdateManager.shared

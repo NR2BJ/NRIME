@@ -1,10 +1,13 @@
 import SwiftUI
 
 struct PerAppTab: View {
+    @ObservedObject private var lang = LocalizedBundle.shared
     @ObservedObject private var store = SettingsStore.shared
     @State private var showingAppPicker = false
 
     var body: some View {
+        let _ = lang.revision
+        let _ = lang.revision
         Form {
             Section {
                 Toggle(L("perApp.enableMemory"), isOn: $store.perAppModeEnabled)
