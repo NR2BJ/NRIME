@@ -22,6 +22,14 @@ final class InlineIndicator {
     /// Only moves if TextInputGeometry returns a valid caret rect (not mouse fallback).
     func updatePosition(client: (any IMKTextInput)?) {
         guard isVisible, let panel = panel else { return }
+        // During composition, many apps return bogus caret positions (field start).
+        // Freeze indicator position until composition ends.
+        if let client = client {
+            let markedRange = client.markedRange()
+            if markedRange.location != NSNotFound && markedRange.length > 0 {
+                return
+            }
+        }
         // Only update if we get a real caret position (not mouse fallback)
         guard let result = TextInputGeometry.caretRect(for: client) else { return }
         let panelSize = panel.frame.size

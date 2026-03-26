@@ -27,16 +27,6 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }
 
-        let markedRange = client.markedRange()
-        let isComposing = markedRange.location != NSNotFound && markedRange.length > 0
-
-        // During active composition, many apps return bogus caret positions
-        // (e.g., field start instead of cursor). If we have a known good position,
-        // keep it stable until composition ends.
-        if isComposing, let last = lastGoodResult {
-            return last
-        }
-
         // 1. Try firstRect — precise positioning for well-behaving apps.
         //    Reject suspiciously wide rects (Electron apps return the entire input field).
         for range in candidateRanges(for: client) {
