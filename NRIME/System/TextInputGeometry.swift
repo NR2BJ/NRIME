@@ -27,45 +27,21 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }
 
-        // 1. attributes at caret index — primary method (used by fcitx5-macos, Squirrel).
-        //    Most reliable across apps for IME positioning.
-        if let index = caretIndex(for: client) {
-            var lineHeightRect = NSRect.zero
-            client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
-            if isUsableRect(lineHeightRect) {
-                let result = CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
-                lastGoodResult = result
-                return result
-            }
+        // 1. Accessibility API — most accurate, works across all apps including Electron.
+        //    Only called on mode switch (not per-keystroke), so 10ms overhead is acceptable.
+        if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
+            let result = CaretResult(rect: axRect, source: .accessibility)
+            lastGoodResult = result
+            return result
         }
 
-        // 2. firstRect — precise positioning for well-behaving apps.
-        //    Reject suspiciously wide rects (Electron apps return the entire input field).
-        for range in candidateRanges(for: client) {
-            var actualRange = NSRange(location: NSNotFound, length: 0)
-            let rect = client.firstRect(forCharacterRange: range, actualRange: &actualRange)
-            if isUsableRect(rect)
-                && !shouldDeferSuspiciousFirstRect(rect, requestedRange: range, actualRange: actualRange) {
-                let result = CaretResult(rect: rect, source: .precise)
-                lastGoodResult = result
-                return result
-            }
-        }
-
-        // 3. attributes at index 0 (Squirrel's sole method).
-        //    Only Y and height are reliable — X points to the line start.
+        // 2. attributes at index 0 — simple fallback (Squirrel's approach).
+        //    Only Y and height are reliable; X points to the line start.
         //    Do NOT save as lastGoodResult — unreliable X would poison future lookups.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         if isUsableRect(zeroRect) {
             return CaretResult(rect: zeroRect, source: .attributesAtZero)
-        }
-
-        // 4. Accessibility API — most accurate but can be slow.
-        if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
-            let result = CaretResult(rect: axRect, source: .accessibility)
-            lastGoodResult = result
-            return result
         }
 
         // All methods failed: return last known good position
