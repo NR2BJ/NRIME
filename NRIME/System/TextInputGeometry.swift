@@ -27,12 +27,24 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }
 
-        // 1. Try firstRect — precise positioning for well-behaving apps.
+        // 1. attributes at caret index — primary method (used by fcitx5-macos, Squirrel).
+        //    Most reliable across apps for IME positioning.
+        if let index = caretIndex(for: client) {
+            var lineHeightRect = NSRect.zero
+            client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
+            if isUsableRect(lineHeightRect) {
+                let result = CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
+                lastGoodResult = result
+                return result
+            }
+        }
+
+        // 2. firstRect — precise positioning for well-behaving apps.
         //    Reject suspiciously wide rects (Electron apps return the entire input field).
         for range in candidateRanges(for: client) {
             var actualRange = NSRange(location: NSNotFound, length: 0)
             let rect = client.firstRect(forCharacterRange: range, actualRange: &actualRange)
-            if isUsableCaretRect(rect)
+            if isUsableRect(rect)
                 && !shouldDeferSuspiciousFirstRect(rect, requestedRange: range, actualRange: actualRange) {
                 let result = CaretResult(rect: rect, source: .precise)
                 lastGoodResult = result
@@ -40,30 +52,17 @@ enum TextInputGeometry {
             }
         }
 
-        // 2. Fallback: attributes at caret index (fcitx5/Squirrel primary method).
-        if let index = caretIndex(for: client) {
-            var lineHeightRect = NSRect.zero
-            client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
-            if isUsableCaretRect(lineHeightRect) {
-                let result = CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
-                lastGoodResult = result
-                return result
-            }
-        }
-
-        // 3. Fallback: attributes at index 0.
-        //    Only Y and height are reliable — X points to the line start, not the caret.
-        //    Do NOT save as lastGoodResult — the unreliable X would poison future lookups.
+        // 3. attributes at index 0 (Squirrel's sole method).
+        //    Only Y and height are reliable — X points to the line start.
+        //    Do NOT save as lastGoodResult — unreliable X would poison future lookups.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
-        if isUsableCaretRect(zeroRect) {
+        if isUsableRect(zeroRect) {
             return CaretResult(rect: zeroRect, source: .attributesAtZero)
         }
 
-        // 4. Accessibility API fallback — most accurate but can be slow.
-        //    Uses length:1 to work around macOS zero-length selection bug.
-        //    Sets AXEnhancedUserInterface for Electron/Chromium apps.
-        if let axRect = accessibilityCaretRect(), isUsableCaretRect(axRect) {
+        // 4. Accessibility API — most accurate but can be slow.
+        if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
             let result = CaretResult(rect: axRect, source: .accessibility)
             lastGoodResult = result
             return result
@@ -293,23 +292,10 @@ enum TextInputGeometry {
         return NSRect(x: quartzRect.origin.x, y: flippedY, width: max(quartzRect.size.width, 1), height: quartzRect.size.height)
     }
 
-    private static func isUsableCaretRect(_ rect: NSRect) -> Bool {
-        guard !rect.equalTo(.zero),
-              rect.width >= 0,
-              rect.height > 0 else {
-            return false
-        }
-
-        guard let screenFrame = screenFrame(containing: rect) else {
-            return false
-        }
-
-        let cornerTolerance: CGFloat = 1
-        let pinnedToLowerLeftCorner =
-            rect.minX <= screenFrame.minX + cornerTolerance &&
-            rect.minY <= screenFrame.minY + cornerTolerance
-
-        return !pinnedToLowerLeftCorner
+    /// Minimal validation: just check the rect has positive height and isn't all zeros.
+    /// Removed aggressive screen-containment and corner checks that rejected valid positions.
+    private static func isUsableRect(_ rect: NSRect) -> Bool {
+        !rect.equalTo(.zero) && rect.height > 0
     }
 
     private static func isPreferredSelectedRange(_ selectedRange: NSRange, relativeTo markedRange: NSRange) -> Bool {
@@ -321,7 +307,7 @@ enum TextInputGeometry {
     }
 
     private static func shouldDeferSuspiciousFirstRect(_ rect: NSRect, requestedRange: NSRange, actualRange: NSRange) -> Bool {
-        guard isUsableCaretRect(rect) else { return false }
+        guard isUsableRect(rect) else { return false }
         guard rect.width > 40 else { return false }
 
         if requestedRange.length == 0 {
