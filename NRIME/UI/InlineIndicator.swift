@@ -69,6 +69,12 @@ final class InlineIndicator {
             return
         }
 
+        DeveloperLogger.shared.log("Indicator", "show", metadata: [
+            "mode": mode.label,
+            "origin": String(format: "(%.0f, %.0f)", origin.x, origin.y),
+            "source": String(describing: TextInputGeometry.caretRect(for: client)?.source ?? .attributesAtZero)
+        ])
+
         panel.setFrameOrigin(origin)
         isFading = false
         panel.alphaValue = 1.0

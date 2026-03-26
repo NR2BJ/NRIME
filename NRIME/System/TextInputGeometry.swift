@@ -33,24 +33,32 @@ enum TextInputGeometry {
         //    Only called on mode switch (not per-keystroke), so 10ms overhead is acceptable.
         if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
             let result = CaretResult(rect: axRect, source: .accessibility)
-            // Only cache if X is meaningful — x≤1 means line start / failure
             if axRect.origin.x > 1 {
                 lastGoodResult = result
             }
+            DeveloperLogger.shared.log("Geometry", "AX success", metadata: [
+                "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", axRect.origin.x, axRect.origin.y, axRect.width, axRect.height),
+                "cached": axRect.origin.x > 1 ? "yes" : "no(x<=1)"
+            ])
             return result
         }
 
+        // AX failed — log reason
+        DeveloperLogger.shared.log("Geometry", "AX failed, trying attributesAtZero")
+
         // 2. attributes at index 0 — simple fallback (Squirrel's approach).
-        //    Only Y and height are reliable; X points to the line start.
-        //    Do NOT save as lastGoodResult — unreliable X would poison future lookups.
-        //    Use relaxed validation (allow x=0) since X is already untrusted here.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         if !zeroRect.equalTo(.zero) && zeroRect.height > 0 {
+            DeveloperLogger.shared.log("Geometry", "attributesAtZero", metadata: [
+                "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", zeroRect.origin.x, zeroRect.origin.y, zeroRect.width, zeroRect.height)
+            ])
             return CaretResult(rect: zeroRect, source: .attributesAtZero)
         }
 
-        // All methods failed: return last known good position
+        DeveloperLogger.shared.log("Geometry", "All methods failed", metadata: [
+            "lastGood": lastGoodResult.map { String(format: "(%.0f,%.0f)", $0.rect.origin.x, $0.rect.origin.y) } ?? "nil"
+        ])
         return lastGoodResult
     }
 
