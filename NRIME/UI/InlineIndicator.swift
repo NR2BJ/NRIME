@@ -19,32 +19,6 @@ final class InlineIndicator {
         return panel.isVisible && panel.alphaValue > 0 && !isFading
     }
 
-    /// Update position while visible (e.g., on keystroke). Does not reset fade timer.
-    func updatePosition(client: (any IMKTextInput)?) {
-        guard isVisible, let panel = panel else { return }
-        // During composition, many apps return bogus caret positions (field start).
-        if let client = client {
-            let markedRange = client.markedRange()
-            if markedRange.location != NSNotFound && markedRange.length > 0 {
-                return
-            }
-        }
-        guard let result = TextInputGeometry.caretRect(for: client) else { return }
-        // attributesAtZero has unreliable X — skip position update
-        if result.source == .attributesAtZero { return }
-
-        let panelSize = panel.frame.size
-        let gap: CGFloat = 4
-        let x = TextInputGeometry.indicatorAnchorX(for: result.rect) + gap
-        let aboveY = result.rect.origin.y + result.rect.height + gap
-        if let screenFrame = TextInputGeometry.screenFrame(containing: result.rect),
-           aboveY + panelSize.height > screenFrame.maxY {
-            panel.setFrameOrigin(NSPoint(x: x, y: result.rect.origin.y - panelSize.height - gap))
-        } else {
-            panel.setFrameOrigin(NSPoint(x: x, y: aboveY))
-        }
-    }
-
     /// Show the mode indicator near the caret position.
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
         fadeTimer?.invalidate()
@@ -96,6 +70,26 @@ final class InlineIndicator {
         isFading = false
         panel.alphaValue = 1.0
         panel.orderFront(nil)
+
+        // Electron/Chromium: IMKit may return stale coordinates on the first call.
+        // Re-check position after a short delay to catch updated caret rect.
+        if let client = client {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                guard let self, let panel = self.panel, panel.isVisible, !self.isFading else { return }
+                if let result = TextInputGeometry.caretRect(for: client),
+                   result.source != .attributesAtZero {
+                    let gap: CGFloat = 4
+                    let x = TextInputGeometry.indicatorAnchorX(for: result.rect) + gap
+                    let aboveY = result.rect.origin.y + result.rect.height + gap
+                    if let screenFrame = TextInputGeometry.screenFrame(containing: result.rect),
+                       aboveY + panelSize.height > screenFrame.maxY {
+                        panel.setFrameOrigin(NSPoint(x: x, y: result.rect.origin.y - panelSize.height - gap))
+                    } else {
+                        panel.setFrameOrigin(NSPoint(x: x, y: aboveY))
+                    }
+                }
+            }
+        }
 
         fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
             guard let self = self else { return }
