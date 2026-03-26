@@ -391,7 +391,7 @@ class NRIMEInputController: IMKInputController {
             if Settings.shared.inlineIndicatorEnabled {
                 // Delay show() to let apps (especially Electron) process any
                 // preceding commit before AX queries the caret position.
-                let delay = Settings.shared.shiftEnterDelay / 1000.0
+                let delay = 0.05  // 50ms — give apps time to process commit before AX query
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                     let client = self?.resolvedClient()
                     InlineIndicator.shared.show(for: mode, client: client)
