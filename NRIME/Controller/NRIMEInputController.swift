@@ -72,6 +72,22 @@ class NRIMEInputController: IMKInputController {
             return false
         }
 
+        // 1.7. Preemptive commit on Cmd/Ctrl down (Electron workaround):
+        // When Cmd or Ctrl is pressed while composing, commit immediately.
+        // This gives Electron time to clear oldHasMarkedText before the
+        // actual Cmd+key arrives (which bypasses handle() via performKeyEquivalent).
+        if event.type == .flagsChanged {
+            let flags = event.modifierFlags
+            if flags.contains(.command) || flags.contains(.control) {
+                if koreanEngine.isCurrentlyComposing {
+                    koreanEngine.forceCommit(client: client)
+                }
+                if japaneseEngine.isCurrentlyComposing {
+                    japaneseEngine.forceCommit(client: client)
+                }
+            }
+        }
+
         // 2. Japanese conversion state: Mozc manages ALL key handling (including candidates)
         if mode == .japanese && japaneseEngine.isInConversionState {
             return handleJapaneseConversion(event, client: client)
@@ -401,41 +417,11 @@ class NRIMEInputController: IMKInputController {
     }
 
     private func handleCommitComposition(_ sender: Any?) {
-        let wasComposing = koreanEngine.isCurrentlyComposing || japaneseEngine.isCurrentlyComposing
-
         if let client = (sender as? (any IMKTextInput))
             ?? resolvedClient() {
             logControllerEvent("commitComposition", client: client)
             koreanEngine.forceCommit(client: client)
             japaneseEngine.forceCommit(client: client)
-        }
-
-        // Electron/Chromium workaround: when Cmd+key triggers commitComposition,
-        // Electron's oldHasMarkedText is still true, causing it to ignore the shortcut.
-        // Repost the key after a delay so Electron has time to clear the flag.
-        DeveloperLogger.shared.log("Controller", "commitComposition repost check", metadata: [
-            "wasComposing": "\(wasComposing)",
-            "currentEvent": NSApp.currentEvent.map { "type=\($0.type.rawValue) keyCode=\($0.keyCode) flags=\($0.modifierFlags.rawValue)" } ?? "nil"
-        ])
-        if wasComposing, let event = NSApp.currentEvent, event.type == .keyDown {
-            let flags = event.modifierFlags
-            if flags.contains(.command) || flags.contains(.control) {
-                let keyCode = event.keyCode
-                let cgFlags = CGEventFlags(rawValue: UInt64(flags.intersection(.deviceIndependentFlagsMask).rawValue))
-                let delay = Settings.shared.shiftEnterDelay / 1000.0
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
-                    keyDown.flags = cgFlags
-                    keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
-                    keyDown.post(tap: .cghidEventTap)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-                        guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
-                        keyUp.flags = cgFlags
-                        keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
-                        keyUp.post(tap: .cghidEventTap)
-                    }
-                }
-            }
         }
     }
 
