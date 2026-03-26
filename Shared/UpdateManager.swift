@@ -20,11 +20,13 @@ struct GitHubAsset: Codable {
     let name: String
     let size: Int
     let browserDownloadURL: String
+    let updatedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case name
         case size
         case browserDownloadURL = "browser_download_url"
+        case updatedAt = "updated_at"
     }
 }
 
@@ -155,10 +157,6 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
 
                 await MainActor.run {
                     if process.terminationStatus == 0 {
-                        // Save installed PKG size for same-version change detection
-                        if let asset = self?.latestRelease?.assets.first(where: { $0.name.hasSuffix(".pkg") }) {
-                            self?.defaults?.set(asset.size, forKey: "lastInstalledPkgSize")
-                        }
                         // Clean up downloaded PKG
                         try? FileManager.default.removeItem(atPath: path)
                         self?.state = .idle
@@ -249,11 +247,11 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
             let pkgAsset = release.assets.first(where: { $0.name.hasSuffix(".pkg") })
             let pkgSize = pkgAsset?.size ?? 0
 
-            // Detect same-version re-uploads by comparing asset size
+            // Detect same-version re-uploads by comparing asset upload timestamp
             let sameVersionChanged: Bool = {
-                guard !newerVersion, let asset = pkgAsset else { return false }
-                let savedSize = defaults?.integer(forKey: "lastInstalledPkgSize") ?? 0
-                return savedSize > 0 && asset.size != savedSize
+                guard !newerVersion, let asset = pkgAsset, let remoteTimestamp = asset.updatedAt else { return false }
+                let savedTimestamp = defaults?.string(forKey: "lastInstalledPkgTimestamp") ?? ""
+                return !savedTimestamp.isEmpty && remoteTimestamp != savedTimestamp
             }()
 
             await MainActor.run {
@@ -262,9 +260,10 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
                     let label = sameVersionChanged ? "\(remoteVersion) (updated)" : remoteVersion
                     state = .available(version: label, notes: release.body ?? "", size: Int64(pkgSize))
                 } else {
-                    // Record current PKG size for future same-version change detection
-                    if let asset = pkgAsset, (defaults?.integer(forKey: "lastInstalledPkgSize") ?? 0) == 0 {
-                        defaults?.set(asset.size, forKey: "lastInstalledPkgSize")
+                    // Record current PKG timestamp for future same-version change detection
+                    if let asset = pkgAsset, let ts = asset.updatedAt,
+                       (defaults?.string(forKey: "lastInstalledPkgTimestamp") ?? "").isEmpty {
+                        defaults?.set(ts, forKey: "lastInstalledPkgTimestamp")
                     }
                     state = .upToDate
                 }
@@ -317,6 +316,11 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         do {
             try? FileManager.default.removeItem(at: destination)
             try FileManager.default.moveItem(at: location, to: destination)
+            // Save PKG timestamp now (before install kills the app via postinstall)
+            if let asset = latestRelease?.assets.first(where: { $0.name.hasSuffix(".pkg") }),
+               let ts = asset.updatedAt {
+                defaults?.set(ts, forKey: "lastInstalledPkgTimestamp")
+            }
             state = .readyToInstall(path: destination.path)
         } catch {
             state = .error("Failed to save download: \(error.localizedDescription)")
