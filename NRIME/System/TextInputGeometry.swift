@@ -47,9 +47,10 @@ enum TextInputGeometry {
         // 2. attributes at index 0 — simple fallback (Squirrel's approach).
         //    Only Y and height are reliable; X points to the line start.
         //    Do NOT save as lastGoodResult — unreliable X would poison future lookups.
+        //    Use relaxed validation (allow x=0) since X is already untrusted here.
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
-        if isUsableRect(zeroRect) {
+        if !zeroRect.equalTo(.zero) && zeroRect.height > 0 {
             return CaretResult(rect: zeroRect, source: .attributesAtZero)
         }
 
