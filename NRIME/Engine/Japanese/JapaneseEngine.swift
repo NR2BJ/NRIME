@@ -1161,9 +1161,11 @@ final class JapaneseEngine: InputEngine {
         }
 
         // Repost the key event via CGEvent with our repost tag.
+        // Delay matches Shift+Enter delay to let Electron/Chromium process the commit.
         let keyCode = event.keyCode
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        DispatchQueue.main.async {
+        let delay = Settings.shared.shiftEnterDelay / 1000.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
             keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
             keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)

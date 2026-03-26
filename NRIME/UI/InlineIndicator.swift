@@ -74,7 +74,7 @@ final class InlineIndicator {
         // Electron/Chromium: IMKit may return stale coordinates on the first call.
         // Re-check position after a short delay to catch updated caret rect.
         if let client = client {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 guard let self, let panel = self.panel, panel.isVisible, !self.isFading else { return }
                 if let result = TextInputGeometry.caretRect(for: client),
                    result.source != .attributesAtZero {
