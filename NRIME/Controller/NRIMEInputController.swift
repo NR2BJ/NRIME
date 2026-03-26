@@ -401,7 +401,7 @@ class NRIMEInputController: IMKInputController {
     }
 
     private func handleCommitComposition(_ sender: Any?) {
-        let wasComposing = koreanEngine.automata.isComposing || japaneseEngine.isComposing
+        let wasComposing = koreanEngine.isCurrentlyComposing || japaneseEngine.isCurrentlyComposing
 
         if let client = (sender as? (any IMKTextInput))
             ?? resolvedClient() {
@@ -411,12 +411,12 @@ class NRIMEInputController: IMKInputController {
         }
 
         // Electron/Chromium workaround: when Cmd+key triggers commitComposition,
-        // macOS sends Cmd+key to the app immediately after. But Electron's
-        // oldHasMarkedText flag is still true, causing it to ignore the shortcut.
-        // Repost the Cmd+key after a delay so Electron has time to clear the flag.
-        // Electron/Chromium workaround: when Cmd+key triggers commitComposition,
         // Electron's oldHasMarkedText is still true, causing it to ignore the shortcut.
         // Repost the key after a delay so Electron has time to clear the flag.
+        DeveloperLogger.shared.log("Controller", "commitComposition repost check", metadata: [
+            "wasComposing": "\(wasComposing)",
+            "currentEvent": NSApp.currentEvent.map { "type=\($0.type.rawValue) keyCode=\($0.keyCode) flags=\($0.modifierFlags.rawValue)" } ?? "nil"
+        ])
         if wasComposing, let event = NSApp.currentEvent, event.type == .keyDown {
             let flags = event.modifierFlags
             if flags.contains(.command) || flags.contains(.control) {
