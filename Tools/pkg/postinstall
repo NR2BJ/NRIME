@@ -32,9 +32,8 @@ xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
 "$LSREGISTER" "$APP_PATH" 2>/dev/null || true
 "$LSREGISTER" "$SETTINGS_PATH" 2>/dev/null || true
 
-# Re-enable input sources using pre-compiled tool (avoids swift-frontend notification)
-SCRIPT_DIR="$(dirname "$0")"
-"$SCRIPT_DIR/enable_input_source" 2>/dev/null || true
+# Input source re-enablement is handled by NRIME's InputSourceRecovery on startup.
+# No need to call enable_input_source here — avoids both swift-frontend and TCC prompts.
 
 # Clean up old loginrestore LaunchAgent (from previous versions — no longer needed)
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then

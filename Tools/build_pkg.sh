@@ -70,10 +70,7 @@ codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" && echo "
 cp "$SCRIPTS_DIR/postinstall" "$PKG_DIR/scripts/postinstall"
 chmod +x "$PKG_DIR/scripts/postinstall"
 
-# Compile enable_input_source tool (avoids swift-frontend notification during install)
-echo "Compiling enable_input_source helper..."
-swiftc -O -o "$PKG_DIR/scripts/enable_input_source" "$SCRIPTS_DIR/enable_input_source.swift"
-chmod +x "$PKG_DIR/scripts/enable_input_source"
+# Input source enablement is handled by NRIME's InputSourceRecovery on startup.
 
 # 4. Generate component plist and disable relocation
 #    Without this, the installer searches the entire filesystem for existing
