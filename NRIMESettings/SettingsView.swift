@@ -27,12 +27,8 @@ struct SettingsView: View {
                 }
         }
         .padding()
-        .id(appLanguage)  // Force full re-render on language change
         .environment(\.locale, Locale(identifier: appLanguage))
         .onChange(of: appLanguage) { _ in
-            LocalizedBundle.shared.update(language: appLanguage)
-        }
-        .onAppear {
             LocalizedBundle.shared.update(language: appLanguage)
         }
     }
@@ -48,15 +44,17 @@ func L(_ key: String) -> String {
 class LocalizedBundle: ObservableObject {
     static let shared = LocalizedBundle()
     private var bundle: Bundle = .main
+    private var currentLanguage: String = ""
     /// Incremented on language change to trigger SwiftUI re-renders.
     @Published var revision: Int = 0
 
     init() {
-        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "ko"
-        update(language: lang)
+        syncWithUserDefaults()
     }
 
     func update(language: String) {
+        guard language != currentLanguage else { return }
+        currentLanguage = language
         if let path = Bundle.main.path(forResource: language, ofType: "lproj"),
            let lprojBundle = Bundle(path: path) {
             bundle = lprojBundle
@@ -66,7 +64,16 @@ class LocalizedBundle: ObservableObject {
         revision += 1
     }
 
+    /// Ensure bundle matches UserDefaults (called from L() on every lookup)
+    private func syncWithUserDefaults() {
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "ko"
+        if lang != currentLanguage {
+            update(language: lang)
+        }
+    }
+
     func string(for key: String) -> String {
-        bundle.localizedString(forKey: key, value: nil, table: nil)
+        syncWithUserDefaults()
+        return bundle.localizedString(forKey: key, value: nil, table: nil)
     }
 }
