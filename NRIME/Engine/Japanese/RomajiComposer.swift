@@ -72,6 +72,12 @@ final class RomajiComposer {
         pendingRomaji = ""
     }
 
+    /// Clear only the composed kana, preserving pending romaji.
+    /// Used by katakana direct-input mode after inserting each syllable.
+    func clearComposed() {
+        composedKana = ""
+    }
+
     /// Restore composed kana from an existing hiragana string (e.g., after Escape from conversion).
     /// pendingRomaji is left empty since the full kana is already resolved.
     func restore(kana: String) {

@@ -183,16 +183,25 @@ final class ShortcutHandler {
             // Check key matches
             guard event.keyCode == config.keyCode else { continue }
 
-            // Check high-level modifier flags match
+            // Check modifier flags match, including left/right distinction.
+            // Use device-independent flags for high-level match, then check
+            // specific side flags if the shortcut was recorded with a side-specific modifier.
             let significantFlags: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
             let eventSignificant = event.modifierFlags.intersection(significantFlags)
             let requiredSignificant = requiredFlags.intersection(significantFlags)
 
             guard eventSignificant == requiredSignificant else { continue }
 
-            // For modifier+key combos, high-level flags are sufficient.
-            // Don't enforce left/right distinction — Option+Enter should work
-            // with either left or right Option key.
+            // Left/right distinction: if the recorded shortcut includes a side-specific
+            // flag (e.g., right shift 0x20004), verify the event also has the same side.
+            // NX_DEVICE* side flags: L/R Ctrl(0x01/0x2000), L/R Shift(0x02/0x04),
+            // L/R Cmd(0x08/0x10), L/R Option(0x20/0x40)
+            let sideFlags: UInt = 0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40 | 0x2000
+            let requiredSide = config.modifiers & sideFlags
+            let eventSide = UInt(event.modifierFlags.rawValue) & sideFlags
+            if requiredSide != 0 {
+                guard eventSide & requiredSide == requiredSide else { continue }
+            }
 
             return performAction(action)
         }

@@ -274,6 +274,13 @@ final class JapaneseEngine: InputEngine {
         let config = Settings.shared.japaneseKeyConfig
         if keyCode == 0x31 {
             if composer.isComposing {
+                // Katakana mode: commit directly, no Mozc conversion
+                if capsLockKatakanaActive || shiftKatakanaActive {
+                    commitComposing(client: client)
+                    let space = config.fullWidthSpace ? "\u{3000}" : " "
+                    client.insertText(space as NSString, replacementRange: replacementRange())
+                    return true
+                }
                 if config.conversionTriggerSpace {
                     return triggerMozcConversion(client: client)
                 }
@@ -293,6 +300,10 @@ final class JapaneseEngine: InputEngine {
 
         // Tab while composing — trigger conversion if enabled, otherwise pass through
         if keyCode == 0x30 && composer.isComposing {
+            if capsLockKatakanaActive || shiftKatakanaActive {
+                commitComposing(client: client)
+                return true
+            }
             if config.conversionTriggerTab {
                 return triggerMozcConversion(client: client)
             }
@@ -302,6 +313,10 @@ final class JapaneseEngine: InputEngine {
 
         // Down arrow while composing — trigger conversion if enabled
         if keyCode == 0x7D && composer.isComposing && config.conversionTriggerDownArrow {
+            if capsLockKatakanaActive || shiftKatakanaActive {
+                commitComposing(client: client)
+                return true
+            }
             return triggerMozcConversion(client: client)
         }
 
@@ -374,19 +389,19 @@ final class JapaneseEngine: InputEngine {
                 return true
             }
 
-            // Caps Lock katakana: convert romaji to katakana and insert directly (no composition/candidates)
+            // Caps Lock katakana: direct output without composition
             if isCapsLockOn && capsAction == .katakana {
                 let result = composer.input(char)
-                if !result.composing.isEmpty {
-                    let katakana = result.composing.applyingTransform(.hiraganaToKatakana, reverse: false) ?? result.composing
+                let kana = composer.composedKana
+                if !kana.isEmpty {
+                    let katakana = kana.applyingTransform(.hiraganaToKatakana, reverse: false) ?? kana
+                    composer.clearComposed()
                     client.insertText(katakana as NSString, replacementRange: replacementRange())
-                    // If pending romaji remains (e.g., "k" after "ka"), show as marked text
-                    if !result.pending.isEmpty {
-                        client.setMarkedText(result.pending as NSString, selectionRange: NSRange(location: result.pending.count, length: 0), replacementRange: replacementRange())
-                    }
-                } else if !result.pending.isEmpty {
-                    // Only pending (incomplete romaji like "k") — show as marked text
-                    client.setMarkedText(result.pending as NSString, selectionRange: NSRange(location: result.pending.count, length: 0), replacementRange: replacementRange())
+                }
+                if !result.pending.isEmpty {
+                    client.setMarkedText(result.pending as NSString,
+                                         selectionRange: NSRange(location: result.pending.count, length: 0),
+                                         replacementRange: replacementRange())
                 }
                 capsLockKatakanaActive = true
                 return true
