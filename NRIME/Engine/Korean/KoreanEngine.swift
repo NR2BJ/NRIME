@@ -205,11 +205,9 @@ final class KoreanEngine: InputEngine {
         // Repost the key event via CGEvent with our repost tag.
         // The controller's handle() checks eventSourceUserData and returns false
         // for tagged events, allowing them to pass through to the host app.
-        // Delay matches Shift+Enter delay to let Electron/Chromium process the commit.
         let keyCode = event.keyCode
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let delay = Settings.shared.shiftEnterDelay / 1000.0
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        DispatchQueue.main.async {
             guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
             keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
             keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
