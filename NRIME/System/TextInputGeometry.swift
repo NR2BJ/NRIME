@@ -23,6 +23,8 @@ enum TextInputGeometry {
     /// Memorize last good caret position to prevent jumping to (0,0) on failure.
     /// (Inspired by fcitx5-macos coordinate memorization strategy.)
     private static var lastGoodResult: CaretResult?
+    /// Public read-only access for InlineIndicator's attributesAtZero X fallback.
+    static var lastGoodCaretRect: CaretResult? { lastGoodResult }
 
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return lastGoodResult }

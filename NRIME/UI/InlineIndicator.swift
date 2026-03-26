@@ -36,9 +36,12 @@ final class InlineIndicator {
             let gap: CGFloat = 4
             let x: CGFloat
             if result.source == .attributesAtZero {
-                // Y is reliable, X is line start — use current panel X if visible, otherwise use rect X
+                // Y is reliable, X is unreliable (line start or 0).
+                // Prefer: current panel X > lastGoodResult X > rect X
                 if panel.isVisible {
                     x = panel.frame.origin.x
+                } else if let lastGood = TextInputGeometry.lastGoodCaretRect {
+                    x = TextInputGeometry.indicatorAnchorX(for: lastGood.rect) + gap
                 } else {
                     x = result.rect.origin.x + gap
                 }
