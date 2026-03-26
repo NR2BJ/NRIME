@@ -8,7 +8,7 @@ struct JapaneseTab: View {
     var body: some View {
         Form {
             Section(L("section.conversionKeys")) {
-                Text("conversionKeys.description")
+                Text(L("conversionKeys.description"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -59,18 +59,18 @@ struct JapaneseTab: View {
                     get: { store.japaneseKeyConfig.capsLockAction },
                     set: { store.japaneseKeyConfig.capsLockAction = $0 }
                 )) {
-                    Text("capsLock.default").tag(CapsLockAction.capsLock)
-                    Text("capsLock.katakana").tag(CapsLockAction.katakana)
-                    Text("capsLock.romaji").tag(CapsLockAction.romaji)
+                    Text(L("capsLock.default")).tag(CapsLockAction.capsLock)
+                    Text(L("capsLock.katakana")).tag(CapsLockAction.katakana)
+                    Text(L("capsLock.romaji")).tag(CapsLockAction.romaji)
                 }
 
                 Picker(L("keyBehavior.shiftKeyAction"), selection: Binding(
                     get: { store.japaneseKeyConfig.shiftKeyAction },
                     set: { store.japaneseKeyConfig.shiftKeyAction = $0 }
                 )) {
-                    Text("shiftKey.none").tag(ShiftKeyAction.none)
-                    Text("shiftKey.katakana").tag(ShiftKeyAction.katakana)
-                    Text("shiftKey.romaji").tag(ShiftKeyAction.romaji)
+                    Text(L("shiftKey.none")).tag(ShiftKeyAction.none)
+                    Text(L("shiftKey.katakana")).tag(ShiftKeyAction.katakana)
+                    Text(L("shiftKey.romaji")).tag(ShiftKeyAction.romaji)
                 }
             }
 
@@ -79,10 +79,10 @@ struct JapaneseTab: View {
                     get: { store.japaneseKeyConfig.fullWidthSpace },
                     set: { store.japaneseKeyConfig.fullWidthSpace = $0 }
                 )) {
-                    Text("space.halfWidth").tag(false)
-                    Text("space.fullWidth").tag(true)
+                    Text(L("space.halfWidth")).tag(false)
+                    Text(L("space.fullWidth")).tag(true)
                 }
-                Text("space.description")
+                Text(L("space.description"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -92,8 +92,9 @@ struct JapaneseTab: View {
                     get: { store.japaneseKeyConfig.punctuationStyle },
                     set: { store.japaneseKeyConfig.punctuationStyle = $0 }
                 )) {
-                    Text("punctuation.japanese").tag(PunctuationStyle.japanese)
-                    Text("punctuation.western").tag(PunctuationStyle.fullWidthWestern)
+                    Text(L("punctuation.japanese")).tag(PunctuationStyle.japanese)
+                    Text(L("punctuation.fullWidthWestern")).tag(PunctuationStyle.fullWidthWestern)
+                    Text(L("punctuation.halfWidthWestern")).tag(PunctuationStyle.halfWidthWestern)
                 }
 
                 Toggle(isOn: Binding(
@@ -101,8 +102,8 @@ struct JapaneseTab: View {
                     set: { store.japaneseKeyConfig.slashToNakaguro = $0 }
                 )) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("punctuation.slashToNakaguro")
-                        Text("punctuation.slashDescription")
+                        Text(L("punctuation.slashToNakaguro"))
+                        Text(L("punctuation.slashDescription"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -113,8 +114,8 @@ struct JapaneseTab: View {
                     set: { store.japaneseKeyConfig.yenKeyToYen = $0 }
                 )) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("punctuation.yenKey")
-                        Text("punctuation.yenDescription")
+                        Text(L("punctuation.yenKey"))
+                        Text(L("punctuation.yenDescription"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -127,8 +128,8 @@ struct JapaneseTab: View {
                     set: { store.japaneseKeyConfig.liveConversion = $0 }
                 )) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("inputFeatures.liveConversion")
-                        Text("inputFeatures.liveConversion.description")
+                        Text(L("inputFeatures.liveConversion"))
+                        Text(L("inputFeatures.liveConversion.description"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -139,8 +140,8 @@ struct JapaneseTab: View {
                     set: { store.japaneseKeyConfig.prediction = $0 }
                 )) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("inputFeatures.prediction")
-                        Text("inputFeatures.prediction.description")
+                        Text(L("inputFeatures.prediction"))
+                        Text(L("inputFeatures.prediction.description"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -150,8 +151,8 @@ struct JapaneseTab: View {
             Section(L("section.conversionHistory")) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("conversionHistory.clear")
-                        Text("conversionHistory.clear.description")
+                        Text(L("conversionHistory.clear"))
+                        Text(L("conversionHistory.clear.description"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -182,12 +183,12 @@ struct JapaneseTab: View {
                 clearMozcHistory()
             }
         } message: {
-            Text("conversionHistory.confirmMessage")
+            Text(L("conversionHistory.confirmMessage"))
         }
         .alert(L("conversionHistory.clearedTitle"), isPresented: $historyCleared) {
             Button(L("common.ok")) { }
         } message: {
-            Text("conversionHistory.clearedMessage")
+            Text(L("conversionHistory.clearedMessage"))
         }
     }
 
@@ -229,7 +230,7 @@ private struct JapaneseKeyRow: View {
             }
             Spacer()
             if isRecording {
-                Text("keyRecorder.pressKey")
+                Text(L("keyRecorder.pressKey"))
                     .foregroundStyle(.orange)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -242,7 +243,7 @@ private struct JapaneseKeyRow: View {
                     .background(Color.secondary.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
-                Text("keyRecorder.none")
+                Text(L("keyRecorder.none"))
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)

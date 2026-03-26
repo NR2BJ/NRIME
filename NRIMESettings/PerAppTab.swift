@@ -11,8 +11,8 @@ struct PerAppTab: View {
 
                 if store.perAppModeEnabled {
                     Picker(L("perApp.mode"), selection: $store.perAppModeType) {
-                        Text("perApp.whitelist").tag("whitelist")
-                        Text("perApp.blacklist").tag("blacklist")
+                        Text(L("perApp.whitelist")).tag("whitelist")
+                        Text(L("perApp.blacklist")).tag("blacklist")
                     }
                     .pickerStyle(.radioGroup)
                 }
@@ -21,7 +21,7 @@ struct PerAppTab: View {
             if store.perAppModeEnabled {
                 Section(store.perAppModeType == "whitelist" ? L("perApp.rememberedApps") : L("perApp.excludedApps")) {
                     if store.perAppModeList.isEmpty {
-                        Text("perApp.noApps")
+                        Text(L("perApp.noApps"))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(store.perAppModeList, id: \.self) { bundleId in

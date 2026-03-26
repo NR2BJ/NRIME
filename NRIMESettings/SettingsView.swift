@@ -27,9 +27,9 @@ struct SettingsView: View {
                 }
         }
         .padding()
+        .id(appLanguage)  // Force full re-render on language change
         .environment(\.locale, Locale(identifier: appLanguage))
         .onChange(of: appLanguage) { _ in
-            // Force Bundle to use selected language for String(localized:) calls
             LocalizedBundle.shared.update(language: appLanguage)
         }
         .onAppear {

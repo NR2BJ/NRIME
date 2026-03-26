@@ -180,3 +180,4 @@
 "common.space" = "Space";
 "common.tab" = "Tab";
 "common.downArrow" = "↓ 화살표";
+"punctuation.halfWidthWestern" = "반각 서양식 (.,)";

@@ -61,10 +61,10 @@ struct DictionaryTab: View {
                     Image(systemName: "book.closed")
                         .font(.system(size: 36))
                         .foregroundStyle(.secondary)
-                    Text("dictionary.noEntries")
+                    Text(L("dictionary.noEntries"))
                         .font(.headline)
                         .foregroundStyle(.secondary)
-                    Text("dictionary.addHint")
+                    Text(L("dictionary.addHint"))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -120,7 +120,7 @@ struct DictionaryTab: View {
             HStack(spacing: 6) {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
-                Text("dictionary.autoLearnInfo")
+                Text(L("dictionary.autoLearnInfo"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -163,7 +163,7 @@ struct DictionaryTab: View {
                 selection.removeAll()
             }
         } message: {
-            Text("dictionary.deleteMessage")
+            Text(L("dictionary.deleteMessage"))
         }
     }
 }

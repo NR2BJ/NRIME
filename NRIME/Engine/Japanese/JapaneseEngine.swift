@@ -1090,9 +1090,17 @@ final class JapaneseEngine: InputEngine {
 
         switch keyCode {
         case 0x2F: // Period key
-            return config.punctuationStyle == .japanese ? "\u{3002}" : "\u{FF0E}"
+            switch config.punctuationStyle {
+            case .japanese: return "\u{3002}"       // 。
+            case .fullWidthWestern: return "\u{FF0E}" // ．
+            case .halfWidthWestern: return "."
+            }
         case 0x2B: // Comma key
-            return config.punctuationStyle == .japanese ? "\u{3001}" : "\u{FF0C}"
+            switch config.punctuationStyle {
+            case .japanese: return "\u{3001}"       // 、
+            case .fullWidthWestern: return "\u{FF0C}" // ，
+            case .halfWidthWestern: return ","
+            }
         case 0x2C: // Slash key
             return config.slashToNakaguro ? "\u{30FB}" : "/"
         case 0x5D: // Yen key (JIS keyboard)

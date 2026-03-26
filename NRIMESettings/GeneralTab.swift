@@ -44,11 +44,11 @@ struct GeneralTab: View {
                                 .frame(width: 50, alignment: .trailing)
                             Slider(value: $store.tapThreshold, in: 0.1...0.5, step: 0.01)
                         }
-                        Text("tapThreshold.description")
+                        Text(L("tapThreshold.description"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("tapThreshold.notApplicable")
+                        Text(L("tapThreshold.notApplicable"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -63,7 +63,7 @@ struct GeneralTab: View {
                             .frame(width: 50, alignment: .trailing)
                         Slider(value: $store.doubleTapWindow, in: 0.15...0.6, step: 0.05)
                     }
-                    Text("shiftDoubleTap.description")
+                    Text(L("shiftDoubleTap.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -77,7 +77,7 @@ struct GeneralTab: View {
                             .frame(width: 50, alignment: .trailing)
                         Slider(value: $store.shiftEnterDelay, in: 0.005...0.05, step: 0.005)
                     }
-                    Text("shiftEnterDelay.description")
+                    Text(L("shiftEnterDelay.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -88,14 +88,14 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(L("display.preventABC"), isOn: $store.preventABCSwitch)
-                    Text("display.preventABC.description")
+                    Text(L("display.preventABC.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("display.candidateFontSize")
+                        Text(L("display.candidateFontSize"))
                         Spacer()
                         Text("\(Int(store.japaneseKeyConfig.candidateFontSize))pt")
                             .monospacedDigit()
@@ -110,13 +110,13 @@ struct GeneralTab: View {
                         )
                         .frame(width: 150)
                     }
-                    Text("display.candidateFontSize.description")
+                    Text(L("display.candidateFontSize.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("display.conversionTriggerKeys")
+                    Text(L("display.conversionTriggerKeys"))
                     Toggle(L("common.space"), isOn: Binding(
                         get: { store.japaneseKeyConfig.conversionTriggerSpace },
                         set: { store.japaneseKeyConfig.conversionTriggerSpace = $0 }
@@ -129,7 +129,7 @@ struct GeneralTab: View {
                         get: { store.japaneseKeyConfig.conversionTriggerDownArrow },
                         set: { store.japaneseKeyConfig.conversionTriggerDownArrow = $0 }
                     ))
-                    Text("display.conversionTriggerKeys.description")
+                    Text(L("display.conversionTriggerKeys.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -138,10 +138,10 @@ struct GeneralTab: View {
             Section(L("section.developer")) {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle(L("developer.enableMode"), isOn: $store.developerModeEnabled)
-                    Text("developer.description")
+                    Text(L("developer.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("developer.privacyNote")
+                    Text(L("developer.privacyNote"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -177,7 +177,7 @@ struct GeneralTab: View {
                         }
                     }
 
-                    Text("backup.description")
+                    Text(L("backup.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -230,7 +230,7 @@ struct ShortcutRow: View {
             Text(title)
             Spacer()
             if isRecording {
-                Text("shortcutRow.pressKeys")
+                Text(L("shortcutRow.pressKeys"))
                     .foregroundStyle(.orange)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)

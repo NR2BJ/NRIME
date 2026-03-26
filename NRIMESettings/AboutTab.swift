@@ -12,7 +12,7 @@ struct AboutTab: View {
             Text(verbatim: "NRIME")
                 .font(.largeTitle.bold())
 
-            Text("about.subtitle")
+            Text(L("about.subtitle"))
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
@@ -23,7 +23,7 @@ struct AboutTab: View {
             Divider()
                 .frame(maxWidth: 200)
 
-            Text("about.languages")
+            Text(L("about.languages"))
                 .font(.body)
 
             Link(destination: URL(string: githubURL)!) {
@@ -51,9 +51,6 @@ struct AboutTab: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 280)
 
-                Text("about.languageRestart")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Spacer()

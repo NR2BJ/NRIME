@@ -144,6 +144,7 @@ enum ShiftKeyAction: String, Codable, CaseIterable {
 
 /// Punctuation style options for Japanese input
 enum PunctuationStyle: String, Codable, CaseIterable {
-    case japanese = "japanese"           // 。、
-    case fullWidthWestern = "fullWidthWestern"  // ．，
+    case japanese = "japanese"                   // 。、
+    case fullWidthWestern = "fullWidthWestern"   // ．，
+    case halfWidthWestern = "halfWidthWestern"   // .,
 }
