@@ -14,6 +14,7 @@ final class SettingsStore: ObservableObject {
         defaults = UserDefaults(suiteName: suiteName) ?? UserDefaults.standard
 
         _inlineIndicatorEnabled = Published(initialValue: true)
+        _indicatorPositionMode = Published(initialValue: "caret")
         _tapThreshold = Published(initialValue: 0.2)
         _preventABCSwitch = Published(initialValue: false)
         _developerModeEnabled = Published(initialValue: false)
@@ -55,6 +56,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var inlineIndicatorEnabled: Bool {
         didSet { defaults.set(inlineIndicatorEnabled, forKey: "inlineIndicatorEnabled") }
+    }
+
+    @Published var indicatorPositionMode: String {
+        didSet { defaults.set(indicatorPositionMode, forKey: "indicatorPositionMode") }
     }
 
     @Published var preventABCSwitch: Bool {
@@ -135,6 +140,7 @@ final class SettingsStore: ObservableObject {
         inlineIndicatorEnabled = defaults.object(forKey: "inlineIndicatorEnabled") == nil
             ? true
             : defaults.bool(forKey: "inlineIndicatorEnabled")
+        indicatorPositionMode = defaults.string(forKey: "indicatorPositionMode") ?? "caret"
 
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2

@@ -29,6 +29,10 @@
 /* GeneralTab - Display */
 "section.display" = "표시";
 "display.inlineIndicator" = "모드 전환 시 인라인 표시기 보기";
+"display.indicatorPosition" = "인디케이터 위치";
+"display.indicatorPosition.caret" = "입력 커서 위치 (가끔 불안정)";
+"display.indicatorPosition.lineStart" = "줄 시작 위치 (안정적)";
+"display.indicatorPosition.mouse" = "마우스 커서 위치";
 "display.preventABC" = "ABC로 전환 방지";
 "display.preventABC.description" = "다른 입력 소스가 선택되면 자동으로 NRIME으로 전환합니다. 로그인/깨우기 후 약 15초간 계속 시도하며, 이후에는 NRIME 내부 EN/KO/JA 단축키를 사용합니다.";
 "display.candidateFontSize" = "후보 글꼴 크기";

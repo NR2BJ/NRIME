@@ -130,6 +130,15 @@ final class Settings {
         set { defaults.set(newValue, forKey: "inlineIndicatorEnabled") }
     }
 
+    /// Indicator position mode: "caret" (input cursor) or "mouse" (mouse cursor).
+    var indicatorPositionMode: String {
+        get {
+            let val = defaults.string(forKey: "indicatorPositionMode")
+            return val ?? "caret"
+        }
+        set { defaults.set(newValue, forKey: "indicatorPositionMode") }
+    }
+
     // MARK: - Per-App Mode Memory
 
     var perAppModeEnabled: Bool {

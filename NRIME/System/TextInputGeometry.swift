@@ -34,6 +34,7 @@ enum TextInputGeometry {
 
     /// Fast pre-commit position capture using IMKit only (no AX).
     /// Called before forceCommit when composition is still active.
+    /// Uses fcitx5-macos trick: if caret is at end, try pos-1 and add offset.
     static func capturePreCommitPosition(for client: (any IMKTextInput)?) {
         guard let client else { return }
         if let index = caretIndex(for: client) {
@@ -41,10 +42,39 @@ enum TextInputGeometry {
             client.attributes(forCharacterIndex: index, lineHeightRectangle: &rect)
             if isUsableRect(rect) {
                 lastGoodResult = CaretResult(rect: rect, source: .attributesAtCaret)
+                DeveloperLogger.shared.log("Geometry", "preCommit success at index", metadata: [
+                    "index": "\(index)",
+                    "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", rect.origin.x, rect.origin.y, rect.width, rect.height)
+                ])
                 return
             }
+
+            // fcitx5 trick: if current position fails, try one character back + 10px offset.
+            if index > 0 {
+                var prevRect = NSRect.zero
+                client.attributes(forCharacterIndex: index - 1, lineHeightRectangle: &prevRect)
+                DeveloperLogger.shared.log("Geometry", "preCommit pos-1 attempt", metadata: [
+                    "index": "\(index-1)",
+                    "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", prevRect.origin.x, prevRect.origin.y, prevRect.width, prevRect.height),
+                    "usable": "\(isUsableRect(prevRect))"
+                ])
+                if isUsableRect(prevRect) {
+                    let offsetRect = NSRect(
+                        x: prevRect.origin.x + 10,
+                        y: prevRect.origin.y,
+                        width: prevRect.width,
+                        height: prevRect.height
+                    )
+                    lastGoodResult = CaretResult(rect: offsetRect, source: .attributesAtCaret)
+                    return
+                }
+            }
+
+            DeveloperLogger.shared.log("Geometry", "preCommit all failed", metadata: [
+                "index": "\(index)",
+                "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", rect.origin.x, rect.origin.y, rect.width, rect.height)
+            ])
         }
-        // If attributesAtCaret fails, don't overwrite existing lastGoodResult
     }
 
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
@@ -226,6 +256,11 @@ enum TextInputGeometry {
     /// Applies Input Source Pro's techniques:
     ///   - length:1 to work around macOS zero-length kAXBoundsForRange bug
     ///   - AXEnhancedUserInterface for Electron/Chromium apps
+    /// Public wrapper for InlineIndicator's direct AX access.
+    static func accessibilityCaretRectPublic() -> NSRect? {
+        accessibilityCaretRect()
+    }
+
     private static func accessibilityCaretRect() -> NSRect? {
         guard let frontApp = NSWorkspace.shared.frontmostApplication else { return nil }
         let pid = frontApp.processIdentifier
@@ -324,7 +359,7 @@ enum TextInputGeometry {
     }
 
     /// Validate the rect has positive height, isn't zero, and is within a visible screen.
-    private static func isUsableRect(_ rect: NSRect) -> Bool {
+    static func isUsableRect(_ rect: NSRect) -> Bool {
         guard !rect.equalTo(.zero) && rect.height > 0 else { return false }
         // Reject rects at the screen origin (0,0) — common failure mode in Firefox/Chromium
         if rect.origin.x == 0 && rect.origin.y == 0 { return false }

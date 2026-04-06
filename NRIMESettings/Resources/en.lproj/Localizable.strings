@@ -29,6 +29,10 @@
 /* GeneralTab - Display */
 "section.display" = "Display";
 "display.inlineIndicator" = "Show inline indicator on mode switch";
+"display.indicatorPosition" = "Indicator Position";
+"display.indicatorPosition.caret" = "Text Cursor (may be inaccurate)";
+"display.indicatorPosition.lineStart" = "Line Start (stable)";
+"display.indicatorPosition.mouse" = "Mouse Cursor";
 "display.preventABC" = "Prevent switching to ABC";
 "display.preventABC.description" = "Automatically switch back to NRIME when another input source is selected, keep trying during the first ~15 seconds after login or wake, and rely on NRIME's internal EN/KO/JA shortcuts afterward so system input-source switching is rarely needed.";
 "display.candidateFontSize" = "Candidate Font Size";

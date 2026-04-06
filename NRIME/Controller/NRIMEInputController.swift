@@ -68,9 +68,8 @@ class NRIMEInputController: IMKInputController {
         }
 
         // 1.5. Pass through all events when NRIMESettings is the active app
-        if client.bundleIdentifier() == "com.nrime.settings" {
-            return false
-        }
+        // NRIMESettings: allow normal input (Japanese/Korean) in text fields.
+        // Shortcut recording uses its own NSEvent monitor, unaffected by this.
 
         // 1.7. Preemptive commit on Cmd/Ctrl down (Electron workaround):
         // When Cmd or Ctrl is pressed while composing, commit immediately.
@@ -384,10 +383,6 @@ class NRIMEInputController: IMKInputController {
         koreanEngine.clearAutomataState()
         japaneseEngine.clearState()
 
-        // Reset cached caret position — stale coordinates from previous text field
-        // would cause the indicator to appear at wrong locations.
-        TextInputGeometry.resetCache()
-
         wireUpShortcutHandler()
 
         // Wire up mode change callback for inline indicator
@@ -557,9 +552,6 @@ class NRIMEInputController: IMKInputController {
 
             switch action {
             case .toggleEnglish, .toggleNonEnglish, .switchKorean, .switchJapanese:
-                // Capture caret position BEFORE forceCommit using fast IMKit call only (no AX).
-                // During composition, attributesAtCaret returns accurate coordinates.
-                TextInputGeometry.capturePreCommitPosition(for: client)
                 if previousMode == .korean {
                     self.koreanEngine.forceCommit(client: client)
                 } else if previousMode == .japanese {

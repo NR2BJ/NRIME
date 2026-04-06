@@ -13,13 +13,14 @@ final class InlineIndicator {
 
     private init() {}
 
-    /// Whether the indicator is actively displayed (not fading or hidden).
     var isVisible: Bool {
         guard let panel = panel else { return false }
         return panel.isVisible && panel.alphaValue > 0 && !isFading
     }
 
-    /// Show the mode indicator near the caret position.
+    /// Show the mode indicator.
+    ///   "caret" — attributes(forCharacterIndex: 0), fail = don't show
+    ///   "mouse" — NSEvent.mouseLocation, always works
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
         fadeTimer?.invalidate()
 
@@ -29,78 +30,37 @@ final class InlineIndicator {
         ensurePanel(for: mode, size: panelSize)
         guard let panel = panel else { return }
 
-        // Get position — use whatever caretRect returns, including attributesAtZero.
-        // Only skip if caretRect returns nil entirely.
+        let gap: CGFloat = 4
         let origin: NSPoint
-        if let result = TextInputGeometry.caretRect(for: client) {
-            let gap: CGFloat = 4
-            let x: CGFloat
-            if result.source == .attributesAtZero {
-                // Y is reliable, X is unreliable (line start or 0).
-                // Prefer: current panel X > lastGoodResult X > rect X
-                if panel.isVisible {
-                    x = panel.frame.origin.x
-                } else if let lastGood = TextInputGeometry.lastGoodCaretRect {
-                    x = TextInputGeometry.indicatorAnchorX(for: lastGood.rect) + gap
-                } else {
-                    x = result.rect.origin.x + gap
-                }
-            } else {
-                x = TextInputGeometry.indicatorAnchorX(for: result.rect) + gap
-            }
-            let aboveY = result.rect.origin.y + result.rect.height + gap
-            if let screenFrame = TextInputGeometry.screenFrame(containing: result.rect),
-               aboveY + panelSize.height > screenFrame.maxY {
-                origin = NSPoint(x: x, y: result.rect.origin.y - panelSize.height - gap)
-            } else {
-                origin = NSPoint(x: x, y: aboveY)
-            }
-        } else if let client = client {
-            // caretRect failed — try raw firstRect at position 0 as last resort
-            var actual = NSRange(location: NSNotFound, length: 0)
-            let rawRect = client.firstRect(forCharacterRange: NSRange(location: 0, length: 0), actualRange: &actual)
-            if rawRect.height > 0 && !rawRect.equalTo(.zero) {
-                let gap: CGFloat = 4
-                origin = NSPoint(x: rawRect.origin.x + gap, y: rawRect.origin.y + rawRect.height + gap)
-            } else {
-                return
-            }
+
+        if Settings.shared.indicatorPositionMode == "mouse" {
+            let mouse = NSEvent.mouseLocation
+            origin = NSPoint(x: mouse.x + gap, y: mouse.y + gap)
         } else {
-            return
+            // "caret" — use attributes(forCharacterIndex: 0)
+            guard let client = client else { return }
+            var rect = NSRect.zero
+            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+            guard rect.height > 0 && !rect.equalTo(.zero) else { return }
+            let onScreen = NSScreen.screens.contains { $0.frame.intersects(rect.insetBy(dx: -50, dy: -50)) }
+            guard onScreen else { return }
+
+            let aboveY = rect.origin.y + rect.height + gap
+            if let screenFrame = TextInputGeometry.screenFrame(containing: rect),
+               aboveY + panelSize.height > screenFrame.maxY {
+                origin = NSPoint(x: rect.origin.x + gap, y: rect.origin.y - panelSize.height - gap)
+            } else {
+                origin = NSPoint(x: rect.origin.x + gap, y: aboveY)
+            }
         }
 
-        // Don't show at screen corners — indicates positioning failure
-        if origin.x < 20 && origin.y < 20 {
-            DeveloperLogger.shared.log("Indicator", "suppressed — origin near (0,0)", metadata: [
-                "origin": String(format: "(%.0f, %.0f)", origin.x, origin.y)
-            ])
-            return
-        }
+        // Suppress screen corner failures
+        if origin.x < 20 && origin.y < 20 { return }
 
         panel.setFrameOrigin(origin)
         isFading = false
         panel.alphaValue = 1.0
         panel.orderFront(nil)
-
-        // Electron/Chromium: IMKit may return stale coordinates on the first call.
-        // Re-check position after a short delay to catch updated caret rect.
-        if let client = client {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                guard let self, let panel = self.panel, panel.isVisible, !self.isFading else { return }
-                if let result = TextInputGeometry.caretRect(for: client),
-                   result.source != .attributesAtZero {
-                    let gap: CGFloat = 4
-                    let x = TextInputGeometry.indicatorAnchorX(for: result.rect) + gap
-                    let aboveY = result.rect.origin.y + result.rect.height + gap
-                    if let screenFrame = TextInputGeometry.screenFrame(containing: result.rect),
-                       aboveY + panelSize.height > screenFrame.maxY {
-                        panel.setFrameOrigin(NSPoint(x: x, y: result.rect.origin.y - panelSize.height - gap))
-                    } else {
-                        panel.setFrameOrigin(NSPoint(x: x, y: aboveY))
-                    }
-                }
-            }
-        }
 
         fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
             guard let self = self else { return }

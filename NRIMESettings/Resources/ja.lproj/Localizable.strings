@@ -29,6 +29,10 @@
 /* GeneralTab - Display */
 "section.display" = "表示";
 "display.inlineIndicator" = "モード切替時にインライン表示";
+"display.indicatorPosition" = "インジケーター位置";
+"display.indicatorPosition.caret" = "入力カーソル位置（不安定な場合あり）";
+"display.indicatorPosition.lineStart" = "行頭位置（安定）";
+"display.indicatorPosition.mouse" = "マウスカーソル位置";
 "display.preventABC" = "ABCへの切替を防止";
 "display.preventABC.description" = "他の入力ソースが選択されると自動的にNRIMEに戻します。ログイン/復帰後約15秒間は切り替えを試み続け、以降はNRIME内蔵のEN/KO/JAショートカットを使用します。";
 "display.candidateFontSize" = "候補フォントサイズ";

@@ -86,6 +86,13 @@ struct GeneralTab: View {
             Section(L("section.display")) {
                 Toggle(L("display.inlineIndicator"), isOn: $store.inlineIndicatorEnabled)
 
+                if store.inlineIndicatorEnabled {
+                    Picker(L("display.indicatorPosition"), selection: $store.indicatorPositionMode) {
+                        Text(L("display.indicatorPosition.caret")).tag("caret")
+                        Text(L("display.indicatorPosition.mouse")).tag("mouse")
+                    }
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(L("display.preventABC"), isOn: $store.preventABCSwitch)
                     Text(L("display.preventABC.description"))
