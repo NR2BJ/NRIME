@@ -11,6 +11,10 @@ enum InputSourceSelectionResult {
 enum InputSourceSelector {
     static let bundleID = "com.nrime.inputmethod.app"
     static let visibleInputSourceID = "com.nrime.inputmethod.app.en"
+    static let secureInputFallbackSourceIDs = [
+        "com.apple.keylayout.ABC",
+        "com.apple.keylayout.US",
+    ]
 
     static func currentInputSourceID() -> String? {
         guard let currentSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
@@ -27,27 +31,43 @@ enum InputSourceSelector {
     }
 
     static func selectVisibleNRIME() -> InputSourceSelectionResult {
-        let targetSourceID = visibleInputSourceID
+        selectInputSource(id: visibleInputSourceID)
+    }
+
+    static func selectSecureInputFallback() -> InputSourceSelectionResult {
+        var lastResult: InputSourceSelectionResult?
+        for sourceID in secureInputFallbackSourceIDs {
+            let result = selectInputSource(id: sourceID)
+            if case .success = result {
+                return result
+            }
+            lastResult = result
+        }
+
+        return lastResult ?? .inputSourceNotFound(targetSourceID: secureInputFallbackSourceIDs[0])
+    }
+
+    private static func selectInputSource(id targetSourceID: String) -> InputSourceSelectionResult {
         let conditions = [
             kTISPropertyInputSourceID: targetSourceID
         ] as CFDictionary
 
         guard let sources = TISCreateInputSourceList(conditions, true)?.takeRetainedValue() as? [TISInputSource],
-              let nrimeSource = sources.first else {
+              let inputSource = sources.first else {
             return .inputSourceNotFound(targetSourceID: targetSourceID)
         }
 
-        if let enabledPtr = TISGetInputSourceProperty(nrimeSource, kTISPropertyInputSourceIsEnabled) {
+        if let enabledPtr = TISGetInputSourceProperty(inputSource, kTISPropertyInputSourceIsEnabled) {
             let enabled = Unmanaged<CFBoolean>.fromOpaque(enabledPtr).takeUnretainedValue()
             if !CFBooleanGetValue(enabled) {
-                let enableStatus = TISEnableInputSource(nrimeSource)
+                let enableStatus = TISEnableInputSource(inputSource)
                 guard enableStatus == noErr else {
                     return .enableFailed(targetSourceID: targetSourceID, status: enableStatus)
                 }
             }
         }
 
-        let status = TISSelectInputSource(nrimeSource)
+        let status = TISSelectInputSource(inputSource)
         guard status == noErr else {
             return .selectFailed(targetSourceID: targetSourceID, status: status)
         }

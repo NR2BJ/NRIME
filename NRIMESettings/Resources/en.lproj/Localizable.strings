@@ -34,7 +34,7 @@
 "display.indicatorPosition.lineStart" = "Line Start (stable)";
 "display.indicatorPosition.mouse" = "Mouse Cursor";
 "display.preventABC" = "Prevent switching to ABC";
-"display.preventABC.description" = "Automatically switch back to NRIME when another input source is selected, keep trying during the first ~15 seconds after login or wake, and rely on NRIME's internal EN/KO/JA shortcuts afterward so system input-source switching is rarely needed.";
+"display.preventABC.description" = "Automatically switch back to NRIME when another input source is selected. During secure input such as password fields, temporarily switch to ABC and restore NRIME afterward.";
 "display.candidateFontSize" = "Candidate Font Size";
 "display.candidateFontSize.description" = "Adjusts the text size in the candidate panel";
 "display.conversionTriggerKeys" = "Conversion Trigger Keys";
