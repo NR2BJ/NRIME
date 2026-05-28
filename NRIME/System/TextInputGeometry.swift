@@ -94,33 +94,8 @@ enum TextInputGeometry {
             return result
         }
 
-        // AX failed — try IMKit's firstRect for likely caret ranges.
-        for range in candidateRanges(for: client) {
-            var actualRange = NSRange(location: NSNotFound, length: 0)
-            let rect = client.firstRect(forCharacterRange: range, actualRange: &actualRange)
-            guard isUsableRect(rect) else { continue }
-
-            if shouldDeferSuspiciousFirstRect(rect, requestedRange: range, actualRange: actualRange) {
-                DeveloperLogger.shared.log("Geometry", "firstRect suspicious", metadata: [
-                    "range": "\(range.location):\(range.length)",
-                    "actual": "\(actualRange.location):\(actualRange.length)",
-                    "rect": rect.logDescription
-                ])
-                continue
-            }
-
-            let result = CaretResult(rect: rect, source: .precise)
-            lastGoodResult = result
-            DeveloperLogger.shared.log("Geometry", "firstRect success", metadata: [
-                "range": "\(range.location):\(range.length)",
-                "actual": "\(actualRange.location):\(actualRange.length)",
-                "rect": rect.logDescription
-            ])
-            return result
-        }
-
-        // firstRect failed — try attributes at caret index (fcitx5-macos approach)
-        DeveloperLogger.shared.log("Geometry", "firstRect failed, trying attributesAtCaret")
+        // AX failed — try attributes at caret index (fcitx5-macos approach)
+        DeveloperLogger.shared.log("Geometry", "AX failed, trying attributesAtCaret")
 
         // 2. attributes at caret index — works during composition in Firefox/native apps
         if let index = caretIndex(for: client) {
@@ -145,7 +120,7 @@ enum TextInputGeometry {
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         let zeroOnScreen = NSScreen.screens.contains { $0.frame.intersects(zeroRect.insetBy(dx: -50, dy: -50)) }
-        if isUsableRect(zeroRect) && zeroOnScreen {
+        if !zeroRect.equalTo(.zero) && zeroRect.height > 0 && zeroOnScreen {
             DeveloperLogger.shared.log("Geometry", "attributesAtZero", metadata: [
                 "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", zeroRect.origin.x, zeroRect.origin.y, zeroRect.width, zeroRect.height)
             ])
@@ -406,11 +381,6 @@ enum TextInputGeometry {
     private static func shouldDeferSuspiciousFirstRect(_ rect: NSRect, requestedRange: NSRange, actualRange: NSRange) -> Bool {
         guard isUsableRect(rect) else { return false }
         guard rect.width > 40 else { return false }
-
-        if actualRange.location != NSNotFound, actualRange.length > 1 {
-            let averageCharacterWidth = rect.width / CGFloat(actualRange.length)
-            return averageCharacterWidth > 40
-        }
 
         if requestedRange.length == 0 {
             return true

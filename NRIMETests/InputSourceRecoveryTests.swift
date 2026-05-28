@@ -48,54 +48,6 @@ final class InputSourceRecoveryTests: XCTestCase {
         ))
     }
 
-    func testSecureInputFallbackSelectsABCWhenNRIMEIsActive() {
-        XCTAssertEqual(
-            InputSourceRecovery.secureInputFallbackDecision(
-                preventABCSwitch: true,
-                secureInputActive: true,
-                currentSourceIsNRIME: true,
-                fallbackActive: false
-            ),
-            .selectFallback
-        )
-    }
-
-    func testSecureInputFallbackTracksExternalFallback() {
-        XCTAssertEqual(
-            InputSourceRecovery.secureInputFallbackDecision(
-                preventABCSwitch: true,
-                secureInputActive: true,
-                currentSourceIsNRIME: false,
-                fallbackActive: false
-            ),
-            .trackExternalFallback
-        )
-    }
-
-    func testSecureInputFallbackRestoresNRIMEAfterSecureInputEnds() {
-        XCTAssertEqual(
-            InputSourceRecovery.secureInputFallbackDecision(
-                preventABCSwitch: true,
-                secureInputActive: false,
-                currentSourceIsNRIME: false,
-                fallbackActive: true
-            ),
-            .restoreNRIME
-        )
-    }
-
-    func testSecureInputFallbackIsDisabledWhenProtectionIsDisabled() {
-        XCTAssertEqual(
-            InputSourceRecovery.secureInputFallbackDecision(
-                preventABCSwitch: false,
-                secureInputActive: true,
-                currentSourceIsNRIME: true,
-                fallbackActive: false
-            ),
-            .none
-        )
-    }
-
     func testRecoveryThrottleUpdatesStateAtomicallyWithinWindow() {
         let now = Date()
         let state = InputSourceRecovery.RecoveryThrottleState(

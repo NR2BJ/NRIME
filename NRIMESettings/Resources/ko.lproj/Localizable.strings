@@ -34,7 +34,7 @@
 "display.indicatorPosition.lineStart" = "줄 시작 위치 (안정적)";
 "display.indicatorPosition.mouse" = "마우스 커서 위치";
 "display.preventABC" = "ABC로 전환 방지";
-"display.preventABC.description" = "다른 입력 소스가 선택되면 자동으로 NRIME으로 전환합니다. 암호 입력처럼 보안 입력 중에는 ABC로 잠시 전환하고, 보안 입력이 끝나면 NRIME으로 돌아옵니다.";
+"display.preventABC.description" = "다른 입력 소스가 선택되면 자동으로 NRIME으로 전환합니다. 로그인/깨우기 후 약 15초간 계속 시도하며, 이후에는 NRIME 내부 EN/KO/JA 단축키를 사용합니다.";
 "display.candidateFontSize" = "후보 글꼴 크기";
 "display.candidateFontSize.description" = "후보 패널의 텍스트 크기를 조절합니다.";
 "display.conversionTriggerKeys" = "변환 트리거 키";

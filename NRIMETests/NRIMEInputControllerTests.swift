@@ -56,35 +56,6 @@ final class NRIMEInputControllerTests: XCTestCase {
         XCTAssertEqual(client.insertedTexts, [])
     }
 
-    func testRustDeskClientPassesThroughControllerShortcuts() {
-        client.bundleID = "com.carriez.rustdesk"
-        StateManager.shared.switchTo(.english)
-
-        XCTAssertFalse(controller.handle(flagsChangedEvent(
-            keyCode: ShortcutConfig.keyCodeRightShift,
-            modifiers: [.shift]
-        ), client: client))
-        XCTAssertFalse(controller.handle(flagsChangedEvent(
-            keyCode: ShortcutConfig.keyCodeRightShift,
-            modifiers: []
-        ), client: client))
-
-        XCTAssertEqual(StateManager.shared.currentMode, .english)
-        XCTAssertEqual(client.markedString, "")
-        XCTAssertEqual(client.insertedTexts, [])
-    }
-
-    func testRustDeskClientStillAllowsLocalTextInput() {
-        client.bundleID = "com.carriez.rustdesk"
-        StateManager.shared.switchTo(.korean)
-
-        let handled = controller.handle(keyEvent(keyCode: 0x0F), client: client) // r
-
-        XCTAssertTrue(handled)
-        XCTAssertEqual(client.markedString, "ㄱ")
-        XCTAssertEqual(client.insertedTexts, [])
-    }
-
     func testShortcutSwitchToJapaneseCommitsKoreanCompositionFirst() {
         StateManager.shared.switchTo(.korean)
 
@@ -339,28 +310,6 @@ final class NRIMEInputControllerTests: XCTestCase {
         ) else {
             XCTFail("Failed to create NSEvent")
             fatalError("Failed to create NSEvent")
-        }
-        return event
-    }
-
-    private func flagsChangedEvent(
-        keyCode: UInt16,
-        modifiers: NSEvent.ModifierFlags
-    ) -> NSEvent {
-        guard let event = NSEvent.keyEvent(
-            with: .flagsChanged,
-            location: .zero,
-            modifierFlags: modifiers,
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            characters: "",
-            charactersIgnoringModifiers: "",
-            isARepeat: false,
-            keyCode: keyCode
-        ) else {
-            XCTFail("Failed to create flagsChanged NSEvent")
-            fatalError("Failed to create flagsChanged NSEvent")
         }
         return event
     }

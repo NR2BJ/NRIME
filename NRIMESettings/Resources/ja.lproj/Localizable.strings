@@ -34,7 +34,7 @@
 "display.indicatorPosition.lineStart" = "行頭位置（安定）";
 "display.indicatorPosition.mouse" = "マウスカーソル位置";
 "display.preventABC" = "ABCへの切替を防止";
-"display.preventABC.description" = "他の入力ソースが選択されると自動的にNRIMEに戻します。パスワード欄などのセキュア入力中は一時的にABCへ切り替え、終了後にNRIMEへ戻します。";
+"display.preventABC.description" = "他の入力ソースが選択されると自動的にNRIMEに戻します。ログイン/復帰後約15秒間は切り替えを試み続け、以降はNRIME内蔵のEN/KO/JAショートカットを使用します。";
 "display.candidateFontSize" = "候補フォントサイズ";
 "display.candidateFontSize.description" = "候補パネルのテキストサイズを調整します";
 "display.conversionTriggerKeys" = "変換トリガーキー";

@@ -21,11 +21,6 @@ final class MozcConverter {
     private let client = MozcClient()
     private let serverManager = MozcServerManager.shared
 
-    /// Pre-create mozc session so the first conversion is instant.
-    func prewarmSession() {
-        _ = client.createSession()
-    }
-
     /// Current candidate strings for CandidatePanel display.
     var currentCandidateStrings: [String] = []
 

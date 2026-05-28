@@ -14,25 +14,16 @@ final class InputSourceRecovery {
         case halt(RecoveryThrottleState)
     }
 
-    enum SecureInputFallbackDecision: Equatable {
-        case none
-        case selectFallback
-        case trackExternalFallback
-        case restoreNRIME
-    }
-
     private let stateQueue = DispatchQueue(label: "com.nrime.inputsource.state")
     private var _userInitiatedSwitch = false
     private var _userInitiatedSwitchExpiresAt: Date?
     private var _consecutiveRecoveries = 0
     private var _lastRecoveryTime: Date?
-    private var _secureInputFallbackActive = false
 
     private let maxConsecutiveRecoveries = 3
     private let userInitiatedSwitchGracePeriod: TimeInterval = 5.0
     private var isMonitoring = false
     private var pollTimer: Timer?
-    private var secureInputPollTimer: Timer?
     private let secureInputDetector = SecureInputDetector()
     private let startupRecoveryDelays: [TimeInterval] = [0.5, 2.0, 5.0]
 
@@ -77,9 +68,6 @@ final class InputSourceRecovery {
         // Fallback: poll every 3 seconds to catch missed notifications (sleep/wake, etc.)
         pollTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.pollInputSource()
-        }
-        secureInputPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.handleSecureInputFallback(reason: "secure_timer")
         }
 
         // Check immediately after wake from sleep
@@ -133,8 +121,6 @@ final class InputSourceRecovery {
         )
         pollTimer?.invalidate()
         pollTimer = nil
-        secureInputPollTimer?.invalidate()
-        secureInputPollTimer = nil
 
         NSLog("NRIME: InputSourceRecovery monitoring stopped")
         DeveloperLogger.shared.log("InputSourceRecovery", "Monitoring stopped")
@@ -164,10 +150,6 @@ final class InputSourceRecovery {
 
     private func attemptStartupRecovery(after delay: TimeInterval) {
         let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
-        if handleSecureInputFallback(reason: "startup", currentSourceID: InputSourceSelector.currentInputSourceID()) {
-            return
-        }
-
         let secureInputActive = secureInputDetector.isSecureInputActive()
         let shouldRecover = Self.shouldRecoverInputSource(
             preventABCSwitch: Settings.shared.preventABCSwitch,
@@ -197,10 +179,6 @@ final class InputSourceRecovery {
 
     private func pollInputSource(reason: String = "timer", allowUnknownSourceRecovery: Bool = false) {
         let currentSourceID = InputSourceSelector.currentInputSourceID()
-        if handleSecureInputFallback(reason: reason, currentSourceID: currentSourceID) {
-            return
-        }
-
         let currentSourceIsNonNRIME = Self.shouldTreatSourceAsRecoverable(
             currentSourceID,
             allowUnknownSourceRecovery: allowUnknownSourceRecovery
@@ -227,11 +205,6 @@ final class InputSourceRecovery {
     }
 
     @objc private func inputSourceChanged(_ notification: Notification) {
-        let currentSourceID = InputSourceSelector.currentInputSourceID()
-        if handleSecureInputFallback(reason: "input_source_changed", currentSourceID: currentSourceID) {
-            return
-        }
-
         let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
         let secureInputActive = secureInputDetector.isSecureInputActive()
         let currentUserInitiatedSwitch = userInitiatedSwitch
@@ -270,115 +243,8 @@ final class InputSourceRecovery {
         return currentSourceIsNonNRIME
     }
 
-    static func secureInputFallbackDecision(
-        preventABCSwitch: Bool,
-        secureInputActive: Bool,
-        currentSourceIsNRIME: Bool,
-        fallbackActive: Bool
-    ) -> SecureInputFallbackDecision {
-        guard preventABCSwitch else { return .none }
-
-        if secureInputActive {
-            if currentSourceIsNRIME {
-                return .selectFallback
-            }
-            return fallbackActive ? .none : .trackExternalFallback
-        }
-
-        return fallbackActive ? .restoreNRIME : .none
-    }
-
     private func isCurrentSourceNonNRIME() -> Bool {
         InputSourceSelector.currentSourceIsNonNRIME()
-    }
-
-    @discardableResult
-    private func handleSecureInputFallback(reason: String, currentSourceID: String? = nil) -> Bool {
-        let resolvedSourceID = currentSourceID ?? InputSourceSelector.currentInputSourceID()
-        let currentSourceIsNRIME = resolvedSourceID?.hasPrefix(InputSourceSelector.bundleID) ?? false
-        let secureInputActive = secureInputDetector.isSecureInputActive()
-        let decision = Self.secureInputFallbackDecision(
-            preventABCSwitch: Settings.shared.preventABCSwitch,
-            secureInputActive: secureInputActive,
-            currentSourceIsNRIME: currentSourceIsNRIME,
-            fallbackActive: secureInputFallbackActive
-        )
-
-        switch decision {
-        case .none:
-            return false
-
-        case .selectFallback:
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input fallback selecting ABC", metadata: [
-                "currentSourceID": resolvedSourceID ?? "nil",
-                "reason": reason
-            ])
-            secureInputFallbackActive = selectSecureInputFallback()
-            return true
-
-        case .trackExternalFallback:
-            secureInputFallbackActive = true
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input fallback tracked", metadata: [
-                "currentSourceID": resolvedSourceID ?? "nil",
-                "reason": reason
-            ])
-            return false
-
-        case .restoreNRIME:
-            secureInputFallbackActive = false
-            userInitiatedSwitch = false
-            guard !currentSourceIsNRIME else { return false }
-
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input fallback restoring NRIME", metadata: [
-                "currentSourceID": resolvedSourceID ?? "nil",
-                "reason": reason
-            ])
-            recoverInputSource()
-            return true
-        }
-    }
-
-    private var secureInputFallbackActive: Bool {
-        get {
-            stateQueue.sync {
-                _secureInputFallbackActive
-            }
-        }
-        set {
-            stateQueue.sync {
-                _secureInputFallbackActive = newValue
-            }
-        }
-    }
-
-    private func selectSecureInputFallback() -> Bool {
-        switch InputSourceSelector.selectSecureInputFallback() {
-        case let .success(targetSourceID):
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input fallback selected", metadata: [
-                "targetSourceID": targetSourceID
-            ])
-            return true
-        case let .inputSourceNotFound(targetSourceID):
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input fallback failed", metadata: [
-                "reason": "input_source_not_found",
-                "targetSourceID": targetSourceID
-            ])
-            return false
-        case let .enableFailed(targetSourceID, status):
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input fallback failed", metadata: [
-                "reason": "enable_failed",
-                "status": String(status),
-                "targetSourceID": targetSourceID
-            ])
-            return false
-        case let .selectFailed(targetSourceID, status):
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input fallback failed", metadata: [
-                "reason": "select_failed",
-                "status": String(status),
-                "targetSourceID": targetSourceID
-            ])
-            return false
-        }
     }
 
     private func recoverInputSource() {

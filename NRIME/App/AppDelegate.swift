@@ -6,8 +6,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var candidatePanel: CandidatePanel!
 
     private var statusItem: NSStatusItem!
-    private var statusMenu: NSMenu!
-    private var languageMenu: NSMenu!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let connectionName = Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String
@@ -37,18 +35,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         updateStatusIcon(for: StateManager.shared.currentMode)
-        if let button = statusItem.button {
-            button.target = self
-            button.action = #selector(statusItemClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        }
 
         // Listen for mode changes
         StateManager.shared.onStatusIconUpdate = { [weak self] mode in
             self?.updateStatusIcon(for: mode)
         }
 
-        // Build main menu
+        // Build menu
         let menu = NSMenu()
 
         let settingsItem = NSMenuItem(title: "NRIME Settings...", action: #selector(openSettings), keyEquivalent: ",")
@@ -65,22 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         quitItem.target = self
         menu.addItem(quitItem)
 
-        statusMenu = menu
-
-        // Build language menu for right-click.
-        let languageMenu = NSMenu()
-
-        let koreanItem = NSMenuItem(title: "Korean", action: #selector(switchKorean), keyEquivalent: "")
-        koreanItem.target = self
-        koreanItem.tag = 2
-        languageMenu.addItem(koreanItem)
-
-        let japaneseItem = NSMenuItem(title: "Japanese", action: #selector(switchJapanese), keyEquivalent: "")
-        japaneseItem.target = self
-        japaneseItem.tag = 3
-        languageMenu.addItem(japaneseItem)
-
-        self.languageMenu = languageMenu
+        statusItem.menu = menu
     }
 
     func updateStatusIcon(for mode: InputMode) {
@@ -108,53 +86,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         image.isTemplate = true
         return image
-    }
-
-    @objc private func statusItemClicked(_ sender: Any?) {
-        guard let event = NSApp.currentEvent else {
-            popUpStatusMenu(statusMenu)
-            return
-        }
-
-        if event.modifierFlags.contains(.control) {
-            StateManager.shared.toggleNonEnglish()
-        } else if event.type == .rightMouseUp {
-            updateLanguageMenuState()
-            popUpStatusMenu(languageMenu)
-        } else {
-            popUpStatusMenu(statusMenu)
-        }
-    }
-
-    private func popUpStatusMenu(_ menu: NSMenu) {
-        guard let button = statusItem.button else { return }
-        menu.popUp(
-            positioning: nil,
-            at: NSPoint(x: 0, y: button.bounds.height + 2),
-            in: button
-        )
-    }
-
-    private func updateLanguageMenuState() {
-        let currentMode = StateManager.shared.currentMode
-        languageMenu.items.forEach { item in
-            switch item.tag {
-            case 2:
-                item.state = currentMode == .korean ? .on : .off
-            case 3:
-                item.state = currentMode == .japanese ? .on : .off
-            default:
-                item.state = .off
-            }
-        }
-    }
-
-    @objc private func switchKorean() {
-        StateManager.shared.switchTo(.korean)
-    }
-
-    @objc private func switchJapanese() {
-        StateManager.shared.switchTo(.japanese)
     }
 
     @objc private func openSettings() {

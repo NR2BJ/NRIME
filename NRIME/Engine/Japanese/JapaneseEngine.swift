@@ -21,11 +21,6 @@ final class JapaneseEngine: InputEngine {
     /// Tracks whether Caps Lock katakana mode is active (for commitComposing to use).
     private var capsLockKatakanaActive = false
 
-    /// Pre-create mozc session so the first conversion is instant.
-    func prewarmSession() {
-        mozcConverter.prewarmSession()
-    }
-
     /// Whether live conversion is currently active (Mozc has been fed characters during composing).
     private var liveConversionActive = false
 
