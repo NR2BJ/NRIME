@@ -84,7 +84,13 @@ During conversion: `Up/Down` to navigate, `1-9` for direct selection, `Enter` to
 
 ## Settings
 
-Click the NRIME icon in the menu bar to open the settings app.
+The NRIME menu bar icon supports these actions.
+
+| Action | Behavior |
+|--------|----------|
+| Left click | Open the NRIME menu (settings, restart, quit) |
+| Control-click | Toggle Korean / Japanese |
+| Right click | Open the language menu (Korean/Japanese) |
 
 ### General Tab
 
