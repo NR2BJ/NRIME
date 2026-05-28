@@ -58,10 +58,9 @@ final class InlineIndicator {
         if origin.x < 20 && origin.y < 20 { return }
 
         panel.setFrameOrigin(origin)
-        panel.level = OverlayWindowLevel.frontmostOverlayLevel
         isFading = false
         panel.alphaValue = 1.0
-        panel.orderFrontRegardless()
+        panel.orderFront(nil)
 
         fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
             guard let self = self else { return }
@@ -87,7 +86,6 @@ final class InlineIndicator {
                 defer: false
             )
             p.level = .floating
-            p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             p.ignoresMouseEvents = true
             p.isOpaque = false
             p.backgroundColor = .clear

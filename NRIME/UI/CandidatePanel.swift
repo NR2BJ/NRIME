@@ -93,8 +93,7 @@ final class CandidatePanel {
         if let panel = panel {
             let origin = caretOrigin(from: client, panelWidth: panel.frame.width)
             panel.setFrameOrigin(origin)
-            panel.level = OverlayWindowLevel.frontmostOverlayLevel
-            panel.orderFrontRegardless()
+            panel.orderFront(nil)
         }
     }
 
@@ -236,7 +235,6 @@ final class CandidatePanel {
             defer: false
         )
         panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.ignoresMouseEvents = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
