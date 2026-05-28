@@ -19,6 +19,25 @@ class NRIMEInputController: IMKInputController {
     /// because self.client() may be nil by the time the callback fires.
     private var cachedClient: AnyObject?
 
+    private static let controllerBypassBundleIDs: Set<String> = [
+        "com.nrime.settings",
+    ]
+
+    private static let remoteShortcutPassthroughBundleIDs: Set<String> = [
+        "com.carriez.rustdesk",
+        "com.p5sys.jump.mac.viewer",
+        "com.p5sys.jump.mac.viewer.web",
+        "tv.parsec.www",
+    ]
+
+    private static let remotePassthroughShortcutNames = [
+        "toggleEnglish",
+        "toggleNonEnglish",
+        "switchKorean",
+        "switchJapanese",
+        "hanjaConvert",
+    ]
+
 #if DEBUG
     /// Test seam for controller-level unit tests that run without a real IMK client proxy.
     var testingClientOverride: (any IMKTextInput)?
@@ -70,6 +89,18 @@ class NRIMEInputController: IMKInputController {
         // 1.5. Pass through all events when NRIMESettings is the active app
         // NRIMESettings: allow normal input (Japanese/Korean) in text fields.
         // Shortcut recording uses its own NSEvent monitor, unaffected by this.
+        if Self.shouldBypassController(for: client) {
+            shortcutHandler.reset()
+            NSApp.candidatePanel?.hide()
+            return false
+        }
+        // Remote desktop apps: pass configured NRIME shortcuts through to the host,
+        // while still allowing local text fields in the remote app to use NRIME.
+        if Self.shouldPassThroughRemoteShortcut(event, for: client) {
+            shortcutHandler.reset()
+            NSApp.candidatePanel?.hide()
+            return false
+        }
 
         // 1.7. Preemptive commit on Cmd/Ctrl down (Electron workaround):
         // When Cmd or Ctrl is pressed while composing, commit immediately.
@@ -388,10 +419,16 @@ class NRIMEInputController: IMKInputController {
         // Wire up mode change callback for inline indicator
         StateManager.shared.onModeChanged = { [weak self] mode in
             if Settings.shared.inlineIndicatorEnabled {
-                // Pre-commit position was already captured in shortcutAction.
-                // show() will use lastGoodResult which has the accurate pre-commit coords.
                 let client = self?.resolvedClient()
                 InlineIndicator.shared.show(for: mode, client: client)
+            }
+            // Pre-create mozc session when switching to Japanese
+            // so the first conversion doesn't pay session creation cost.
+            if mode == .japanese {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    _ = MozcServerManager.shared.ensureServerRunning()
+                    self?.japaneseEngine.prewarmSession()
+                }
             }
         }
 
@@ -598,6 +635,37 @@ class NRIMEInputController: IMKInputController {
         }
 #endif
         return self.client()
+    }
+
+    private static func shouldBypassController(for client: any IMKTextInput) -> Bool {
+        guard let bundleID = client.bundleIdentifier() else { return false }
+        return controllerBypassBundleIDs.contains(bundleID)
+    }
+
+    private static func shouldPassThroughRemoteShortcut(_ event: NSEvent, for client: any IMKTextInput) -> Bool {
+        guard let bundleID = client.bundleIdentifier(),
+              remoteShortcutPassthroughBundleIDs.contains(bundleID) else {
+            return false
+        }
+
+        return remotePassthroughShortcutNames.contains { shortcutName in
+            let config = Settings.shared.shortcut(for: shortcutName)
+            guard !config.disabled else { return false }
+
+            if config.isModifierOnlyTap {
+                return event.type == .flagsChanged && event.keyCode == config.keyCode
+            }
+
+            guard event.type == .keyDown, event.keyCode == config.keyCode else {
+                return false
+            }
+
+            let requiredFlags = NSEvent.ModifierFlags(rawValue: UInt(config.modifiers))
+            let significantFlags: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+            let eventSignificant = event.modifierFlags.intersection(significantFlags)
+            let requiredSignificant = requiredFlags.intersection(significantFlags)
+            return eventSignificant == requiredSignificant
+        }
     }
 
 #if DEBUG

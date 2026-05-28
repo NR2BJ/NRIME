@@ -234,7 +234,9 @@ final class CandidatePanel {
             backing: .buffered,
             defer: false
         )
-        panel.level = .floating
+        // Candidate windows should sit above Spotlight-like utility panels.
+        panel.level = .popUpMenu
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.ignoresMouseEvents = false
         panel.isOpaque = false
         panel.backgroundColor = .clear

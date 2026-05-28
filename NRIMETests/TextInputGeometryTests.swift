@@ -3,6 +3,16 @@ import XCTest
 
 final class TextInputGeometryTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        TextInputGeometry.resetCache()
+    }
+
+    override func tearDown() {
+        TextInputGeometry.resetCache()
+        super.tearDown()
+    }
+
     func testCaretRectUsesSelectedRangeForFirstRectLookup() {
         let client = MockTextInputClient()
         client.setSelectedRange(NSRange(location: 12, length: 0))

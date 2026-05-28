@@ -7,35 +7,45 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="$PROJECT_DIR/build"
-PKG_DIR="$BUILD_DIR/pkg"
+OUTPUT_DIR="$PROJECT_DIR/build"
+XCODE_BUILD_DIR="$OUTPUT_DIR/pkg-products"
+PKG_DIR="$OUTPUT_DIR/pkg"
 SCRIPTS_DIR="$PROJECT_DIR/Tools/pkg"
 VERSION=""
 
 echo "=== NRIME PKG Builder ==="
 
-# 1. Generate Xcode project
-echo "Generating Xcode project..."
-xcodegen generate --spec "$PROJECT_DIR/project.yml" --project "$PROJECT_DIR"
+# 1. Generate Xcode project when xcodegen is available.
+if command -v xcodegen >/dev/null 2>&1; then
+    echo "Generating Xcode project..."
+    xcodegen generate --spec "$PROJECT_DIR/project.yml" --project "$PROJECT_DIR"
+elif [ -d "$PROJECT_DIR/NRIME.xcodeproj" ]; then
+    echo "xcodegen not found; using existing NRIME.xcodeproj"
+else
+    echo "ERROR: xcodegen is not installed and NRIME.xcodeproj is missing."
+    exit 1
+fi
 
 # 2. Build Release
+rm -rf "$XCODE_BUILD_DIR"
+
 echo "Building NRIME (Release)..."
 xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
     -scheme NRIME -configuration Release \
-    SYMROOT="$BUILD_DIR" \
+    SYMROOT="$XCODE_BUILD_DIR" \
     build
 
 echo "Building NRIMESettings (Release)..."
 xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
     -scheme NRIMESettings -configuration Release \
-    SYMROOT="$BUILD_DIR" \
+    SYMROOT="$XCODE_BUILD_DIR" \
     build
 
 # NRIMERestoreHelper removed — NRIME handles input source recovery internally
 
 # Verify build products exist
-NRIME_APP="$BUILD_DIR/Release/NRIME.app"
-SETTINGS_APP="$BUILD_DIR/Release/NRIMESettings.app"
+NRIME_APP="$XCODE_BUILD_DIR/Release/NRIME.app"
+SETTINGS_APP="$XCODE_BUILD_DIR/Release/NRIMESettings.app"
 
 if [ ! -d "$NRIME_APP" ]; then
     echo "ERROR: NRIME.app not found at $NRIME_APP"
@@ -103,12 +113,12 @@ sed "s/__VERSION__/$VERSION/g" "$SCRIPTS_DIR/distribution.xml" > "$PKG_DIR/distr
 productbuild \
     --distribution "$PKG_DIR/distribution.xml" \
     --package-path "$PKG_DIR" \
-    "$BUILD_DIR/NRIME-$VERSION.pkg"
+    "$OUTPUT_DIR/NRIME-$VERSION.pkg"
 
 # Cleanup intermediate files
 rm -rf "$PKG_DIR"
 
 echo ""
 echo "=== Done ==="
-echo "Installer: $BUILD_DIR/NRIME-$VERSION.pkg"
-echo "Size: $(du -h "$BUILD_DIR/NRIME-$VERSION.pkg" | cut -f1)"
+echo "Installer: $OUTPUT_DIR/NRIME-$VERSION.pkg"
+echo "Size: $(du -h "$OUTPUT_DIR/NRIME-$VERSION.pkg" | cut -f1)"
