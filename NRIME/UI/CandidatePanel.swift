@@ -93,7 +93,8 @@ final class CandidatePanel {
         if let panel = panel {
             let origin = caretOrigin(from: client, panelWidth: panel.frame.width)
             panel.setFrameOrigin(origin)
-            panel.orderFront(nil)
+            panel.level = OverlayWindowLevel.frontmostOverlayLevel
+            panel.orderFrontRegardless()
         }
     }
 
@@ -234,9 +235,8 @@ final class CandidatePanel {
             backing: .buffered,
             defer: false
         )
-        // Candidate windows should sit above Spotlight-like utility panels.
-        panel.level = .popUpMenu
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.ignoresMouseEvents = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
