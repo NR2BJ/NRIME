@@ -367,9 +367,10 @@ final class JapaneseEngine: InputEngine {
 
         // Symbol keys (punctuation, brackets, shifted symbols like ! ?) —
         // commit composing text, then insert the symbol styled per settings.
-        // Skipped when Shift/Caps Lock romaji passthrough expects raw ASCII.
-        if !isRomajiPassthrough(shifted: isShifted, capsLockOn: isCapsLockOn),
-           let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
+        // Width comes from punctuationStyle alone; the Shift and Caps Lock romaji
+        // actions govern letters (kana vs romaji) and must not reach symbols,
+        // otherwise ! and ? ignore the punctuation setting entirely.
+        if let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
             if liveConversionActive {
                 commitLiveConversion(client: client)
             } else {
@@ -560,9 +561,7 @@ final class JapaneseEngine: InputEngine {
         }
 
         // Symbol keys — dismiss prediction and insert the styled symbol
-        let isCapsLockOn = event.modifierFlags.contains(.capsLock)
-        if !isRomajiPassthrough(shifted: isShifted, capsLockOn: isCapsLockOn),
-           let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
+        if let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
             dismissPrediction()
             client.insertText(symbol as NSString, replacementRange: replacementRange())
             return true
@@ -735,9 +734,7 @@ final class JapaneseEngine: InputEngine {
         }
 
         // Symbol keys — commit the conversion, then insert the styled symbol.
-        let isCapsLockOn = event.modifierFlags.contains(.capsLock)
-        if !isRomajiPassthrough(shifted: isShifted, capsLockOn: isCapsLockOn),
-           let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
+        if let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
             commitConversion(client: client)
             client.insertText(symbol as NSString, replacementRange: replacementRange())
             return true
@@ -1229,14 +1226,6 @@ final class JapaneseEngine: InputEngine {
 
         guard let pair else { return nil }
         return style == .halfWidthWestern ? pair.half : pair.full
-    }
-
-    /// Whether raw-ASCII passthrough is expected for this event (Shift/Caps Lock
-    /// configured as romaji input) — symbol conversion must be skipped then.
-    private func isRomajiPassthrough(shifted: Bool, capsLockOn: Bool) -> Bool {
-        let config = Settings.shared.japaneseKeyConfig
-        return (shifted && config.shiftKeyAction == .romaji)
-            || (capsLockOn && config.capsLockAction == .romaji)
     }
 
     private func replacementRange() -> NSRange {

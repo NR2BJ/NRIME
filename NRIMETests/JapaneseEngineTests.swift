@@ -78,16 +78,62 @@ final class JapaneseEngineTests: XCTestCase {
         XCTAssertEqual(client.composedText, "あ？")
     }
 
-    func testShiftedSymbolPassesThroughInRomajiShiftMode() {
+    // MARK: - Romaji Shift/Caps Lock actions apply to letters, never to symbols
+
+    func testShiftedSymbolStillFollowsPunctuationStyleInRomajiShiftMode() {
+        // shiftKeyAction switches letters from kana to romaji. It must not
+        // suppress symbol styling, or ! and ? silently ignore the setting.
         var config = Settings.shared.japaneseKeyConfig
         config.shiftKeyAction = .romaji
+        config.punctuationStyle = .japanese
         Settings.shared.japaneseKeyConfig = config
 
         let handled = engine.handleEvent(
             keyEvent(keyCode: 0x12, modifiers: [.shift]), client: client) // Shift+1 = !
 
-        XCTAssertFalse(handled, "Shift-romaji mode should pass raw ASCII through")
-        XCTAssertEqual(client.insertedTexts, [])
+        XCTAssertTrue(handled)
+        XCTAssertEqual(client.insertedTexts, ["！"])
+    }
+
+    func testShiftedSymbolStaysASCIIWhenStyleIsHalfWidth() {
+        // Same romaji setting, but the punctuation style now asks for ASCII —
+        // this is the only switch that should make ！ come out as !.
+        var config = Settings.shared.japaneseKeyConfig
+        config.shiftKeyAction = .romaji
+        config.punctuationStyle = .halfWidthWestern
+        Settings.shared.japaneseKeyConfig = config
+
+        XCTAssertTrue(engine.handleEvent(
+            keyEvent(keyCode: 0x12, modifiers: [.shift]), client: client))
+
+        XCTAssertEqual(client.insertedTexts, ["!"])
+    }
+
+    func testRomajiShiftStillBypassesKanaForLetters() {
+        // Regression guard: the letter behaviour the setting exists for.
+        var config = Settings.shared.japaneseKeyConfig
+        config.shiftKeyAction = .romaji
+        Settings.shared.japaneseKeyConfig = config
+
+        XCTAssertTrue(engine.handleEvent(
+            keyEvent(keyCode: 0x00, modifiers: [.shift]), client: client)) // Shift+a
+
+        XCTAssertEqual(client.insertedTexts, ["a"], "Shift+letter inserts romaji, not あ")
+    }
+
+    func testCapsLockKatakanaUserConfigStillStylesSymbols() {
+        // The reporting user's exact combination: Shift=romaji, CapsLock=katakana.
+        var config = Settings.shared.japaneseKeyConfig
+        config.shiftKeyAction = .romaji
+        config.capsLockAction = .katakana
+        config.punctuationStyle = .fullWidthWestern
+        config.fullWidthSpace = true
+        Settings.shared.japaneseKeyConfig = config
+
+        XCTAssertTrue(engine.handleEvent(
+            keyEvent(keyCode: 0x2C, modifiers: [.shift]), client: client)) // Shift+/ = ?
+
+        XCTAssertEqual(client.insertedTexts, ["？"])
     }
 
     // MARK: - Styled symbol mapping (pure)
