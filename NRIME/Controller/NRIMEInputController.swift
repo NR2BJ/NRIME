@@ -128,11 +128,13 @@ class NRIMEInputController: IMKInputController {
         }
 
         // Number keys 1-9: select candidate and commit the segment
+        // (Shift+number is a symbol like ！ — let the engine handle it)
         let numberMap: [UInt16: Int] = [
             0x12: 0, 0x13: 1, 0x14: 2, 0x15: 3, 0x17: 4,
             0x16: 5, 0x1A: 6, 0x1C: 7, 0x19: 8
         ]
-        if let offset = numberMap[event.keyCode],
+        if !event.modifierFlags.contains(.shift),
+           let offset = numberMap[event.keyCode],
            let panel = NSApp.candidatePanel, panel.isVisible() {
             let pageStart = panel.currentPage * panel.effectivePageSize
             let candidateIndex = pageStart + offset

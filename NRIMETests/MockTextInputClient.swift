@@ -3,6 +3,9 @@ import InputMethodKit
 
 final class MockTextInputClient: NSObject, IMKTextInput {
     private(set) var insertedTexts: [String] = []
+    /// Every setMarkedText payload in call order — lets tests assert that commit
+    /// paths never call setMarkedText("") around insertText (oldHasMarkedText).
+    private(set) var markedTextHistory: [String] = []
     private(set) var markedString: String = ""
     private(set) var markedSelectionRange: NSRange = NSRange(location: 0, length: 0)
     private var plainText: String = ""
@@ -36,6 +39,7 @@ final class MockTextInputClient: NSObject, IMKTextInput {
     }
 
     func setMarkedText(_ string: Any!, selectionRange: NSRange, replacementRange: NSRange) {
+        markedTextHistory.append(Self.plainString(from: string))
         markedString = Self.plainString(from: string)
         markedSelectionRange = selectionRange
         currentSelectionRange = selectionRange

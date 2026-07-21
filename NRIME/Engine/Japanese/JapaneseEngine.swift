@@ -113,11 +113,8 @@ final class JapaneseEngine: InputEngine {
                     preedit: mozcConverter.currentPreedit,
                     originalHiragana: mozcConverter.originalHiragana
                 ) {
-                client.setMarkedText(
-                    "" as NSString,
-                    selectionRange: NSRange(location: 0, length: 0),
-                    replacementRange: replacementRange()
-                )
+                // Commit via insertText only — setMarkedText("") first deletes the
+                // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
                 client.insertText(text as NSString, replacementRange: replacementRange())
             }
             conversionState = .composing
@@ -132,11 +129,8 @@ final class JapaneseEngine: InputEngine {
         guard composer.isComposing else { return }
         let text = composer.flush()
         if !text.isEmpty {
-            client.setMarkedText(
-                "" as NSString,
-                selectionRange: NSRange(location: 0, length: 0),
-                replacementRange: replacementRange()
-            )
+            // Commit via insertText only — setMarkedText("") first deletes the
+            // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
     }
@@ -190,9 +184,8 @@ final class JapaneseEngine: InputEngine {
                     showCandidateWindow(client: client)
                 }
             } else {
-                client.setMarkedText("" as NSString,
-                                     selectionRange: NSRange(location: 0, length: 0),
-                                     replacementRange: replacementRange())
+                // insertText above already ended the composition — do not call
+                // setMarkedText("") here (oldHasMarkedText trigger in Chromium).
 
                 // Trigger prediction after commit if enabled
                 triggerPredictionIfEnabled(client: client)
@@ -372,8 +365,11 @@ final class JapaneseEngine: InputEngine {
             return false
         }
 
-        // Punctuation, slash, yen — configurable Japanese symbol handling (only without Shift)
-        if !isShifted, let symbol = symbolForKeyCode(keyCode) {
+        // Symbol keys (punctuation, brackets, shifted symbols like ! ?) —
+        // commit composing text, then insert the symbol styled per settings.
+        // Skipped when Shift/Caps Lock romaji passthrough expects raw ASCII.
+        if !isRomajiPassthrough(shifted: isShifted, capsLockOn: isCapsLockOn),
+           let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
             if liveConversionActive {
                 commitLiveConversion(client: client)
             } else {
@@ -498,12 +494,12 @@ final class JapaneseEngine: InputEngine {
             return true
         }
 
-        // Number keys 1-9 — direct selection
+        // Number keys 1-9 — direct selection (Shift+number is a symbol, not selection)
         let numberMap: [UInt16: Int] = [
             0x12: 0, 0x13: 1, 0x14: 2, 0x15: 3, 0x17: 4,
             0x16: 5, 0x1A: 6, 0x1C: 7, 0x19: 8
         ]
-        if let offset = numberMap[keyCode] {
+        if !isShifted, let offset = numberMap[keyCode] {
             let panel = NSApp.candidatePanel
             let pageStart = (panel?.currentPage ?? 0) * (panel?.effectivePageSize ?? 9)
             let candidateIndex = pageStart + offset
@@ -561,6 +557,15 @@ final class JapaneseEngine: InputEngine {
         if keyCode == backspaceKeyCode {
             dismissPrediction()
             return false
+        }
+
+        // Symbol keys — dismiss prediction and insert the styled symbol
+        let isCapsLockOn = event.modifierFlags.contains(.capsLock)
+        if !isRomajiPassthrough(shifted: isShifted, capsLockOn: isCapsLockOn),
+           let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
+            dismissPrediction()
+            client.insertText(symbol as NSString, replacementRange: replacementRange())
+            return true
         }
 
         // Any other key — dismiss prediction and pass through
@@ -687,12 +692,8 @@ final class JapaneseEngine: InputEngine {
             capsLockKatakanaActive = false
         }
         if !text.isEmpty {
-            // Explicitly end composition first, then insert committed text.
-            client.setMarkedText(
-                "" as NSString,
-                selectionRange: NSRange(location: 0, length: 0),
-                replacementRange: replacementRange()
-            )
+            // Commit via insertText only — setMarkedText("") first deletes the
+            // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
 
@@ -730,6 +731,15 @@ final class JapaneseEngine: InputEngine {
         // so Backspace works naturally (one char at a time, no ghost text).
         if keyCode == 0x35 {
             revertToComposing(client: client)
+            return true
+        }
+
+        // Symbol keys — commit the conversion, then insert the styled symbol.
+        let isCapsLockOn = event.modifierFlags.contains(.capsLock)
+        if !isRomajiPassthrough(shifted: isShifted, capsLockOn: isCapsLockOn),
+           let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
+            commitConversion(client: client)
+            client.insertText(symbol as NSString, replacementRange: replacementRange())
             return true
         }
 
@@ -928,12 +938,8 @@ final class JapaneseEngine: InputEngine {
                 preedit: mozcConverter.currentPreedit,
                 originalHiragana: mozcConverter.originalHiragana
             ) {
-            // Explicitly end composition first, then insert committed text.
-            client.setMarkedText(
-                "" as NSString,
-                selectionRange: NSRange(location: 0, length: 0),
-                replacementRange: replacementRange()
-            )
+            // Commit via insertText only — setMarkedText("") first deletes the
+            // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
         if submittedText == nil {
@@ -966,12 +972,8 @@ final class JapaneseEngine: InputEngine {
             capsLockKatakanaActive = false
         }
         if !text.isEmpty {
-            // Explicitly end composition first, then insert committed text.
-            client.setMarkedText(
-                "" as NSString,
-                selectionRange: NSRange(location: 0, length: 0),
-                replacementRange: replacementRange()
-            )
+            // Commit via insertText only — setMarkedText("") first deletes the
+            // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
     }
@@ -1138,33 +1140,103 @@ final class JapaneseEngine: InputEngine {
         }
     }
 
-    /// Returns a Japanese symbol string for punctuation/slash/yen keys based on settings,
+    /// Returns a Japanese symbol string for symbol/punctuation keys based on settings,
     /// or nil if the keyCode should not produce a special symbol.
-    private func symbolForKeyCode(_ keyCode: UInt16) -> String? {
-        let config = Settings.shared.japaneseKeyConfig
+    private func symbolForKeyCode(_ keyCode: UInt16, shifted: Bool) -> String? {
+        Self.styledSymbol(keyCode: keyCode, shifted: shifted,
+                          config: Settings.shared.japaneseKeyConfig)
+    }
 
-        switch keyCode {
-        case 0x2F: // Period key
-            switch config.punctuationStyle {
-            case .japanese: return "\u{3002}"       // 。
+    /// Full symbol map for the US-ANSI layout, styled by the punctuation setting:
+    /// .japanese uses Japanese conventions (。、「」〜), .fullWidthWestern uses
+    /// full-width Western forms (．，［］～), .halfWidthWestern stays ASCII.
+    /// keyCode-based (not event.characters) for Electron compatibility.
+    static func styledSymbol(keyCode: UInt16, shifted: Bool,
+                             config: JapaneseKeyConfig) -> String? {
+        let style = config.punctuationStyle
+
+        // Keys with dedicated settings or style-specific (non-width) forms
+        switch (keyCode, shifted) {
+        case (0x2F, false): // Period key
+            switch style {
+            case .japanese: return "\u{3002}"         // 。
             case .fullWidthWestern: return "\u{FF0E}" // ．
             case .halfWidthWestern: return "."
             }
-        case 0x2B: // Comma key
-            switch config.punctuationStyle {
-            case .japanese: return "\u{3001}"       // 、
+        case (0x2B, false): // Comma key
+            switch style {
+            case .japanese: return "\u{3001}"         // 、
             case .fullWidthWestern: return "\u{FF0C}" // ，
             case .halfWidthWestern: return ","
             }
-        case 0x2C: // Slash key
-            return config.slashToNakaguro ? "\u{30FB}" : "/"
-        case 0x5D: // Yen key (JIS keyboard)
-            return config.yenKeyToYen ? "\u{00A5}" : "\\"
-        case 0x2A: // Backslash key (US keyboard)
-            return config.yenKeyToYen ? "\u{00A5}" : "\\"
+        case (0x2C, false): // Slash key
+            if config.slashToNakaguro { return "\u{30FB}" } // ・
+            return style == .halfWidthWestern ? "/" : "\u{FF0F}" // ／
+        case (0x2A, false), (0x5D, false): // Backslash (US) / Yen key (JIS)
+            if config.yenKeyToYen { return "\u{00A5}" } // ¥
+            return style == .halfWidthWestern ? "\\" : "\u{FF3C}" // ＼
+        case (0x21, false): // [
+            switch style {
+            case .japanese: return "\u{300C}"         // 「
+            case .fullWidthWestern: return "\u{FF3B}" // ［
+            case .halfWidthWestern: return "["
+            }
+        case (0x1E, false): // ]
+            switch style {
+            case .japanese: return "\u{300D}"         // 」
+            case .fullWidthWestern: return "\u{FF3D}" // ］
+            case .halfWidthWestern: return "]"
+            }
+        case (0x32, true): // ~
+            switch style {
+            case .japanese: return "\u{301C}"         // 〜 (wave dash)
+            case .fullWidthWestern: return "\u{FF5E}" // ～
+            case .halfWidthWestern: return "~"
+            }
         default:
-            return nil
+            break
         }
+
+        // Symbols whose full-width form is shared by .japanese and .fullWidthWestern
+        let pair: (full: String, half: String)?
+        switch (keyCode, shifted) {
+        case (0x12, true): pair = ("\u{FF01}", "!")  // ！
+        case (0x13, true): pair = ("\u{FF20}", "@")  // ＠
+        case (0x14, true): pair = ("\u{FF03}", "#")  // ＃
+        case (0x15, true): pair = ("\u{FF04}", "$")  // ＄
+        case (0x17, true): pair = ("\u{FF05}", "%")  // ％
+        case (0x16, true): pair = ("\u{FF3E}", "^")  // ＾
+        case (0x1A, true): pair = ("\u{FF06}", "&")  // ＆
+        case (0x1C, true): pair = ("\u{FF0A}", "*")  // ＊
+        case (0x19, true): pair = ("\u{FF08}", "(")  // （
+        case (0x1D, true): pair = ("\u{FF09}", ")")  // ）
+        case (0x1B, true): pair = ("\u{FF3F}", "_")  // ＿ (unshifted "-" stays ー via composer)
+        case (0x18, false): pair = ("\u{FF1D}", "=") // ＝
+        case (0x18, true): pair = ("\u{FF0B}", "+")  // ＋
+        case (0x21, true): pair = ("\u{FF5B}", "{")  // ｛
+        case (0x1E, true): pair = ("\u{FF5D}", "}")  // ｝
+        case (0x2A, true), (0x5D, true): pair = ("\u{FF5C}", "|") // ｜
+        case (0x29, false): pair = ("\u{FF1B}", ";") // ；
+        case (0x29, true): pair = ("\u{FF1A}", ":")  // ：
+        case (0x27, false): pair = ("\u{FF07}", "'") // ＇
+        case (0x27, true): pair = ("\u{FF02}", "\"") // ＂
+        case (0x2B, true): pair = ("\u{FF1C}", "<")  // ＜
+        case (0x2F, true): pair = ("\u{FF1E}", ">")  // ＞
+        case (0x2C, true): pair = ("\u{FF1F}", "?")  // ？
+        case (0x32, false): pair = ("\u{FF40}", "`") // ｀
+        default: pair = nil
+        }
+
+        guard let pair else { return nil }
+        return style == .halfWidthWestern ? pair.half : pair.full
+    }
+
+    /// Whether raw-ASCII passthrough is expected for this event (Shift/Caps Lock
+    /// configured as romaji input) — symbol conversion must be skipped then.
+    private func isRomajiPassthrough(shifted: Bool, capsLockOn: Bool) -> Bool {
+        let config = Settings.shared.japaneseKeyConfig
+        return (shifted && config.shiftKeyAction == .romaji)
+            || (capsLockOn && config.capsLockAction == .romaji)
     }
 
     private func replacementRange() -> NSRange {
@@ -1243,7 +1315,6 @@ final class JapaneseEngine: InputEngine {
         case 0x25: return "l"
         case 0x26: return "j"
         case 0x28: return "k"
-        case 0x29: return shifted ? ":" : ";"
         case 0x2D: return "n"
         case 0x2E: return "m"
         case 0x1B: return shifted ? nil : "-"

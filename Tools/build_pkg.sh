@@ -57,6 +57,9 @@ ditto "$NRIME_APP" "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
 if [ -d "$SETTINGS_APP" ]; then
     ditto "$SETTINGS_APP" "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app"
 fi
+# Strip Syncthing temp files leaked into build products — codesign rejects
+# unsigned subcomponents like Contents/.syncthing.Info.plist.tmp
+find "$PKG_DIR/payload" -name ".syncthing.*" -delete
 # Ad-hoc code sign (inside-out to avoid broken nested signatures)
 echo "Ad-hoc signing apps..."
 find "$PKG_DIR/payload" -name "*.bundle" -exec codesign -s - --force {} \;
