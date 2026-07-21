@@ -95,18 +95,34 @@ final class JapaneseEngineTests: XCTestCase {
         XCTAssertEqual(client.insertedTexts, ["！"])
     }
 
-    func testShiftedSymbolStaysASCIIWhenStyleIsHalfWidth() {
-        // Same romaji setting, but the punctuation style now asks for ASCII —
-        // this is the only switch that should make ！ come out as !.
+    func testHalfWidthStylePassesSymbolThroughInsteadOfReinserting() {
+        // ASCII is what the keyboard already produces, so the engine must not
+        // consume the key: insertText is dropped by password prompts and similar
+        // fields, which would swallow the character entirely.
         var config = Settings.shared.japaneseKeyConfig
         config.shiftKeyAction = .romaji
         config.punctuationStyle = .halfWidthWestern
         Settings.shared.japaneseKeyConfig = config
 
-        XCTAssertTrue(engine.handleEvent(
-            keyEvent(keyCode: 0x12, modifiers: [.shift]), client: client))
+        let handled = engine.handleEvent(
+            keyEvent(keyCode: 0x12, modifiers: [.shift]), client: client)
 
-        XCTAssertEqual(client.insertedTexts, ["!"])
+        XCTAssertFalse(handled, "Plain ASCII symbols must pass through to the system")
+        XCTAssertEqual(client.insertedTexts, [])
+    }
+
+    func testHalfWidthStyleStillCommitsComposingBeforePassingThrough() {
+        var config = Settings.shared.japaneseKeyConfig
+        config.punctuationStyle = .halfWidthWestern
+        Settings.shared.japaneseKeyConfig = config
+
+        XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x00), client: client)) // a → あ
+
+        let handled = engine.handleEvent(keyEvent(keyCode: 0x2F), client: client) // .
+
+        XCTAssertFalse(handled)
+        XCTAssertEqual(client.insertedTexts, ["あ"], "Composition commits, system types the .")
+        XCTAssertFalse(engine.isCurrentlyComposing)
     }
 
     func testRomajiShiftStillBypassesKanaForLetters() {
@@ -164,16 +180,30 @@ final class JapaneseEngineTests: XCTestCase {
         XCTAssertEqual(symbol(0x32, shifted: true, config), "\u{FF5E}") // ～ full-width tilde
     }
 
-    func testStyledSymbolHalfWidthWesternStyleStaysASCII() {
+    func testStyledSymbolReturnsNilWhenResultWouldEqualPlainASCII() {
+        // nil means "let the keystroke through" — see styledSymbol's contract.
         var config = JapaneseKeyConfig.default
         config.punctuationStyle = .halfWidthWestern
+        config.slashToNakaguro = false
+        config.yenKeyToYen = false
 
-        XCTAssertEqual(symbol(0x2F, shifted: false, config), ".")
-        XCTAssertEqual(symbol(0x12, shifted: true, config), "!")
-        XCTAssertEqual(symbol(0x2C, shifted: true, config), "?")
-        XCTAssertEqual(symbol(0x21, shifted: false, config), "[")
-        XCTAssertEqual(symbol(0x29, shifted: false, config), ";")
-        XCTAssertEqual(symbol(0x32, shifted: true, config), "~")
+        for (keyCode, shifted) in [(UInt16(0x2F), false), (0x12, true), (0x2C, true),
+                                   (0x21, false), (0x29, false), (0x32, true),
+                                   (0x2C, false), (0x2A, false)] {
+            XCTAssertNil(symbol(keyCode, shifted: shifted, config),
+                         "keyCode 0x\(String(keyCode, radix: 16)) shifted=\(shifted)")
+        }
+    }
+
+    func testHalfWidthStyleStillAppliesDedicatedSymbolToggles() {
+        // These two settings intentionally differ from ASCII even in half-width.
+        var config = JapaneseKeyConfig.default
+        config.punctuationStyle = .halfWidthWestern
+        config.slashToNakaguro = true
+        config.yenKeyToYen = true
+
+        XCTAssertEqual(symbol(0x2C, shifted: false, config), "・")
+        XCTAssertEqual(symbol(0x2A, shifted: false, config), "¥")
     }
 
     func testStyledSymbolLeavesComposerKeysAlone() {
@@ -193,7 +223,7 @@ final class JapaneseEngineTests: XCTestCase {
         XCTAssertEqual(symbol(0x2C, shifted: false, config), "\u{FF0F}") // ／
 
         config.punctuationStyle = .halfWidthWestern
-        XCTAssertEqual(symbol(0x2C, shifted: false, config), "/")
+        XCTAssertNil(symbol(0x2C, shifted: false, config), "ASCII / passes through")
     }
 
     private func symbol(_ keyCode: UInt16, shifted: Bool, _ config: JapaneseKeyConfig) -> String? {

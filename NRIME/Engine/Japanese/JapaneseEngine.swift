@@ -1148,47 +1148,64 @@ final class JapaneseEngine: InputEngine {
     /// .japanese uses Japanese conventions (。、「」〜), .fullWidthWestern uses
     /// full-width Western forms (．，［］～), .halfWidthWestern stays ASCII.
     /// keyCode-based (not event.characters) for Electron compatibility.
+    ///
+    /// Returns nil when the styled form equals the ASCII the keyboard already
+    /// produces. The caller then passes the key through instead of consuming it
+    /// and re-inserting the same character — insertText is dropped by fields that
+    /// ignore IME insertion (password prompts), which would swallow the keystroke.
     static func styledSymbol(keyCode: UInt16, shifted: Bool,
                              config: JapaneseKeyConfig) -> String? {
+        guard let forms = symbolForms(keyCode: keyCode, shifted: shifted, config: config) else {
+            return nil
+        }
+        return forms.styled == forms.ascii ? nil : forms.styled
+    }
+
+    /// The styled form and the plain ASCII form for a symbol key, or nil if the
+    /// key is not a symbol key.
+    private static func symbolForms(
+        keyCode: UInt16, shifted: Bool, config: JapaneseKeyConfig
+    ) -> (styled: String, ascii: String)? {
         let style = config.punctuationStyle
+        let isHalfWidth = style == .halfWidthWestern
 
         // Keys with dedicated settings or style-specific (non-width) forms
         switch (keyCode, shifted) {
         case (0x2F, false): // Period key
             switch style {
-            case .japanese: return "\u{3002}"         // 。
-            case .fullWidthWestern: return "\u{FF0E}" // ．
-            case .halfWidthWestern: return "."
+            case .japanese:         return ("\u{3002}", ".")  // 。
+            case .fullWidthWestern: return ("\u{FF0E}", ".")  // ．
+            case .halfWidthWestern: return (".", ".")
             }
         case (0x2B, false): // Comma key
             switch style {
-            case .japanese: return "\u{3001}"         // 、
-            case .fullWidthWestern: return "\u{FF0C}" // ，
-            case .halfWidthWestern: return ","
+            case .japanese:         return ("\u{3001}", ",")  // 、
+            case .fullWidthWestern: return ("\u{FF0C}", ",")  // ，
+            case .halfWidthWestern: return (",", ",")
             }
         case (0x2C, false): // Slash key
-            if config.slashToNakaguro { return "\u{30FB}" } // ・
-            return style == .halfWidthWestern ? "/" : "\u{FF0F}" // ／
+            if config.slashToNakaguro { return ("\u{30FB}", "/") }        // ・
+            return (isHalfWidth ? "/" : "\u{FF0F}", "/")                  // ／
         case (0x2A, false), (0x5D, false): // Backslash (US) / Yen key (JIS)
-            if config.yenKeyToYen { return "\u{00A5}" } // ¥
-            return style == .halfWidthWestern ? "\\" : "\u{FF3C}" // ＼
+            if config.yenKeyToYen { return ("\u{00A5}", "\\") }           // ¥
+            return (isHalfWidth ? "\\" : "\u{FF3C}", "\\")                // ＼
         case (0x21, false): // [
             switch style {
-            case .japanese: return "\u{300C}"         // 「
-            case .fullWidthWestern: return "\u{FF3B}" // ［
-            case .halfWidthWestern: return "["
+            case .japanese:         return ("\u{300C}", "[")  // 「
+            case .fullWidthWestern: return ("\u{FF3B}", "[")  // ［
+            case .halfWidthWestern: return ("[", "[")
             }
         case (0x1E, false): // ]
             switch style {
-            case .japanese: return "\u{300D}"         // 」
-            case .fullWidthWestern: return "\u{FF3D}" // ］
-            case .halfWidthWestern: return "]"
+            case .japanese:         return ("\u{300D}", "]")  // 」
+            case .fullWidthWestern: return ("\u{FF3D}", "]")  // ］
+            case .halfWidthWestern: return ("]", "]")
             }
         case (0x32, true): // ~
             switch style {
-            case .japanese: return "\u{301C}"         // 〜 (wave dash)
-            case .fullWidthWestern: return "\u{FF5E}" // ～
-            case .halfWidthWestern: return "~"
+            case .japanese:         return ("\u{301C}", "~")  // 〜 (wave dash)
+            case .fullWidthWestern: return ("\u{FF5E}", "~")  // ～
+            case .halfWidthWestern: return ("~", "~")
             }
         default:
             break
@@ -1225,7 +1242,7 @@ final class JapaneseEngine: InputEngine {
         }
 
         guard let pair else { return nil }
-        return style == .halfWidthWestern ? pair.half : pair.full
+        return (isHalfWidth ? pair.half : pair.full, pair.half)
     }
 
     private func replacementRange() -> NSRange {
