@@ -291,6 +291,22 @@ final class NRIMEInputControllerTests: XCTestCase {
         }
     }
 
+    /// Device-dependent modifier bits (IOLLEvent.h NX_DEVICE*KEYMASK). Real keyDown
+    /// events always carry these and ShortcutHandler uses them to tell left from
+    /// right, so synthetic events need them too. Sides match the defaults these
+    /// tests install: Right Shift + key for mode switching, Left Option + Return
+    /// for hanja.
+    private static func withDeviceBits(
+        _ modifiers: NSEvent.ModifierFlags
+    ) -> NSEvent.ModifierFlags {
+        var raw = modifiers.rawValue
+        if modifiers.contains(.shift)   { raw |= 0x0000_0004 } // right shift
+        if modifiers.contains(.option)  { raw |= 0x0000_0020 } // left option
+        if modifiers.contains(.control) { raw |= 0x0000_0001 } // left control
+        if modifiers.contains(.command) { raw |= 0x0000_0008 } // left command
+        return NSEvent.ModifierFlags(rawValue: raw)
+    }
+
     private func keyEvent(
         keyCode: UInt16,
         characters: String = "",
@@ -299,7 +315,7 @@ final class NRIMEInputControllerTests: XCTestCase {
         guard let event = NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
-            modifierFlags: modifiers,
+            modifierFlags: Self.withDeviceBits(modifiers),
             timestamp: 0,
             windowNumber: 0,
             context: nil,
