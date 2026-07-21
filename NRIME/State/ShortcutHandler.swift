@@ -192,13 +192,23 @@ final class ShortcutHandler {
 
             guard eventSignificant == requiredSignificant else { continue }
 
-            // Left/right distinction: if the recorded shortcut includes a side-specific
-            // flag (e.g., right shift 0x20004), verify the event also has the same side.
-            // Left/right modifier distinction via keyCode comparison.
-            // activeModifierKeyCode tracks which physical modifier key is held (e.g., 0x3C=RShift).
-            // config.modifierKeyCode stores the keyCode recorded during shortcut setup.
-            if config.modifierKeyCode != 0, let activeModifier = activeModifierKeyCode {
-                guard config.modifierKeyCode == activeModifier else { continue }
+            // Left/right distinction. Prefer the device-dependent modifier bits
+            // carried by the event itself: they are present on every real keyDown
+            // and stay correct even when no flagsChanged was seen for this press.
+            // activeModifierKeyCode is only a fallback (synthetic events carry no
+            // device bits), and when neither source can name the side we decline
+            // the shortcut — assuming it matched would hijack ordinary typing such
+            // as Shift+1 for ！ in Japanese mode.
+            if config.modifierKeyCode != 0,
+               let sides = Self.deviceModifierMasks(for: config.modifierKeyCode) {
+                let rawFlags = event.modifierFlags.rawValue
+                if rawFlags & sides.eitherSide != 0 {
+                    guard rawFlags & sides.requiredSide != 0 else { continue }
+                } else if let activeModifier = activeModifierKeyCode {
+                    guard config.modifierKeyCode == activeModifier else { continue }
+                } else {
+                    continue
+                }
             }
 
             return performAction(action)
@@ -244,6 +254,43 @@ final class ShortcutHandler {
     }
 
     // MARK: - Helpers
+
+    /// Device-dependent modifier bits (IOLLEvent.h NX_DEVICE*KEYMASK) for a physical
+    /// modifier keyCode: the bit for that exact key, plus the bits for both sides so
+    /// callers can tell "side is known" from "side is unavailable".
+    private static func deviceModifierMasks(
+        for modifierKeyCode: UInt16
+    ) -> (requiredSide: UInt, eitherSide: UInt)? {
+        let leftShift: UInt  = 0x0000_0002
+        let rightShift: UInt = 0x0000_0004
+        let leftCtrl: UInt   = 0x0000_0001
+        let rightCtrl: UInt  = 0x0000_2000
+        let leftOption: UInt  = 0x0000_0020
+        let rightOption: UInt = 0x0000_0040
+        let leftCommand: UInt  = 0x0000_0008
+        let rightCommand: UInt = 0x0000_0010
+
+        switch modifierKeyCode {
+        case ShortcutConfig.keyCodeLeftShift:
+            return (leftShift, leftShift | rightShift)
+        case ShortcutConfig.keyCodeRightShift:
+            return (rightShift, leftShift | rightShift)
+        case ShortcutConfig.keyCodeLeftCtrl:
+            return (leftCtrl, leftCtrl | rightCtrl)
+        case ShortcutConfig.keyCodeRightCtrl:
+            return (rightCtrl, leftCtrl | rightCtrl)
+        case ShortcutConfig.keyCodeLeftOption:
+            return (leftOption, leftOption | rightOption)
+        case ShortcutConfig.keyCodeRightOption:
+            return (rightOption, leftOption | rightOption)
+        case ShortcutConfig.keyCodeLeftCmd:
+            return (leftCommand, leftCommand | rightCommand)
+        case ShortcutConfig.keyCodeRightCmd:
+            return (rightCommand, leftCommand | rightCommand)
+        default:
+            return nil
+        }
+    }
 
     private func isKeyRegisteredAsShortcut(_ keyCode: UInt16) -> Bool {
         for (key, _) in Self.allShortcuts {
