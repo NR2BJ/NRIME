@@ -33,3 +33,4 @@ xcuserdata/
 *.dSYM
 default.profraw
 worklog.md
+.codex/

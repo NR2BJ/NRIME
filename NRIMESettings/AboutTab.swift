@@ -40,6 +40,8 @@ struct AboutTab: View {
 
             updateSection
 
+            channelPicker
+
             Divider()
                 .frame(maxWidth: 200)
 
@@ -167,6 +169,30 @@ struct AboutTab: View {
                     .frame(maxWidth: 300)
 
                 checkButton
+            }
+        }
+    }
+
+    /// Opt-in switch for test builds. Beta pulls GitHub prereleases as well as
+    /// final releases; stable only ever sees final releases.
+    private var channelPicker: some View {
+        VStack(spacing: 6) {
+            Picker(L("update.channel"), selection: Binding(
+                get: { updateManager.channel },
+                set: { updateManager.setChannel($0) }
+            )) {
+                Text(L("update.channel.stable")).tag(UpdateChannel.stable)
+                Text(L("update.channel.beta")).tag(UpdateChannel.beta)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 280)
+
+            if updateManager.channel == .beta {
+                Text(L("update.channel.betaWarning"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 300)
             }
         }
     }

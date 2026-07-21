@@ -187,3 +187,9 @@
 "common.downArrow" = "↓ Arrow";
 "punctuation.halfWidthWestern" = "Half-width Western (.,)";
 "shiftDoubleTap.enable" = "Toggle Caps Lock with Shift double-tap";
+
+/* Update channel */
+"update.channel" = "Update Channel";
+"update.channel.stable" = "Stable";
+"update.channel.beta" = "Beta";
+"update.channel.betaWarning" = "The beta channel receives test builds first. They may be unstable.";

@@ -7,13 +7,40 @@ struct GitHubRelease: Codable {
     let body: String?
     let publishedAt: String?
     let assets: [GitHubAsset]
+    /// GitHub marks test builds with `prerelease: true`; `/releases/latest` omits them.
+    let prerelease: Bool?
+    let draft: Bool?
 
     enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
         case body
         case publishedAt = "published_at"
         case assets
+        case prerelease
+        case draft
     }
+
+    var isPrerelease: Bool { prerelease ?? false }
+    var isDraft: Bool { draft ?? false }
+
+    /// Version string without the tag's leading "v" (e.g. "1.0.9-beta.2").
+    var version: String {
+        tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+    }
+
+    var pkgAsset: GitHubAsset? {
+        assets.first { $0.name.hasSuffix(".pkg") }
+    }
+}
+
+// MARK: - Update Channel
+
+/// Which GitHub releases the app is willing to install.
+enum UpdateChannel: String, Codable, CaseIterable {
+    /// Final releases only — GitHub's `/releases/latest` already excludes prereleases.
+    case stable
+    /// Newest release of any kind, so test builds reach opted-in users.
+    case beta
 }
 
 struct GitHubAsset: Codable {
@@ -68,14 +95,20 @@ enum UpdateState: Equatable {
 final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegate {
     static let shared = UpdateManager()
 
-    private static let apiURL = "https://api.github.com/repos/NR2BJ/NRIME/releases/latest"
+    private static let repoURL = "https://api.github.com/repos/NR2BJ/NRIME/releases"
     private static let suiteName = "group.com.nrime.inputmethod"
     private static let lastCheckKey = "UpdateLastCheckTime"
-    private static let etagKey = "UpdateETag"
+    private static let channelKey = "UpdateChannel"
     private static let checkInterval: TimeInterval = 24 * 60 * 60  // 24 hours
+    /// How many releases to scan on the beta channel when picking the newest build.
+    private static let betaScanCount = 20
 
     @Published var state: UpdateState = .idle
     @Published var latestRelease: GitHubRelease?
+
+    /// Release channel this install follows. Persisted in the App Group so the
+    /// IME and the settings app agree.
+    @Published var channel: UpdateChannel = .stable
 
     private var downloadTask: URLSessionDownloadTask?
     private lazy var downloadSession: URLSession = {
@@ -93,6 +126,10 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
 
     private override init() {
         super.init()
+        if let raw = defaults?.string(forKey: Self.channelKey),
+           let stored = UpdateChannel(rawValue: raw) {
+            channel = stored
+        }
     }
 
     // MARK: - Public API
@@ -112,11 +149,24 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         Task { await check() }
     }
 
+    /// Switch channels and re-check immediately.
+    /// Any pending download is cancelled — it belongs to the previous channel.
+    func setChannel(_ newChannel: UpdateChannel) {
+        guard newChannel != channel else { return }
+        downloadTask?.cancel()
+        downloadTask = nil
+        channel = newChannel
+        defaults?.set(newChannel.rawValue, forKey: Self.channelKey)
+        latestRelease = nil
+        state = .idle
+        Task { await check() }
+    }
+
     /// Download the PKG for the latest release.
     func downloadUpdate() {
         guard case .available = state, let release = latestRelease else { return }
 
-        guard let asset = release.assets.first(where: { $0.name.hasSuffix(".pkg") }),
+        guard let asset = release.pkgAsset,
               let url = URL(string: asset.browserDownloadURL) else {
             state = .error("No PKG found in release assets.")
             return
@@ -176,10 +226,10 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         downloadTask?.cancel()
         downloadTask = nil
         // Restore available state
-        if let release = latestRelease,
-           let asset = release.assets.first(where: { $0.name.hasSuffix(".pkg") }) {
-            let version = release.tagName.hasPrefix("v") ? String(release.tagName.dropFirst()) : release.tagName
-            state = .available(version: version, notes: release.body ?? "", size: Int64(asset.size))
+        if let release = latestRelease, let asset = release.pkgAsset {
+            state = .available(version: release.version,
+                               notes: release.body ?? "",
+                               size: Int64(asset.size))
         } else {
             state = .idle
         }
@@ -188,9 +238,12 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
     // MARK: - Check Logic
 
     private func check() async {
-        await MainActor.run { state = .checking }
+        let activeChannel = await MainActor.run { () -> UpdateChannel in
+            state = .checking
+            return channel
+        }
 
-        guard let url = URL(string: Self.apiURL) else {
+        guard let url = URL(string: endpoint(for: activeChannel)) else {
             await MainActor.run { state = .error("Invalid API URL.") }
             return
         }
@@ -198,8 +251,9 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 
-        // Use ETag for conditional requests
-        if let etag = defaults?.string(forKey: Self.etagKey) {
+        // Conditional request keeps us under GitHub's unauthenticated rate limit.
+        // The ETag is per channel because each channel hits a different URL.
+        if let etag = defaults?.string(forKey: etagKey(for: activeChannel)) {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
         }
 
@@ -211,19 +265,14 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
                 return
             }
 
-            // Save check time
             defaults?.set(Date().timeIntervalSince1970, forKey: Self.lastCheckKey)
 
-            // Save ETag
-            if let etag = http.value(forHTTPHeaderField: "ETag") {
-                defaults?.set(etag, forKey: Self.etagKey)
-            }
-
             if http.statusCode == 304 {
-                // Not modified — use cached release if we have one
+                // Unchanged since the last check — re-evaluate the cached release so a
+                // pending update isn't reported as "up to date".
                 await MainActor.run {
-                    if latestRelease != nil, state == .checking {
-                        state = .upToDate
+                    if let cached = cachedRelease(for: activeChannel) {
+                        evaluate(cached, channel: activeChannel)
                     } else {
                         state = .upToDate
                     }
@@ -236,38 +285,19 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
                 return
             }
 
-            let decoder = JSONDecoder()
-            let release = try decoder.decode(GitHubRelease.self, from: data)
-
-            let remoteVersion = release.tagName.hasPrefix("v")
-                ? String(release.tagName.dropFirst())
-                : release.tagName
-
-            let newerVersion = compareVersions(current: currentVersion, remote: remoteVersion)
-            let pkgAsset = release.assets.first(where: { $0.name.hasSuffix(".pkg") })
-            let pkgSize = pkgAsset?.size ?? 0
-
-            // Detect same-version re-uploads by comparing asset upload timestamp
-            let sameVersionChanged: Bool = {
-                guard !newerVersion, let asset = pkgAsset, let remoteTimestamp = asset.updatedAt else { return false }
-                let savedTimestamp = defaults?.string(forKey: "lastInstalledPkgTimestamp") ?? ""
-                return !savedTimestamp.isEmpty && remoteTimestamp != savedTimestamp
-            }()
-
-            await MainActor.run {
-                self.latestRelease = release
-                if newerVersion || sameVersionChanged {
-                    let label = sameVersionChanged ? "\(remoteVersion) (updated)" : remoteVersion
-                    state = .available(version: label, notes: release.body ?? "", size: Int64(pkgSize))
-                } else {
-                    // Record current PKG timestamp for future same-version change detection
-                    if let asset = pkgAsset, let ts = asset.updatedAt,
-                       (defaults?.string(forKey: "lastInstalledPkgTimestamp") ?? "").isEmpty {
-                        defaults?.set(ts, forKey: "lastInstalledPkgTimestamp")
-                    }
-                    state = .upToDate
-                }
+            guard let release = decodeRelease(from: data, channel: activeChannel) else {
+                await MainActor.run { state = .upToDate }
+                return
             }
+
+            // Only store the ETag once the body actually parsed, otherwise a future
+            // 304 would point at a release we never decoded.
+            if let etag = http.value(forHTTPHeaderField: "ETag") {
+                defaults?.set(etag, forKey: etagKey(for: activeChannel))
+            }
+            cacheRelease(release, for: activeChannel)
+
+            await MainActor.run { evaluate(release, channel: activeChannel) }
         } catch is CancellationError {
             await MainActor.run { state = .idle }
         } catch {
@@ -276,21 +306,91 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         }
     }
 
-    // MARK: - Version Comparison
+    /// Decide whether `release` is worth offering and publish the resulting state.
+    @MainActor
+    private func evaluate(_ release: GitHubRelease, channel activeChannel: UpdateChannel) {
+        latestRelease = release
 
-    /// Returns true if remote is newer than current.
-    private func compareVersions(current: String, remote: String) -> Bool {
-        let currentParts = current.split(separator: ".").compactMap { Int($0) }
-        let remoteParts = remote.split(separator: ".").compactMap { Int($0) }
+        let remoteVersion = release.version
+        let isNewer = SemanticVersion.isNewer(remote: remoteVersion, than: currentVersion)
+        let pkgSize = release.pkgAsset?.size ?? 0
+        let timestampKey = pkgTimestampKey(for: activeChannel)
 
-        let maxLen = max(currentParts.count, remoteParts.count)
-        for i in 0..<maxLen {
-            let c = i < currentParts.count ? currentParts[i] : 0
-            let r = i < remoteParts.count ? remoteParts[i] : 0
-            if r > c { return true }
-            if r < c { return false }
+        // Detect same-version re-uploads by comparing the asset's upload timestamp,
+        // so a rebuilt test build under an unchanged tag still reaches beta users.
+        let sameVersionChanged: Bool = {
+            guard !isNewer,
+                  let remoteTimestamp = release.pkgAsset?.updatedAt else { return false }
+            let saved = defaults?.string(forKey: timestampKey) ?? ""
+            return !saved.isEmpty && remoteTimestamp != saved
+        }()
+
+        if isNewer || sameVersionChanged {
+            let label = sameVersionChanged ? "\(remoteVersion) (updated)" : remoteVersion
+            state = .available(version: label, notes: release.body ?? "", size: Int64(pkgSize))
+        } else {
+            if let ts = release.pkgAsset?.updatedAt,
+               (defaults?.string(forKey: timestampKey) ?? "").isEmpty {
+                defaults?.set(ts, forKey: timestampKey)
+            }
+            state = .upToDate
         }
-        return false
+    }
+
+    /// Stable reads GitHub's "latest" (prereleases excluded server-side);
+    /// beta scans the release list and picks the highest version itself.
+    private func decodeRelease(from data: Data, channel activeChannel: UpdateChannel) -> GitHubRelease? {
+        let decoder = JSONDecoder()
+        switch activeChannel {
+        case .stable:
+            return try? decoder.decode(GitHubRelease.self, from: data)
+        case .beta:
+            guard let releases = try? decoder.decode([GitHubRelease].self, from: data) else {
+                return nil
+            }
+            // Highest version wins rather than first-in-list, so a stable release
+            // published after a beta still supersedes it.
+            return releases
+                .filter { !$0.isDraft && $0.pkgAsset != nil }
+                .max { lhs, rhs in
+                    guard let left = SemanticVersion(lhs.version),
+                          let right = SemanticVersion(rhs.version) else { return false }
+                    return left < right
+                }
+        }
+    }
+
+    // MARK: - Per-channel storage
+
+    private func endpoint(for activeChannel: UpdateChannel) -> String {
+        switch activeChannel {
+        case .stable: return "\(Self.repoURL)/latest"
+        case .beta:   return "\(Self.repoURL)?per_page=\(Self.betaScanCount)"
+        }
+    }
+
+    private func etagKey(for activeChannel: UpdateChannel) -> String {
+        "UpdateETag_\(activeChannel.rawValue)"
+    }
+
+    private func pkgTimestampKey(for activeChannel: UpdateChannel) -> String {
+        "lastInstalledPkgTimestamp_\(activeChannel.rawValue)"
+    }
+
+    private func cachedReleaseKey(for activeChannel: UpdateChannel) -> String {
+        "UpdateCachedRelease_\(activeChannel.rawValue)"
+    }
+
+    private func cacheRelease(_ release: GitHubRelease, for activeChannel: UpdateChannel) {
+        guard let data = try? JSONEncoder().encode(release) else { return }
+        defaults?.set(data, forKey: cachedReleaseKey(for: activeChannel))
+    }
+
+    private func cachedRelease(for activeChannel: UpdateChannel) -> GitHubRelease? {
+        guard let data = defaults?.data(forKey: cachedReleaseKey(for: activeChannel)) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(GitHubRelease.self, from: data)
     }
 
     // MARK: - Helpers
@@ -317,9 +417,8 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
             try? FileManager.default.removeItem(at: destination)
             try FileManager.default.moveItem(at: location, to: destination)
             // Save PKG timestamp now (before install kills the app via postinstall)
-            if let asset = latestRelease?.assets.first(where: { $0.name.hasSuffix(".pkg") }),
-               let ts = asset.updatedAt {
-                defaults?.set(ts, forKey: "lastInstalledPkgTimestamp")
+            if let ts = latestRelease?.pkgAsset?.updatedAt {
+                defaults?.set(ts, forKey: pkgTimestampKey(for: channel))
             }
             state = .readyToInstall(path: destination.path)
         } catch {

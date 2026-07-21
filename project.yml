@@ -17,8 +17,8 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
-    MARKETING_VERSION: "1.0.8"
-    CURRENT_PROJECT_VERSION: "9"
+    MARKETING_VERSION: "1.0.9"
+    CURRENT_PROJECT_VERSION: "10"
 
 targets:
   NRIME:
@@ -40,6 +40,8 @@ targets:
       - path: Shared/SettingsModels.swift
         type: file
       - path: Shared/UpdateManager.swift
+        type: file
+      - path: Shared/SemanticVersion.swift
         type: file
       - path: NRIME/Resources/mozc_server
         buildPhase: resources
@@ -80,6 +82,8 @@ targets:
       - path: Shared/SettingsModels.swift
         type: file
       - path: Shared/UpdateManager.swift
+        type: file
+      - path: Shared/SemanticVersion.swift
         type: file
       - path: NRIME/Engine/Japanese/Proto/user_dictionary_storage.pb.swift
         type: file

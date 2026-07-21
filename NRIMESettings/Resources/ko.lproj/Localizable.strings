@@ -187,3 +187,9 @@
 "common.downArrow" = "↓ 화살표";
 "punctuation.halfWidthWestern" = "반각 서양식 (.,)";
 "shiftDoubleTap.enable" = "Shift 더블탭으로 Caps Lock 전환";
+
+/* Update channel */
+"update.channel" = "업데이트 채널";
+"update.channel.stable" = "정식";
+"update.channel.beta" = "베타";
+"update.channel.betaWarning" = "베타 채널은 테스트 빌드를 먼저 받습니다. 불안정할 수 있습니다.";
