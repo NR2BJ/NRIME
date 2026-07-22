@@ -61,7 +61,18 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_ALLOWED: false
     postBuildScripts:
-      - script: chmod +x "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+      # mozc_server is a bundled executable, not a plain resource: Xcode copies
+      # it without the exec bit if the source file ever loses it (file sync,
+      # archive round-trip), and Japanese conversion then fails silently with
+      # "Server launch failed".
+      - script: |
+          chmod +x "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
+          MOZC="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/mozc_server"
+          if [ -f "$MOZC" ]; then
+            chmod +x "$MOZC"
+          else
+            echo "warning: mozc_server missing from resources — Japanese conversion will not work"
+          fi
         name: "Fix executable permissions"
     dependencies:
       - framework: InputMethodKit.framework

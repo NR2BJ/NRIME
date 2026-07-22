@@ -60,6 +60,20 @@ fi
 # Strip Syncthing temp files leaked into build products — codesign rejects
 # unsigned subcomponents like Contents/.syncthing.Info.plist.tmp
 find "$PKG_DIR/payload" -name ".syncthing.*" -delete
+
+# mozc_server must ship executable. Losing the exec bit breaks Japanese
+# conversion in a way that looks like "the candidate window stopped working",
+# so fail the build rather than ship it.
+MOZC_PAYLOAD="$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Resources/mozc_server"
+if [ ! -f "$MOZC_PAYLOAD" ]; then
+    echo "ERROR: mozc_server missing from payload — Japanese conversion would not work"
+    exit 1
+fi
+chmod +x "$MOZC_PAYLOAD"
+if [ ! -x "$MOZC_PAYLOAD" ]; then
+    echo "ERROR: mozc_server is not executable in payload"
+    exit 1
+fi
 # Ad-hoc code sign (inside-out to avoid broken nested signatures)
 echo "Ad-hoc signing apps..."
 find "$PKG_DIR/payload" -name "*.bundle" -exec codesign -s - --force {} \;
