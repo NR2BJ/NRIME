@@ -4,9 +4,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 /// Protocol version must match mozc's IPC_PROTOCOL_VERSION (currently 3).
 #define IPC_PROTOCOL_VERSION 3
+
+static uint64_t nrime_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000);
+}
 
 /// Matches mozc's mach_ipc_send_message struct exactly.
 typedef struct {
@@ -32,6 +40,10 @@ bool nrime_mozc_call(const char *port_name,
 {
     *response = NULL;
     *response_size = 0;
+
+    // One deadline shared by the send and every receive trial — without it the
+    // worst-case block on the keystroke thread is 3x the nominal timeout.
+    const uint64_t deadline = nrime_now_ms() + timeout_ms;
 
     // 1. Look up server port
     mach_port_t server_port = MACH_PORT_NULL;
@@ -86,9 +98,16 @@ bool nrime_mozc_call(const char *port_name,
         return false;
     }
 
-    // 5. Receive response — retry up to 2 times (matches upstream)
+    // 5. Receive response — retry up to 2 times (matches upstream),
+    //    all trials sharing the remaining time budget
     bool success = false;
     for (int trial = 0; trial < 2; ++trial) {
+        uint64_t now = nrime_now_ms();
+        if (now >= deadline) {
+            break;
+        }
+        mach_msg_timeout_t remaining = (mach_msg_timeout_t)(deadline - now);
+
         nrime_receive_message_t receive_message;
         memset(&receive_message, 0, sizeof(receive_message));
 
@@ -101,7 +120,7 @@ bool nrime_mozc_call(const char *port_name,
                       0,
                       receive_message.header.msgh_size,
                       client_port,
-                      timeout_ms,
+                      remaining,
                       MACH_PORT_NULL);
 
         if (kr == MACH_RCV_TIMED_OUT) {
@@ -111,6 +130,9 @@ bool nrime_mozc_call(const char *port_name,
             continue;  // Wrong message, try again
         }
         if (receive_message.header.msgh_id != IPC_PROTOCOL_VERSION) {
+            // A message WAS dequeued into this task — destroy it, or its OOL
+            // mapping leaks (one page-granular region per mismatched reply).
+            mach_msg_destroy(&receive_message.header);
             continue;  // Wrong protocol version
         }
 

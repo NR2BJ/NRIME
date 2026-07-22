@@ -61,7 +61,8 @@ final class JapaneseEngine: InputEngine {
                 commitComposing(client: client)
             }
             if wasActive {
-                let delay = Settings.shared.shiftEnterDelay / 1000.0
+                // shiftEnterDelay is already in seconds (default 0.015)
+                let delay = Settings.shared.shiftEnterDelay
                 let keyCode = event.keyCode
                 let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -154,6 +155,10 @@ final class JapaneseEngine: InputEngine {
     /// Exit conversion state (used by controller after candidate selection).
     func exitConversionState() {
         conversionState = .composing
+        // Full reset (not just the display list) — after a failed submit the
+        // converter would otherwise keep stale preedit/candidates/originalHiragana
+        // describing a conversion that no longer exists.
+        mozcConverter.reset()
         mozcConverter.currentCandidateStrings = []
         composer.clear()
         liveConversionActive = false
@@ -408,6 +413,12 @@ final class JapaneseEngine: InputEngine {
 
             // Caps Lock katakana: direct output without composition
             if isCapsLockOn && capsAction == .katakana {
+                // Same stale-live-conversion hazard as shift-katakana below
+                if liveConversionActive {
+                    mozcConverter.cancel()
+                    liveConversionActive = false
+                    liveConvertedText = nil
+                }
                 let result = composer.input(char)
                 let kana = composer.composedKana
                 if !kana.isEmpty {
@@ -427,6 +438,14 @@ final class JapaneseEngine: InputEngine {
 
             // Track shift-katakana state
             if isShifted && shiftAction == .katakana {
+                // Katakana mode suspends live conversion — tear it down now, or
+                // a later commit would glue the stale peeked kanji (never shown
+                // after this point) onto the katakana suffix ("蚊t" for "カt").
+                if !shiftKatakanaActive && liveConversionActive {
+                    mozcConverter.cancel()
+                    liveConversionActive = false
+                    liveConvertedText = nil
+                }
                 shiftKatakanaActive = true
             } else if !isShifted {
                 shiftKatakanaActive = false
@@ -504,12 +523,16 @@ final class JapaneseEngine: InputEngine {
             let panel = NSApp.candidatePanel
             let pageStart = (panel?.currentPage ?? 0) * (panel?.effectivePageSize ?? 9)
             let candidateIndex = pageStart + offset
-            if candidateIndex < mozcConverter.currentCandidates.count {
-                if let output = mozcConverter.selectCandidateByIndex(candidateIndex) {
-                    let result = mozcConverter.updateFromOutput(output)
-                    if let committed = result.committedText {
-                        client.insertText(committed as NSString, replacementRange: replacementRange())
-                    }
+            guard candidateIndex < mozcConverter.currentCandidates.count else {
+                // Not a valid selection — the user is typing a digit. Dismiss
+                // and pass it through instead of silently eating the keystroke.
+                dismissPrediction()
+                return false
+            }
+            if let output = mozcConverter.selectCandidateByIndex(candidateIndex) {
+                let result = mozcConverter.updateFromOutput(output)
+                if let committed = result.committedText {
+                    client.insertText(committed as NSString, replacementRange: replacementRange())
                 }
             }
             dismissPrediction()
@@ -740,6 +763,15 @@ final class JapaneseEngine: InputEngine {
             return true
         }
 
+        // A letter starts the next word: commit this conversion and re-enter
+        // composing with the same key (standard IME behavior). Without this the
+        // letter would fall through to "commit + pass through" and leak into
+        // the document as raw ASCII ("日本語k" instead of 日本語 + composing か).
+        if Self.charForKeyCode(keyCode, shifted: isShifted) != nil {
+            commitConversion(client: client)
+            return handleComposingEvent(event, client: client)
+        }
+
         // Build Mozc KeyEvent from NSEvent
         guard let mozcKey = buildMozcKeyEvent(keyCode: keyCode, shifted: isShifted) else {
             // Unknown key — commit conversion and pass through
@@ -765,40 +797,21 @@ final class JapaneseEngine: InputEngine {
         DeveloperLogger.shared.log("Japanese", "Conversion triggered",
                                    metadata: ["liveConversion": "\(liveConversionActive)"])
         if liveConversionActive {
-            // Live conversion active — Mozc is already in CONVERSION state from peekConversion().
-            // Transition to .converting and show candidate window.
+            // The live-conversion peek fed Mozc only the resolved kana — pending
+            // romaji (e.g. the ん from a trailing "n") is missing from that
+            // session, and reusing its CONVERSION state means any extra Space
+            // sent to "populate candidates" actually advances the selection.
+            // Re-convert the full flushed hiragana from scratch instead: one
+            // extra IPC round-trip on the Space press, deterministic result.
             let hiragana = composer.flush()
             guard !hiragana.isEmpty else { return false }
 
-            mozcConverter.originalHiragana = hiragana
-            conversionState = .converting
             liveConversionActive = false
             liveConvertedText = nil
-
-            if let preedit = mozcConverter.currentPreedit, !preedit.segment.isEmpty {
-                renderPreedit(preedit, client: client)
-
-                // peekConversion() left Mozc in CONVERSION state but without
-                // opening the candidate window.  Send Space to Mozc so it
-                // populates the full candidate list (same as a second Space press).
-                if mozcConverter.currentCandidateStrings.isEmpty {
-                    var spaceKey = Mozc_Commands_KeyEvent()
-                    spaceKey.specialKey = .space
-                    if let output = mozcConverter.sendKeyEvent(spaceKey) {
-                        let result = mozcConverter.updateFromOutput(output)
-                        if let updatedPreedit = result.preedit, !updatedPreedit.segment.isEmpty {
-                            renderPreedit(updatedPreedit, client: client)
-                        }
-                    }
-                }
-
-                showCandidateWindow(client: client)
-                return true
-            }
-
-            // Fallback: peekConversion didn't leave valid state — do full convert
             mozcConverter.cancel()
+
             if mozcConverter.convert(hiragana: hiragana) {
+                conversionState = .converting
                 if let preedit = mozcConverter.currentPreedit, !preedit.segment.isEmpty {
                     renderPreedit(preedit, client: client)
                 } else {
@@ -1051,7 +1064,9 @@ final class JapaneseEngine: InputEngine {
             ])
 
             if isHighlight {
-                cursorPosition = attrString.length + text.count
+                // NSRange positions are UTF-16 units; String.count is grapheme
+                // clusters and diverges on non-BMP kanji (e.g. 𠮟る).
+                cursorPosition = attrString.length + (text as NSString).length
             }
 
             attrString.append(segAttr)

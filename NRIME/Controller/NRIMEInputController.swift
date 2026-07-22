@@ -87,6 +87,21 @@ class NRIMEInputController: IMKInputController {
             }
         }
 
+        // 1.9. Give the shortcut handler every flagsChanged exactly once, even in
+        // conversion/candidate states that bypass routeEvent below. Without this
+        // its modifier tracking desyncs (a release seen during conversion never
+        // arrives), and the first Shift tap after a conversion is silently
+        // ignored. This also lets tap mode-switches work during conversion —
+        // the onAction handler force-commits the active engine first.
+        if event.type == .flagsChanged {
+            if shortcutHandler.onAction == nil {
+                wireUpShortcutHandler()
+            }
+            if shortcutHandler.handleEvent(event) {
+                return true
+            }
+        }
+
         // 2. Japanese conversion state: Mozc manages ALL key handling (including candidates)
         if mode == .japanese && japaneseEngine.isInConversionState {
             return handleJapaneseConversion(event, client: client)
@@ -196,7 +211,14 @@ class NRIMEInputController: IMKInputController {
                     _ = japaneseEngine.mozcConverter.highlightCandidateByIndex(candidateIndex)
                 }
                 let replacementRange = NSRange(location: NSNotFound, length: NSNotFound)
-                if let text = japaneseEngine.mozcConverter.submit() {
+                // submit() is a single unretried IPC call — on failure fall back to
+                // the on-screen preedit (then the original hiragana) instead of
+                // silently dropping the word the user explicitly confirmed.
+                if let text = japaneseEngine.mozcConverter.submit()
+                    ?? JapaneseEngine.conversionFallbackText(
+                        preedit: japaneseEngine.mozcConverter.currentPreedit,
+                        originalHiragana: japaneseEngine.mozcConverter.originalHiragana
+                    ) {
                     client.insertText(text as NSString, replacementRange: replacementRange)
                 }
                 japaneseEngine.exitConversionState()
@@ -285,8 +307,7 @@ class NRIMEInputController: IMKInputController {
             return true
 
         case 0x35: // Escape — dismiss
-            previewHanjaSourceIfNeeded(client: client)
-            koreanEngine.clearHanjaSession()
+            endHanjaSessionIfNeeded(client: client)
             panel.hide()
             return true
 
@@ -307,8 +328,7 @@ class NRIMEInputController: IMKInputController {
 
         case 0x31: // Space — dismiss and pass through for Korean hanja
             let shouldPassThrough = koreanEngine.isCurrentlyComposing
-            previewHanjaSourceIfNeeded(client: client)
-            koreanEngine.clearHanjaSession()
+            endHanjaSessionIfNeeded(client: client)
             panel.hide()
             if shouldPassThrough {
                 return routeEvent(event, client: client)
@@ -317,10 +337,17 @@ class NRIMEInputController: IMKInputController {
 
         default:
             // Dismiss panel and route event through normal handling
-            koreanEngine.clearHanjaSession()
+            endHanjaSessionIfNeeded(client: client)
             panel.hide()
             return routeEvent(event, client: client)
         }
+    }
+
+    /// End the Korean hanja session, committing a selected-text original so the
+    /// user's own text can't be replaced by the next keystroke.
+    private func endHanjaSessionIfNeeded(client: any IMKTextInput) {
+        guard StateManager.shared.currentMode == .korean else { return }
+        koreanEngine.endHanjaSession(client: client)
     }
 
     /// Select the currently highlighted candidate and commit.
@@ -499,6 +526,18 @@ class NRIMEInputController: IMKInputController {
     /// Called by the global mouse monitor when a click is detected in any app.
     /// Commits composing text before the click changes focus.
     private func commitOnMouseClick() {
+        // Mirror handle()'s secure-input gate: a click that lands on (or races
+        // with) a secure field must never trigger a commit into it.
+        guard !secureInputDetector.isSecureInputActive() else { return }
+
+        // A click ends any candidate session — without this the panel stays
+        // visible over stale candidates and hijacks subsequent keys (Enter
+        // would insert an old hanja at the new caret).
+        if let panel = NSApp.candidatePanel, panel.isVisible() {
+            koreanEngine.clearHanjaSession()
+            panel.hide()
+        }
+
         // Use cached client because self.client() may be nil by the time
         // the async global monitor callback fires.
         guard let client = (cachedClient as? (any IMKTextInput))
@@ -526,7 +565,9 @@ class NRIMEInputController: IMKInputController {
         if shortcutHandler.onAction == nil {
             wireUpShortcutHandler()
         }
-        if shortcutHandler.handleEvent(event) {
+        // flagsChanged was already fed to the shortcut handler in handle() step
+        // 1.9 — feeding it twice would corrupt the press/release tracking.
+        if event.type != .flagsChanged, shortcutHandler.handleEvent(event) {
             return true
         }
 
@@ -545,6 +586,27 @@ class NRIMEInputController: IMKInputController {
     // MARK: - Shortcut Handler Wiring
 
     private func wireUpShortcutHandler() {
+        // Tap-hold buffering replay: a letter the handler consumed while the
+        // tap modifier was held is now settled — route it to the current mode.
+        shortcutHandler.onReplay = { [weak self] original, keepShift in
+            guard let self, let client = self.resolvedClient() else { return }
+            guard !self.secureInputDetector.isSecureInputActive() else { return }
+            let event = keepShift ? original : Self.strippingShift(original)
+            switch StateManager.shared.currentMode {
+            case .korean:
+                _ = self.koreanEngine.handleEvent(event, client: client)
+            case .japanese:
+                _ = self.japaneseEngine.handleEvent(event, client: client)
+            case .english:
+                // EnglishEngine passes keys through to the system, but a
+                // buffered event was already consumed — insert directly.
+                if let chars = event.characters, !chars.isEmpty {
+                    client.insertText(chars as NSString,
+                                      replacementRange: NSRange(location: NSNotFound, length: NSNotFound))
+                }
+            }
+        }
+
         shortcutHandler.onAction = { [weak self] action in
             guard let self = self,
                   let client = self.resolvedClient() else {
@@ -580,6 +642,28 @@ class NRIMEInputController: IMKInputController {
                 return false
             }
         }
+    }
+
+    /// Rebuild a buffered keyDown without its Shift so the replayed letter
+    /// produces the base character (ㄱ not ㄲ, "a" not "A") in the new mode.
+    private static func strippingShift(_ event: NSEvent) -> NSEvent {
+        // Clear .shift plus both device-dependent shift bits (L 0x2 / R 0x4).
+        let stripped = NSEvent.ModifierFlags(
+            rawValue: event.modifierFlags.rawValue
+                & ~NSEvent.ModifierFlags.shift.rawValue & ~0x6)
+        let lowered = (event.charactersIgnoringModifiers ?? event.characters ?? "").lowercased()
+        return NSEvent.keyEvent(
+            with: .keyDown,
+            location: event.locationInWindow,
+            modifierFlags: stripped,
+            timestamp: event.timestamp,
+            windowNumber: event.windowNumber,
+            context: nil,
+            characters: lowered,
+            charactersIgnoringModifiers: lowered,
+            isARepeat: false,
+            keyCode: event.keyCode
+        ) ?? event
     }
 
     private func logControllerEvent(

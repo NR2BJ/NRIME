@@ -29,6 +29,8 @@ final class SettingsStore: ObservableObject {
         _shiftDoubleTapEnabled = Published(initialValue: true)
         _doubleTapWindow = Published(initialValue: 0.3)
         _shiftEnterDelay = Published(initialValue: 0.015)
+        _tapHoldBufferingEnabled = Published(initialValue: false)
+        _tapOverlapWindow = Published(initialValue: 0.05)
         _japaneseKeyConfig = Published(initialValue: .default)
 
         reloadFromDefaults()
@@ -80,6 +82,14 @@ final class SettingsStore: ObservableObject {
 
     @Published var doubleTapWindow: Double {
         didSet { defaults.set(doubleTapWindow, forKey: "doubleTapWindow") }
+    }
+
+    @Published var tapHoldBufferingEnabled: Bool {
+        didSet { defaults.set(tapHoldBufferingEnabled, forKey: "tapHoldBufferingEnabled") }
+    }
+
+    @Published var tapOverlapWindow: Double {
+        didSet { defaults.set(tapOverlapWindow, forKey: "tapOverlapWindow") }
     }
 
     @Published var shiftEnterDelay: Double {
@@ -150,6 +160,9 @@ final class SettingsStore: ObservableObject {
         doubleTapWindow = dtVal > 0 ? dtVal : 0.3
         let seVal = defaults.double(forKey: "shiftEnterDelay")
         shiftEnterDelay = seVal > 0 ? seVal : 0.015
+        tapHoldBufferingEnabled = defaults.bool(forKey: "tapHoldBufferingEnabled")
+        let towVal = defaults.double(forKey: "tapOverlapWindow")
+        tapOverlapWindow = towVal > 0 ? towVal : 0.05
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")
         perAppModeEnabled = defaults.bool(forKey: "perAppModeEnabled")

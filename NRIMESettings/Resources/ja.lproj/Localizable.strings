@@ -193,3 +193,8 @@
 "update.channel.stable" = "正式版";
 "update.channel.beta" = "ベータ";
 "update.channel.betaWarning" = "ベータチャンネルはテストビルドを先に受け取ります。不安定な場合があります。";
+
+/* Tap-hold buffering */
+"tapHoldBuffering.enable" = "高速タップ切替補正（実験的）";
+"tapHoldBuffering.description" = "Shiftタップ直後の高速入力で大文字などが混入する問題を補正します。Shift押下中に届いた文字を一時保留し、すぐにShiftを離すと言語切替+新モードで入力します。";
+"tapHoldBuffering.windowDescription" = "判定時間: 文字入力後この時間内にShiftを離すと切替意図と判断します。高速な大文字入力が誤認される場合は値を下げてください。";

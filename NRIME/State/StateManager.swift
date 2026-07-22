@@ -105,6 +105,10 @@ final class StateManager {
     func deactivateApp(_ bundleId: String) {
         guard Settings.shared.perAppModeEnabled else { return }
         guard shouldRememberApp(bundleId) else { return }
+        // IMKit does not strictly order deactivate/activate across fast focus
+        // hops. A stale deactivate arriving after another app activated would
+        // save THAT app's mode under this bundleId — skip it.
+        guard bundleId == currentAppBundleId else { return }
 
         var saved = Settings.shared.perAppSavedModes
         saved[bundleId] = currentMode.rawValue

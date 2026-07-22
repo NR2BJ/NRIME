@@ -41,7 +41,8 @@ final class KoreanEngine: InputEngine {
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || event.modifierFlags.contains(.option) {
             if automata.isComposing {
                 commitComposing(client: client)
-                let delay = Settings.shared.shiftEnterDelay / 1000.0
+                // shiftEnterDelay is already in seconds (default 0.015)
+                let delay = Settings.shared.shiftEnterDelay
                 let keyCode = event.keyCode
                 let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -125,6 +126,26 @@ final class KoreanEngine: InputEngine {
         hanjaSource = .none
     }
 
+    /// Restore the original text and end the hanja session (Escape/Space/other
+    /// keys — anything that leaves the panel without selecting a candidate).
+    /// A selected-text session has no composing state behind its marked preview,
+    /// so the original must be committed — leaving it marked lets the very next
+    /// keystroke replace the user's own text. A composing session keeps the
+    /// marked restore so the composition stays editable.
+    func endHanjaSession(client: any IMKTextInput) {
+        switch hanjaSource {
+        case .selectedText(let text):
+            if !text.isEmpty {
+                client.insertText(text as NSString, replacementRange: replacementRange())
+            }
+        case .composing:
+            restoreHanjaSource(client: client)
+        case .none:
+            break
+        }
+        clearHanjaSession()
+    }
+
     func rememberSelectedHanja(_ hanja: String) {
         guard let sourceText = hanjaSource.text else { return }
         hanjaSelectionStore.remember(hanja: hanja, for: sourceText)
@@ -141,8 +162,9 @@ final class KoreanEngine: InputEngine {
             return
         }
         let composingText = automata.currentComposingText()
+        // Log length only — typed content must never reach the developer log.
         DeveloperLogger.shared.log("Korean", "forceCommit: committing",
-                                   metadata: ["text": composingText, "length": "\(composingText.count)"])
+                                   metadata: ["length": "\(composingText.count)"])
         clearHanjaSession()
         commitComposing(client: client)
     }
@@ -188,8 +210,12 @@ final class KoreanEngine: InputEngine {
                 selectionRange: NSRange(location: result.composing.count, length: 0),
                 replacementRange: replacementRange()
             )
-        } else {
-            // Committed text but no composing text, or no text at all — clear marked text
+        } else if result.committed.isEmpty {
+            // Nothing committed and nothing composing — clear marked text.
+            // When something WAS committed, insertText above already replaced the
+            // marked text and ended composition; a trailing setMarkedText("")
+            // would re-trigger Chromium's oldHasMarkedText deletion (e.g. typing
+            // "세ㅠ" where the vowel commits with no remaining composition).
             client.setMarkedText(
                 "" as NSString,
                 selectionRange: NSRange(location: 0, length: 0),
@@ -268,8 +294,10 @@ final class KoreanEngine: InputEngine {
             converter.lookupCandidates(for: text),
             for: text
         )
+        // Log length only — the selected/composing text itself must never
+        // reach the developer log ("typed text is not recorded" contract).
         DeveloperLogger.shared.log("Korean", "Hanja lookup result",
-                                   metadata: ["source": text,
+                                   metadata: ["sourceLength": "\(text.count)",
                                               "candidates": "\(results.count)",
                                               "isSelectedText": "\(isSelectedText)"])
         if results.isEmpty {

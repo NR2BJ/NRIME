@@ -16,6 +16,26 @@ final class ShortcutHandler {
     /// Set by NRIMEInputController. Returns true to consume the event.
     var onAction: ((Action) -> Bool)?
 
+    /// Set by NRIMEInputController. Called when a buffered letter is resolved:
+    /// the event must be routed to the current-mode engine. `keepShift == false`
+    /// means the letter belonged to a tap (mode switch already fired) and must be
+    /// replayed unshifted into the new mode.
+    var onReplay: ((_ event: NSEvent, _ keepShift: Bool) -> Void)?
+
+    /// A letter keyDown that arrived while a tap-registered modifier was still
+    /// held. Held back until the modifier release (tap → replay unshifted) or a
+    /// timeout/second key (hold → replay shifted) settles the user's intent.
+    private struct PendingLetter {
+        let event: NSEvent
+        let letterDownTimestamp: TimeInterval
+        let modifierKeyCode: UInt16
+        let flushWork: DispatchWorkItem
+    }
+    private var pendingLetter: PendingLetter?
+    /// event.timestamp of the tracked modifier's press — buffering decisions use
+    /// event timestamps (not Date()) so 40ms-scale judgments stay accurate.
+    private var modifierDownEventTimestamp: TimeInterval?
+
     /// All shortcut keys and their corresponding actions.
     private static let allShortcuts: [(String, Action)] = [
         ("toggleEnglish", .toggleEnglish),
@@ -50,7 +70,16 @@ final class ShortcutHandler {
     }
 
     /// Reset internal state (e.g., on deactivateServer).
+    /// A pending buffered letter is dropped without replay — the client that the
+    /// replay would target is going away with the deactivation.
     func reset() {
+        if let pending = pendingLetter {
+            pending.flushWork.cancel()
+            DeveloperLogger.shared.log("Shortcut", "Buffered letter dropped on reset",
+                                       metadata: ["keyCode": String(format: "0x%02X", pending.event.keyCode)])
+        }
+        pendingLetter = nil
+        modifierDownEventTimestamp = nil
         activeModifierKeyCode = nil
         modifierDownTime = nil
         modifierWasUsedAsCombo = false
@@ -72,13 +101,23 @@ final class ShortcutHandler {
                 let capsNowOn = newFlags.contains(.capsLock)
                 let capsWasOn = oldFlags.contains(.capsLock)
                 // Only trigger when Caps Lock transitions OFF → ON (press, not release)
-                guard capsNowOn && !capsWasOn else { return false }
+                guard capsNowOn && !capsWasOn else {
+                    capsLockIsOn = capsNowOn // observe transitions we don't intercept
+                    return false
+                }
                 // Shift+CapsLock = real Caps Lock, don't intercept
-                if newFlags.contains(.shift) { return false }
+                if newFlags.contains(.shift) {
+                    capsLockIsOn = capsNowOn
+                    return false
+                }
                 let matched = checkModifierOnlyTap(keyCode) || checkPlainKeyShortcut(keyCode)
                 if matched {
-                    // Undo the system Caps Lock toggle so LED stays off
-                    toggleCapsLock()
+                    // Undo the system Caps Lock toggle: restore the pre-press state.
+                    // (toggle-then-apply here would re-assert the ON state the OS
+                    // just set, leaving Caps Lock stuck on.)
+                    setCapsLock(capsWasOn)
+                } else {
+                    capsLockIsOn = capsNowOn
                 }
                 return matched
             }
@@ -89,11 +128,40 @@ final class ShortcutHandler {
         let wasDown = oldFlags.contains(flag)
 
         if isNowDown && !wasDown {
+            // Another modifier joining while a letter is buffered settles it as
+            // a deliberate combo (hold).
+            if pendingLetter != nil {
+                flushPendingAsHold()
+            }
             // Modifier pressed down — start tracking for potential tap
             activeModifierKeyCode = keyCode
             modifierDownTime = Date()
+            modifierDownEventTimestamp = event.timestamp
             modifierWasUsedAsCombo = false
             return false // Don't consume yet
+        }
+
+        // Release while a letter is buffered: the overlap between letter-down and
+        // this release is the discriminating signal. A short overlap means the
+        // letter was a rollover after an intended tap (switch mode, replay
+        // unshifted); a long one means a deliberate shifted letter.
+        if !isNowDown && wasDown, let pending = pendingLetter, pending.modifierKeyCode == keyCode {
+            pending.flushWork.cancel()
+            pendingLetter = nil
+            let overlap = event.timestamp - pending.letterDownTimestamp
+            let hold = event.timestamp - (modifierDownEventTimestamp ?? event.timestamp)
+            activeModifierKeyCode = nil
+            modifierDownTime = nil
+            modifierDownEventTimestamp = nil
+            // Deliberately skip the double-tap bookkeeping below: a buffer-resolving
+            // release is not a clean tap and must not pair into a Caps Lock toggle.
+            if overlap < Settings.shared.tapOverlapWindow && hold < Settings.shared.tapThreshold {
+                _ = checkModifierOnlyTap(keyCode)
+                onReplay?(pending.event, false)
+            } else {
+                onReplay?(pending.event, true)
+            }
+            return true
         }
 
         if !isNowDown && wasDown && activeModifierKeyCode == keyCode {
@@ -102,6 +170,7 @@ final class ShortcutHandler {
             let elapsed = Date().timeIntervalSince(downTime)
             activeModifierKeyCode = nil
             modifierDownTime = nil
+            modifierDownEventTimestamp = nil
 
             if !modifierWasUsedAsCombo && elapsed < Settings.shared.tapThreshold {
                 // Double-Shift tap → toggle Caps Lock (only for shift keys NOT registered as shortcuts)
@@ -134,6 +203,13 @@ final class ShortcutHandler {
     private func handleKeyDown(_ event: NSEvent) -> Bool {
         let keyCode = event.keyCode
 
+        // 0. A second key while a letter is buffered settles it as a deliberate
+        //    combo (hold). This also covers the stuck case where the modifier's
+        //    release event was never delivered (focus change mid-buffer).
+        if pendingLetter != nil {
+            flushPendingAsHold()
+        }
+
         // 1. Check modifier+key combo shortcuts (any modifier held)
         if let result = checkModifierKeyCombo(event) {
             // Mark modifier as used so tap doesn't fire on release
@@ -141,6 +217,15 @@ final class ShortcutHandler {
             activeModifierKeyCode = nil
             modifierDownTime = nil
             return result
+        }
+
+        // 1.5. Tap-hold buffering: a letter arriving while a tap-registered
+        //      modifier is briefly held is ambiguous (rollover after a tap vs
+        //      a deliberate shifted letter). Consume and hold it; the modifier
+        //      release or the overlap-window timer settles it.
+        if shouldBufferLetter(event) {
+            bufferLetter(event)
+            return true
         }
 
         // 2. If a modifier is held for tap tracking, mark it as used
@@ -155,6 +240,86 @@ final class ShortcutHandler {
 
         return false
     }
+
+    // MARK: - Tap-Hold Buffering
+
+    private func shouldBufferLetter(_ event: NSEvent) -> Bool {
+        guard Settings.shared.tapHoldBufferingEnabled,
+              !event.isARepeat,
+              pendingLetter == nil,
+              !modifierWasUsedAsCombo,
+              let held = activeModifierKeyCode,
+              let heldFlag = ShortcutConfig.modifierFlag(for: held),
+              event.modifierFlags.contains(heldFlag),
+              // Only the ambiguous window right after the modifier went down
+              let downTS = modifierDownEventTimestamp,
+              event.timestamp - downTS < Settings.shared.tapThreshold,
+              // The held modifier must be a tap shortcut, and must not double as
+              // a combo modifier (combo users expect combo semantics)
+              isKeyRegisteredAsShortcut(held),
+              !anyEnabledComboUses(modifierKeyCode: held),
+              // Letters only — digits/symbols keep their shifted meanings (！ etc.)
+              JamoTable.jamo(forKeyCode: event.keyCode, shifted: false) != nil,
+              event.modifierFlags.intersection([.control, .option, .command]).isEmpty,
+              onlyHeldSideIsDown(event, held: held)
+        else { return false }
+        return true
+    }
+
+    private func bufferLetter(_ event: NSEvent) {
+        guard let held = activeModifierKeyCode,
+              let downTS = modifierDownEventTimestamp else { return }
+        let work = DispatchWorkItem { [weak self] in self?.flushPendingAsHold() }
+        pendingLetter = PendingLetter(event: event,
+                                      letterDownTimestamp: event.timestamp,
+                                      modifierKeyCode: held,
+                                      flushWork: work)
+        // The buffer never outlives the overlap window, nor the point where the
+        // hold itself stops qualifying as a tap.
+        let deadline = min(Settings.shared.tapOverlapWindow,
+                           (downTS + Settings.shared.tapThreshold) - event.timestamp)
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0.001, deadline), execute: work)
+    }
+
+    /// Settle the buffered letter as a deliberate shifted keystroke (hold).
+    private func flushPendingAsHold() {
+        guard let pending = pendingLetter else { return }
+        pending.flushWork.cancel()
+        pendingLetter = nil
+        modifierWasUsedAsCombo = true
+        onReplay?(pending.event, true)
+    }
+
+    /// Whether any enabled modifier+key combo shortcut is bound to this modifier.
+    private func anyEnabledComboUses(modifierKeyCode: UInt16) -> Bool {
+        for (key, _) in Self.allShortcuts {
+            let config = Settings.shared.shortcut(for: key)
+            guard !config.disabled, !config.isModifierOnlyTap else { continue }
+            if config.modifierKeyCode == modifierKeyCode { return true }
+        }
+        return false
+    }
+
+    /// The event's device-dependent bits must name only the tracked side.
+    /// Both shifts down is not a tap gesture; synthetic events without device
+    /// bits fall back to trusting the tracked keyCode.
+    private func onlyHeldSideIsDown(_ event: NSEvent, held: UInt16) -> Bool {
+        guard let sides = Self.deviceModifierMasks(for: held) else { return false }
+        let sideBits = event.modifierFlags.rawValue & sides.eitherSide
+        if sideBits != 0 {
+            return sideBits == sides.requiredSide
+        }
+        return true
+    }
+
+#if DEBUG
+    /// Test seam: fire the overlap-window timeout synchronously.
+    func flushPendingForTesting() {
+        flushPendingAsHold()
+    }
+
+    var hasPendingLetterForTesting: Bool { pendingLetter != nil }
+#endif
 
     // MARK: - Shortcut Matching
 
@@ -308,16 +473,21 @@ final class ShortcutHandler {
     /// Track Caps Lock state ourselves since IOHIDGetModifierLockState returns stale values.
     private var capsLockIsOn = false
 
-    /// Toggle Caps Lock using IOKit (no Accessibility permission needed).
+    /// Toggle Caps Lock using IOKit (double-Shift-tap path).
     private func toggleCapsLock() {
+        setCapsLock(!capsLockIsOn)
+    }
+
+    /// Set Caps Lock to an explicit state using IOKit (no Accessibility permission needed).
+    private func setCapsLock(_ on: Bool) {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching(kIOHIDSystemClass))
         guard service != IO_OBJECT_NULL else { return }
         defer { IOObjectRelease(service) }
 
-        capsLockIsOn.toggle()
-        IOHIDSetModifierLockState(service, Int32(kIOHIDCapsLockState), capsLockIsOn)
-        DeveloperLogger.shared.log("Shortcut", "Double-Shift → Caps Lock toggled",
-                                   metadata: ["now": "\(capsLockIsOn)"])
+        capsLockIsOn = on
+        IOHIDSetModifierLockState(service, Int32(kIOHIDCapsLockState), on)
+        DeveloperLogger.shared.log("Shortcut", "Caps Lock state set",
+                                   metadata: ["now": "\(on)"])
     }
 
 }

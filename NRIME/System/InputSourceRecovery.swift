@@ -224,7 +224,11 @@ final class InputSourceRecovery {
                 "userInitiatedSwitch": String(currentUserInitiatedSwitch)
             ])
         }
-        userInitiatedSwitch = false
+        // Do NOT clear userInitiatedSwitch here: the very focus change the user
+        // initiated fires this notification immediately, and an unconditional
+        // clear would consume the whole 5s grace period on that first alert —
+        // the next poll tick would then yank the user's chosen source back.
+        // The property's getter already expires it after the grace period.
 
         if shouldRecover {
             recoverInputSource()

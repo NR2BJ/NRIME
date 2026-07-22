@@ -190,7 +190,11 @@ final class MozcServerManager {
         process.terminationHandler = { [weak self] proc in
             NSLog("NRIME: mozc_server terminated with status \(proc.terminationStatus)")
             self?.serverProcessLock.withLock {
-                self?.serverProcess = nil
+                // The handler for a killed old server can arrive after a fresh
+                // replacement was launched — only clear our own reference.
+                if self?.serverProcess === proc {
+                    self?.serverProcess = nil
+                }
             }
         }
 

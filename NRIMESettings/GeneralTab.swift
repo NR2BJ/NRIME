@@ -69,6 +69,24 @@ struct GeneralTab: View {
                 }
             }
 
+            Section {
+                Toggle(L("tapHoldBuffering.enable"), isOn: $store.tapHoldBufferingEnabled)
+                Text(L("tapHoldBuffering.description"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if store.tapHoldBufferingEnabled {
+                    HStack {
+                        Text("\(Int(round(store.tapOverlapWindow * 1000)))ms")
+                            .monospacedDigit()
+                            .frame(width: 50, alignment: .trailing)
+                        Slider(value: $store.tapOverlapWindow, in: 0.03...0.08, step: 0.005)
+                    }
+                    Text(L("tapHoldBuffering.windowDescription"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section(L("section.shiftEnterDelay")) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {

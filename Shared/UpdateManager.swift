@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // MARK: - GitHub API Models
@@ -48,12 +49,16 @@ struct GitHubAsset: Codable {
     let size: Int
     let browserDownloadURL: String
     let updatedAt: String?
+    /// GitHub-computed content digest ("sha256:<hex>") — the integrity anchor
+    /// for the downloaded PKG, which is later installed with admin rights.
+    let digest: String?
 
     enum CodingKeys: String, CodingKey {
         case name
         case size
         case browserDownloadURL = "browser_download_url"
         case updatedAt = "updated_at"
+        case digest
     }
 }
 
@@ -410,12 +415,26 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         let cacheDir = cacheDirectory()
-        let fileName = downloadTask.response?.suggestedFilename ?? "NRIME-update.pkg"
+        // Name the file from the release metadata, not the response's
+        // suggestedFilename (a server-influenced header), and strip any
+        // path components either way.
+        let fileName = (latestRelease?.pkgAsset?.name ?? "NRIME-update.pkg")
+            .components(separatedBy: "/").last ?? "NRIME-update.pkg"
         let destination = cacheDir.appendingPathComponent(fileName)
 
         do {
             try? FileManager.default.removeItem(at: destination)
             try FileManager.default.moveItem(at: location, to: destination)
+
+            // The PKG is installed with admin rights — refuse bytes that don't
+            // match the sha256 digest the release metadata promised.
+            if Self.fileMatchesDigest(at: destination,
+                                      expected: latestRelease?.pkgAsset?.digest) == false {
+                try? FileManager.default.removeItem(at: destination)
+                state = .error("Downloaded file failed integrity verification.")
+                return
+            }
+
             // Save PKG timestamp now (before install kills the app via postinstall)
             if let ts = latestRelease?.pkgAsset?.updatedAt {
                 defaults?.set(ts, forKey: pkgTimestampKey(for: channel))
@@ -424,6 +443,25 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         } catch {
             state = .error("Failed to save download: \(error.localizedDescription)")
         }
+    }
+
+    /// Compare a file's SHA-256 against a GitHub asset digest ("sha256:<hex>").
+    /// Returns nil when no digest is available (older releases), true/false
+    /// for a definite verdict. An unreadable file is a failed verification.
+    static func fileMatchesDigest(at url: URL, expected: String?) -> Bool? {
+        guard let expected, expected.lowercased().hasPrefix("sha256:") else { return nil }
+        let expectedHex = String(expected.dropFirst("sha256:".count)).lowercased()
+
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        while true {
+            guard let chunk = try? handle.read(upToCount: 1 << 20), !chunk.isEmpty else { break }
+            hasher.update(data: chunk)
+        }
+        let actualHex = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        return actualHex == expectedHex
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

@@ -77,23 +77,27 @@ final class MozcConverter {
             var keyEvent = Mozc_Commands_KeyEvent()
             keyEvent.keyString = String(chars[i])
 
-            if let output = client.sendKey(keyEvent) {
-                if output.hasErrorCode {
-                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana got error code from Mozc",
-                                               metadata: ["errorCode": "\(output.errorCode)"])
-                    client.resetSession()
-                    return false
-                }
+            let output = client.sendKey(keyEvent)
+
+            if let output, !output.hasErrorCode {
                 lastFeedOutput = output
                 i += 1
             } else if !retried {
-                // IPC failure — restart server and retry from beginning
-                DeveloperLogger.shared.log("MozcConvert", "feedHiragana IPC failed — restarting server and retrying")
-                client.resetSession()
-                guard serverManager.restartServer() else {
-                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed — server restart unsuccessful")
-                    isAvailable = false
-                    return false
+                if output != nil {
+                    // Server answered with an error — typically a stale session
+                    // ID after a restart triggered by another input controller.
+                    // A fresh session is enough; no server restart needed.
+                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana got error code — resetting session and retrying")
+                    client.resetSession()
+                } else {
+                    // IPC failure — restart server and retry from beginning
+                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana IPC failed — restarting server and retrying")
+                    client.resetSession()
+                    guard serverManager.restartServer() else {
+                        DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed — server restart unsuccessful")
+                        isAvailable = false
+                        return false
+                    }
                 }
                 retried = true
                 i = 0
