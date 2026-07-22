@@ -62,20 +62,46 @@ final class KoreanEngineTests: XCTestCase {
 
     // MARK: - Shift+Enter Passthrough Tests
 
-    func testShiftEnterWhileComposingConsumedForRepost() {
+    func testShiftEnterWhileComposingInChromiumCommitsAndInsertsNewlineAsync() {
+        ChromiumDetector.overrideForTesting = true
+        defer { ChromiumDetector.overrideForTesting = nil }
+
         XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x0F), client: client)) // r → ㄱ
         XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x28), client: client)) // k → 가
         XCTAssertEqual(client.markedString, "가")
 
-        // Shift+Enter while composing: consumed (return true).
-        // Text committed asynchronously; key re-posted via CGEvent.
         let handled = engine.handleEvent(
             keyEvent(keyCode: 0x24, characters: "\r", modifiers: [.shift]),
             client: client
         )
 
-        XCTAssertTrue(handled, "Shift+Enter while composing should be consumed for async repost")
-        XCTAssertEqual(client.markedString, "")
+        XCTAssertTrue(handled, "Chromium path consumes the event and inserts the newline itself")
+        XCTAssertEqual(client.insertedTexts, ["가"], "Commit lands synchronously")
+        XCTAssertFalse(engine.isCurrentlyComposing)
+
+        // The newline is inserted after shiftEnterDelay to dodge oldHasMarkedText.
+        let settled = expectation(description: "async newline")
+        DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay + 0.05) {
+            settled.fulfill()
+        }
+        wait(for: [settled], timeout: 1.0)
+        XCTAssertEqual(client.insertedTexts, ["가", "\n"])
+    }
+
+    func testShiftEnterWhileComposingOutsideChromiumCommitsAndPassesThrough() {
+        ChromiumDetector.overrideForTesting = false
+        defer { ChromiumDetector.overrideForTesting = nil }
+
+        XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x0F), client: client)) // r → ㄱ
+        XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x28), client: client)) // k → 가
+
+        let handled = engine.handleEvent(
+            keyEvent(keyCode: 0x24, characters: "\r", modifiers: [.shift]),
+            client: client
+        )
+
+        XCTAssertFalse(handled, "Non-Chromium apps handle the original Shift+Enter themselves")
+        XCTAssertEqual(client.insertedTexts, ["가"])
         XCTAssertFalse(engine.isCurrentlyComposing)
     }
 

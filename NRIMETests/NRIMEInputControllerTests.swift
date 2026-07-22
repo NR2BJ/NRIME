@@ -173,7 +173,9 @@ final class NRIMEInputControllerTests: XCTestCase {
 
     // MARK: - Shift+Enter & Cmd+A Passthrough Tests
 
-    func testShiftEnterWhileKoreanComposingConsumedForRepost() {
+    func testShiftEnterWhileKoreanComposingInChromiumConsumesAndCommits() {
+        ChromiumDetector.overrideForTesting = true
+        defer { ChromiumDetector.overrideForTesting = nil }
         StateManager.shared.switchTo(.korean)
 
         XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x0F), client: client)) // r → ㄱ
@@ -185,9 +187,28 @@ final class NRIMEInputControllerTests: XCTestCase {
             client: client
         )
 
-        // Consumed: text committed async, Shift+Enter re-posted via CGEvent
+        // Chromium path: commit lands, event consumed, newline arrives async
         XCTAssertTrue(handled)
         XCTAssertEqual(client.markedString, "")
+        XCTAssertEqual(client.insertedTexts, ["가"])
+    }
+
+    func testShiftEnterWhileKoreanComposingOutsideChromiumPassesThrough() {
+        ChromiumDetector.overrideForTesting = false
+        defer { ChromiumDetector.overrideForTesting = nil }
+        StateManager.shared.switchTo(.korean)
+
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x0F), client: client)) // r
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k
+
+        let handled = controller.handle(
+            keyEvent(keyCode: 0x24, characters: "\r", modifiers: [.shift]),
+            client: client
+        )
+
+        // Non-Chromium: commit lands, the app handles the original Shift+Enter
+        XCTAssertFalse(handled)
+        XCTAssertEqual(client.insertedTexts, ["가"])
     }
 
     func testCmdAWhileKoreanComposingConsumedForRepost() {
@@ -219,7 +240,9 @@ final class NRIMEInputControllerTests: XCTestCase {
         XCTAssertEqual(client.insertedTexts, [])
     }
 
-    func testShiftEnterWhileJapaneseComposingConsumedForRepost() {
+    func testShiftEnterWhileJapaneseComposingInChromiumConsumesAndCommits() {
+        ChromiumDetector.overrideForTesting = true
+        defer { ChromiumDetector.overrideForTesting = nil }
         StateManager.shared.switchTo(.japanese)
 
         XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k
@@ -231,9 +254,10 @@ final class NRIMEInputControllerTests: XCTestCase {
             client: client
         )
 
-        // Consumed: text committed async, Shift+Enter re-posted via CGEvent
+        // Chromium path: commit lands, event consumed, newline arrives async
         XCTAssertTrue(handled)
         XCTAssertEqual(client.markedString, "")
+        XCTAssertEqual(client.insertedTexts, ["か"])
     }
 
     func testCmdAWhileJapaneseComposingConsumedForRepost() {
