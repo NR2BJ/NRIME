@@ -29,7 +29,9 @@ final class ShortcutHandler {
         let event: NSEvent
         let letterDownTimestamp: TimeInterval
         let modifierKeyCode: UInt16
-        let flushWork: DispatchWorkItem
+        var flushWork: DispatchWorkItem
+        /// Whether the timeout already yielded once to a release still in flight.
+        var deferredOnce = false
     }
     private var pendingLetter: PendingLetter?
     /// event.timestamp of the tracked modifier's press — buffering decisions use
@@ -45,14 +47,21 @@ final class ShortcutHandler {
         ("hanjaConvert", .hanjaConvert),
     ]
 
-    // Tracking state for modifier-only tap detection
+    // Tracking state for modifier-only tap detection.
+    //
+    // All durations are measured with NSEvent.timestamp — the moment the event
+    // actually occurred — never with Date(), which reads the clock when the
+    // handler happens to run. The IMKit event thread stalls for hundreds of
+    // milliseconds under load (synchronous Mozc IPC, server relaunch sleeps),
+    // and a Date()-based measurement charges that stall to the user's key hold:
+    // short taps miss the threshold, and long holds processed back-to-back are
+    // promoted to taps.
     private var activeModifierKeyCode: UInt16?   // which modifier key is currently held
-    private var modifierDownTime: Date?
     private var modifierWasUsedAsCombo = false
     private var previousModifierFlags: NSEvent.ModifierFlags = []
 
     // Double-Shift tracking for Caps Lock toggle
-    private var lastShiftTapTime: Date?
+    private var lastShiftTapTimestamp: TimeInterval?
     private var lastShiftTapKeyCode: UInt16?
     private var doubleTapWindow: TimeInterval { Settings.shared.doubleTapWindow }
 
@@ -81,7 +90,6 @@ final class ShortcutHandler {
         pendingLetter = nil
         modifierDownEventTimestamp = nil
         activeModifierKeyCode = nil
-        modifierDownTime = nil
         modifierWasUsedAsCombo = false
         previousModifierFlags = []
     }
@@ -135,7 +143,6 @@ final class ShortcutHandler {
             }
             // Modifier pressed down — start tracking for potential tap
             activeModifierKeyCode = keyCode
-            modifierDownTime = Date()
             modifierDownEventTimestamp = event.timestamp
             modifierWasUsedAsCombo = false
             return false // Don't consume yet
@@ -151,7 +158,6 @@ final class ShortcutHandler {
             let overlap = event.timestamp - pending.letterDownTimestamp
             let hold = event.timestamp - (modifierDownEventTimestamp ?? event.timestamp)
             activeModifierKeyCode = nil
-            modifierDownTime = nil
             modifierDownEventTimestamp = nil
             // Deliberately skip the double-tap bookkeeping below: a buffer-resolving
             // release is not a clean tap and must not pair into a Caps Lock toggle.
@@ -165,11 +171,12 @@ final class ShortcutHandler {
         }
 
         if !isNowDown && wasDown && activeModifierKeyCode == keyCode {
-            // Modifier released — check if it was a solo tap
-            guard let downTime = modifierDownTime else { return false }
-            let elapsed = Date().timeIntervalSince(downTime)
+            // Modifier released — check if it was a solo tap. Measure with the
+            // events' own timestamps so a stalled event thread neither hides a
+            // real tap nor invents one (see the note on the tracking state).
+            guard let downTimestamp = modifierDownEventTimestamp else { return false }
+            let elapsed = max(0, event.timestamp - downTimestamp)
             activeModifierKeyCode = nil
-            modifierDownTime = nil
             modifierDownEventTimestamp = nil
 
             if !modifierWasUsedAsCombo && elapsed < Settings.shared.tapThreshold {
@@ -178,16 +185,17 @@ final class ShortcutHandler {
                                   keyCode == ShortcutConfig.keyCodeRightShift)
                 let isRegisteredShortcut = isShiftKey && isKeyRegisteredAsShortcut(keyCode)
                 if isShiftKey && !isRegisteredShortcut && Settings.shared.shiftDoubleTapEnabled,
-                   let lastTime = lastShiftTapTime,
+                   let lastTimestamp = lastShiftTapTimestamp,
                    lastShiftTapKeyCode == keyCode,
-                   Date().timeIntervalSince(lastTime) < doubleTapWindow {
-                    lastShiftTapTime = nil
+                   (event.timestamp - lastTimestamp) >= 0,
+                   (event.timestamp - lastTimestamp) < doubleTapWindow {
+                    lastShiftTapTimestamp = nil
                     lastShiftTapKeyCode = nil
                     toggleCapsLock()
                     return true
                 }
                 if isShiftKey && !isRegisteredShortcut {
-                    lastShiftTapTime = Date()
+                    lastShiftTapTimestamp = event.timestamp
                     lastShiftTapKeyCode = keyCode
                 }
                 // Solo tap — check modifier-only shortcuts
@@ -215,7 +223,7 @@ final class ShortcutHandler {
             // Mark modifier as used so tap doesn't fire on release
             modifierWasUsedAsCombo = true
             activeModifierKeyCode = nil
-            modifierDownTime = nil
+            modifierDownEventTimestamp = nil
             return result
         }
 
@@ -269,7 +277,7 @@ final class ShortcutHandler {
     private func bufferLetter(_ event: NSEvent) {
         guard let held = activeModifierKeyCode,
               let downTS = modifierDownEventTimestamp else { return }
-        let work = DispatchWorkItem { [weak self] in self?.flushPendingAsHold() }
+        let work = DispatchWorkItem { [weak self] in self?.flushPendingOnTimeout() }
         pendingLetter = PendingLetter(event: event,
                                       letterDownTimestamp: event.timestamp,
                                       modifierKeyCode: held,
@@ -289,6 +297,32 @@ final class ShortcutHandler {
         modifierWasUsedAsCombo = true
         onReplay?(pending.event, true)
     }
+
+    /// The overlap window elapsed. Firing a timer is only evidence that time
+    /// passed on *this* thread, which under load can lag far behind the physical
+    /// keyboard — so if the modifier is already physically up, its release event
+    /// is queued behind whatever stalled us. Yield once so that event decides
+    /// with its own timestamp instead of settling a real tap as a capital.
+    private func flushPendingOnTimeout() {
+        guard var pending = pendingLetter else { return }
+
+        if !pending.deferredOnce,
+           let flag = ShortcutConfig.modifierFlag(for: pending.modifierKeyCode),
+           !NSEvent.modifierFlags.contains(flag) {
+            pending.flushWork.cancel()
+            pending.deferredOnce = true
+            let work = DispatchWorkItem { [weak self] in self?.flushPendingOnTimeout() }
+            pending.flushWork = work
+            pendingLetter = pending
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.releaseGracePeriod, execute: work)
+            return
+        }
+
+        flushPendingAsHold()
+    }
+
+    /// How long the timeout waits for an in-flight release before giving up.
+    private static let releaseGracePeriod: TimeInterval = 0.02
 
     /// Whether any enabled modifier+key combo shortcut is bound to this modifier.
     private func anyEnabledComboUses(modifierKeyCode: UInt16) -> Bool {

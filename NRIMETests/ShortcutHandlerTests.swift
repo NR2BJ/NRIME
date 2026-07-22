@@ -141,6 +141,40 @@ final class ShortcutHandlerTests: XCTestCase {
         XCTAssertEqual(StateManager.shared.currentMode, .japanese)
     }
 
+    // MARK: - Timing under main-thread stalls
+
+    /// Tap timing must come from the events' own timestamps, not from when the
+    /// handler happened to run. The IMKit event thread can stall for hundreds of
+    /// milliseconds (synchronous Mozc IPC, server relaunch sleeps), which delays
+    /// the release's *processing* without changing how long the key was held.
+    func testTapStillFiresWhenEventProcessingIsDelayed() {
+        let stall: TimeInterval = 0.30 // > tapThreshold (0.2)
+        StateManager.shared.switchTo(.korean)
+
+        _ = handler.handleEvent(flagsChangedEvent(
+            keyCode: ShortcutConfig.keyCodeRightShift, modifiers: [.shift], timestamp: 100.0))
+        Thread.sleep(forTimeInterval: stall)
+        let consumed = handler.handleEvent(flagsChangedEvent(
+            keyCode: ShortcutConfig.keyCodeRightShift, modifiers: [], timestamp: 100.08))
+
+        XCTAssertTrue(consumed, "An 80ms physical tap must fire even if its release was processed late")
+        XCTAssertEqual(StateManager.shared.currentMode, .english)
+    }
+
+    /// The mirror case: a genuinely long hold must not be promoted to a tap just
+    /// because the handler processed both events back to back.
+    func testLongHoldIsNotTreatedAsTapWhenProcessedQuickly() {
+        StateManager.shared.switchTo(.korean)
+
+        _ = handler.handleEvent(flagsChangedEvent(
+            keyCode: ShortcutConfig.keyCodeRightShift, modifiers: [.shift], timestamp: 200.0))
+        let consumed = handler.handleEvent(flagsChangedEvent(
+            keyCode: ShortcutConfig.keyCodeRightShift, modifiers: [], timestamp: 200.5))
+
+        XCTAssertFalse(consumed, "500ms hold is not a tap")
+        XCTAssertEqual(StateManager.shared.currentMode, .korean)
+    }
+
     private func keyEvent(
         keyCode: UInt16,
         characters: String = "",
@@ -166,13 +200,14 @@ final class ShortcutHandlerTests: XCTestCase {
 
     private func flagsChangedEvent(
         keyCode: UInt16,
-        modifiers: NSEvent.ModifierFlags
+        modifiers: NSEvent.ModifierFlags,
+        timestamp: TimeInterval = 0
     ) -> NSEvent {
         guard let event = NSEvent.keyEvent(
             with: .flagsChanged,
             location: .zero,
             modifierFlags: modifiers,
-            timestamp: 0,
+            timestamp: timestamp,
             windowNumber: 0,
             context: nil,
             characters: "",
