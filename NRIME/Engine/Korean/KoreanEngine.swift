@@ -78,15 +78,17 @@ final class KoreanEngine: InputEngine {
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
 
         // Shift+Enter while composing: commit text and insert newline.
-        // Chromium (Electron/CEF): async insertText("\n") to avoid oldHasMarkedText race.
+        // Chromium (Electron/CEF): perform the newline ourselves after a delay
+        // to avoid the oldHasMarkedText race (insertText("\n"), or a replayed
+        // key press for apps that submit on a programmatic "\n" — see
+        // KeyEventReposter.performChromiumNewline).
         // All other apps: commit + return false — system handles the original Enter event.
         if automata.isComposing && isShifted && Self.isEnterKey(event.keyCode) {
             commitComposing(client: client)
             if ChromiumDetector.isFrontmostAppChromium {
-                let capturedClient = client
-                DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
-                    capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
-                }
+                KeyEventReposter.performChromiumNewline(keyCode: event.keyCode,
+                                                        client: client,
+                                                        delay: Settings.shared.shiftEnterDelay)
                 return true
             }
             return false

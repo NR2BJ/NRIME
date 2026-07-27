@@ -175,7 +175,11 @@ final class NRIMEInputControllerTests: XCTestCase {
 
     func testShiftEnterWhileKoreanComposingInChromiumConsumesAndCommits() {
         ChromiumDetector.overrideForTesting = true
-        defer { ChromiumDetector.overrideForTesting = nil }
+        ChromiumDetector.newlineQuirkOverrideForTesting = false
+        defer {
+            ChromiumDetector.overrideForTesting = nil
+            ChromiumDetector.newlineQuirkOverrideForTesting = nil
+        }
         StateManager.shared.switchTo(.korean)
 
         XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x0F), client: client)) // r → ㄱ
@@ -242,7 +246,11 @@ final class NRIMEInputControllerTests: XCTestCase {
 
     func testShiftEnterWhileJapaneseComposingInChromiumConsumesAndCommits() {
         ChromiumDetector.overrideForTesting = true
-        defer { ChromiumDetector.overrideForTesting = nil }
+        ChromiumDetector.newlineQuirkOverrideForTesting = false
+        defer {
+            ChromiumDetector.overrideForTesting = nil
+            ChromiumDetector.newlineQuirkOverrideForTesting = nil
+        }
         StateManager.shared.switchTo(.japanese)
 
         XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k

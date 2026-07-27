@@ -266,15 +266,15 @@ final class JapaneseEngine: InputEngine {
             let wasComposing = composer.isComposing || liveConversionActive
 
             // Shift+Enter while composing: commit text and insert newline.
-            // Chromium: async insertText("\n") to avoid oldHasMarkedText race.
+            // Chromium: async newline (insertText("\n"), or a replayed key press
+            // for apps that submit on programmatic "\n" — Codex).
             // All other apps: commit + return false — system handles the original Enter.
             if wasComposing && isShifted {
                 commitComposing(client: client)
                 if ChromiumDetector.isFrontmostAppChromium {
-                    let capturedClient = client
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
-                        capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
-                    }
+                    KeyEventReposter.performChromiumNewline(keyCode: event.keyCode,
+                                                            client: client,
+                                                            delay: Settings.shared.shiftEnterDelay)
                     return true
                 }
                 return false
@@ -735,14 +735,15 @@ final class JapaneseEngine: InputEngine {
         let isShifted = event.modifierFlags.contains(.shift)
 
         // Shift+Enter — commit conversion and insert newline.
-        // Chromium: async insertText("\n"). Others: commit + return false.
+        // Chromium: async newline (insertText("\n"), or a replayed key press
+        // for apps that submit on programmatic "\n" — Codex).
+        // Others: commit + return false.
         if (keyCode == 0x24 || keyCode == 0x4C) && isShifted {
             commitConversion(client: client)
             if ChromiumDetector.isFrontmostAppChromium {
-                let capturedClient = client
-                DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay) {
-                    capturedClient.insertText("\n" as NSString, replacementRange: NSRange(location: NSNotFound, length: 0))
-                }
+                KeyEventReposter.performChromiumNewline(keyCode: keyCode,
+                                                        client: client,
+                                                        delay: Settings.shared.shiftEnterDelay)
                 return true
             }
             return false

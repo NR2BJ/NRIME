@@ -8,7 +8,28 @@ enum ChromiumDetector {
 #if DEBUG
     /// Test seam: forces the verdict regardless of the frontmost app.
     static var overrideForTesting: Bool?
+    /// Test seam for the newline-submit quirk below.
+    static var newlineQuirkOverrideForTesting: Bool?
 #endif
+
+    /// Electron apps whose editor treats a programmatic insertText("\n") as
+    /// message submit rather than a line break (their newline path only fires
+    /// on a real Shift+Enter keydown). For these, the Shift+Enter workaround
+    /// replays the key press after the commit instead of inserting "\n".
+    private static let newlineInsertSubmitsBundleIDs: Set<String> = [
+        "com.openai.codex", // ChatGPT/Codex desktop — verified 2026-07 beta test
+    ]
+
+    /// Whether the frontmost app is on the newline-submit quirk list.
+    static var frontmostAppTreatsNewlineInsertAsSubmit: Bool {
+#if DEBUG
+        if let forced = newlineQuirkOverrideForTesting { return forced }
+#endif
+        guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else {
+            return false
+        }
+        return newlineInsertSubmitsBundleIDs.contains(bundleID)
+    }
 
     /// Returns true if the frontmost application uses Chromium/Electron.
     /// Result is cached per bundle path to avoid repeated filesystem checks.

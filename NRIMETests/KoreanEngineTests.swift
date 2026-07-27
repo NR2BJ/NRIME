@@ -64,7 +64,11 @@ final class KoreanEngineTests: XCTestCase {
 
     func testShiftEnterWhileComposingInChromiumCommitsAndInsertsNewlineAsync() {
         ChromiumDetector.overrideForTesting = true
-        defer { ChromiumDetector.overrideForTesting = nil }
+        ChromiumDetector.newlineQuirkOverrideForTesting = false
+        defer {
+            ChromiumDetector.overrideForTesting = nil
+            ChromiumDetector.newlineQuirkOverrideForTesting = nil
+        }
 
         XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x0F), client: client)) // r → ㄱ
         XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x28), client: client)) // k → 가
@@ -86,6 +90,45 @@ final class KoreanEngineTests: XCTestCase {
         }
         wait(for: [settled], timeout: 1.0)
         XCTAssertEqual(client.insertedTexts, ["가", "\n"])
+    }
+
+    // The Codex quirk: its editor submits on a programmatic "\n", so the
+    // newline must be a replayed key press instead — and never an insertText.
+    func testShiftEnterInNewlineSubmitQuirkAppRepostsInsteadOfInsertingNewline() {
+        ChromiumDetector.overrideForTesting = true
+        ChromiumDetector.newlineQuirkOverrideForTesting = true
+        var reposted: [(keyCode: UInt16, flags: CGEventFlags)] = []
+        KeyEventReposter.captureForTesting = { keyCode, flags in
+            reposted.append((keyCode, flags))
+        }
+        defer {
+            ChromiumDetector.overrideForTesting = nil
+            ChromiumDetector.newlineQuirkOverrideForTesting = nil
+            KeyEventReposter.captureForTesting = nil
+        }
+
+        XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x0F), client: client)) // r → ㄱ
+        XCTAssertTrue(engine.handleEvent(keyEvent(keyCode: 0x28), client: client)) // k → 가
+
+        let handled = engine.handleEvent(
+            keyEvent(keyCode: 0x24, characters: "\r", modifiers: [.shift]),
+            client: client
+        )
+        XCTAssertTrue(handled)
+        XCTAssertEqual(client.insertedTexts, ["가"], "Commit lands synchronously")
+
+        let settled = expectation(description: "async repost")
+        DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay + 0.05) {
+            settled.fulfill()
+        }
+        wait(for: [settled], timeout: 1.0)
+
+        XCTAssertEqual(client.insertedTexts, ["가"],
+                       "No \\n insert — it would submit the message in this app")
+        XCTAssertEqual(reposted.count, 1)
+        XCTAssertEqual(reposted.first?.keyCode, 0x24)
+        XCTAssertEqual(reposted.first?.flags, .maskShift,
+                       "Must replay with Shift — a plain Enter would submit")
     }
 
     func testShiftEnterWhileComposingOutsideChromiumCommitsAndPassesThrough() {
