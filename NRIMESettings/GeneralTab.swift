@@ -113,6 +113,10 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(L("display.preventABC"), isOn: $store.preventABCSwitch)
+                    Toggle(L("secureInput.asciiFallback"), isOn: $store.secureInputASCIIFallback)
+                    Text(L("secureInput.asciiFallbackDescription"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text(L("display.preventABC.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)

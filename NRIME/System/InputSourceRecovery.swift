@@ -14,7 +14,24 @@ final class InputSourceRecovery {
         case halt(RecoveryThrottleState)
     }
 
+    /// What the secure-input watcher should do on this observation.
+    enum SecureInputAction: Equatable {
+        /// Step aside to a plain layout, remembering the source to come back to.
+        case switchToASCII(remembering: String)
+        /// Secure input ended — go back to the remembered source.
+        case restore(String)
+        case none
+    }
+
     private let stateQueue = DispatchQueue(label: "com.nrime.inputsource.state")
+    /// Secure input is a process-global flag, and while it is on the input
+    /// method cannot compose at all — keystrokes reach the app as plain ASCII
+    /// while the indicator still claims Korean/Japanese. Rather than sit in
+    /// that lying state, hand the keyboard to a real ASCII layout for the
+    /// duration, which also keeps password fields typable.
+    private var secureInputTimer: Timer?
+    private var wasSecureInputActive = false
+    private var sourceBeforeSecureInput: String?
     private var _userInitiatedSwitch = false
     private var _userInitiatedSwitchExpiresAt: Date?
     private var _consecutiveRecoveries = 0
@@ -68,6 +85,13 @@ final class InputSourceRecovery {
         // Fallback: poll every 3 seconds to catch missed notifications (sleep/wake, etc.)
         pollTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.pollInputSource()
+        }
+
+        // Secure input has no change notification, and the window that matters
+        // is the moment a password field takes focus, so poll it briskly. The
+        // check itself is a cheap Carbon call.
+        secureInputTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.checkSecureInput()
         }
 
         // Check immediately after wake from sleep
@@ -233,6 +257,68 @@ final class InputSourceRecovery {
         if shouldRecover {
             recoverInputSource()
         }
+    }
+
+    private func checkSecureInput() {
+        let isActive = secureInputDetector.isSecureInputActive()
+        let action = Self.secureInputAction(
+            fallbackEnabled: Settings.shared.secureInputASCIIFallback,
+            wasActive: wasSecureInputActive,
+            isActive: isActive,
+            currentSourceID: InputSourceSelector.currentInputSourceID(),
+            rememberedSourceID: sourceBeforeSecureInput
+        )
+        wasSecureInputActive = isActive
+
+        switch action {
+        case .switchToASCII(let remembering):
+            sourceBeforeSecureInput = remembering
+            // Our own switch — don't let recovery treat it as a stray change.
+            userInitiatedSwitch = true
+            let result = InputSourceSelector.selectASCIIFallback()
+            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input — switched to ASCII", metadata: [
+                "from": remembering,
+                "result": "\(result)"
+            ])
+        case .restore(let sourceID):
+            sourceBeforeSecureInput = nil
+            userInitiatedSwitch = false
+            let result = InputSourceSelector.select(sourceID: sourceID)
+            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input ended — restored", metadata: [
+                "to": sourceID,
+                "result": "\(result)"
+            ])
+        case .none:
+            break
+        }
+    }
+
+    /// Decide what to do about a secure-input observation.
+    ///
+    /// Only steps aside when NRIME is the source that would otherwise swallow
+    /// the keystrokes, and only restores a source it stepped away from, so a
+    /// layout the user picked themselves is never overridden.
+    static func secureInputAction(
+        fallbackEnabled: Bool,
+        wasActive: Bool,
+        isActive: Bool,
+        currentSourceID: String?,
+        rememberedSourceID: String?
+    ) -> SecureInputAction {
+        guard fallbackEnabled else { return .none }
+
+        if !wasActive && isActive {
+            guard let currentSourceID,
+                  currentSourceID.hasPrefix(InputSourceSelector.bundleID) else { return .none }
+            return .switchToASCII(remembering: currentSourceID)
+        }
+
+        if wasActive && !isActive {
+            guard let rememberedSourceID else { return .none }
+            return .restore(rememberedSourceID)
+        }
+
+        return .none
     }
 
     static func shouldRecoverInputSource(

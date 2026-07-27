@@ -156,4 +156,61 @@ final class InputSourceRecoveryTests: XCTestCase {
             allowUnknownSourceRecovery: true
         ))
     }
+
+    // MARK: - Secure input ASCII fallback
+
+    private let nrimeSource = InputSourceSelector.visibleInputSourceID
+
+    func testStepsAsideWhenSecureInputBeginsWhileNRIMEIsActive() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, wasActive: false, isActive: true,
+            currentSourceID: nrimeSource, rememberedSourceID: nil)
+
+        XCTAssertEqual(action, .switchToASCII(remembering: nrimeSource))
+    }
+
+    func testDoesNotStepAsideWhenAnotherLayoutIsAlreadyActive() {
+        // The user picked a non-NRIME layout themselves — leave it alone, and
+        // remember nothing so secure input ending does not move them.
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, wasActive: false, isActive: true,
+            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nil)
+
+        XCTAssertEqual(action, .none)
+    }
+
+    func testRestoresRememberedSourceWhenSecureInputEnds() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, wasActive: true, isActive: false,
+            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nrimeSource)
+
+        XCTAssertEqual(action, .restore(nrimeSource))
+    }
+
+    func testDoesNotRestoreWhenNothingWasRemembered() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, wasActive: true, isActive: false,
+            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nil)
+
+        XCTAssertEqual(action, .none)
+    }
+
+    func testStableSecureInputStateDoesNothing() {
+        // Every poll tick lands here — it must not re-issue switches.
+        XCTAssertEqual(InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, wasActive: true, isActive: true,
+            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nrimeSource), .none)
+        XCTAssertEqual(InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, wasActive: false, isActive: false,
+            currentSourceID: nrimeSource, rememberedSourceID: nil), .none)
+    }
+
+    func testDisabledSettingNeverActs() {
+        XCTAssertEqual(InputSourceRecovery.secureInputAction(
+            fallbackEnabled: false, wasActive: false, isActive: true,
+            currentSourceID: nrimeSource, rememberedSourceID: nil), .none)
+        XCTAssertEqual(InputSourceRecovery.secureInputAction(
+            fallbackEnabled: false, wasActive: true, isActive: false,
+            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nrimeSource), .none)
+    }
 }

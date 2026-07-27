@@ -17,6 +17,7 @@ final class SettingsStore: ObservableObject {
         _indicatorPositionMode = Published(initialValue: "caret")
         _tapThreshold = Published(initialValue: 0.2)
         _preventABCSwitch = Published(initialValue: false)
+        _secureInputASCIIFallback = Published(initialValue: true)
         _developerModeEnabled = Published(initialValue: false)
         _perAppModeEnabled = Published(initialValue: false)
         _perAppModeType = Published(initialValue: "whitelist")
@@ -62,6 +63,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var indicatorPositionMode: String {
         didSet { defaults.set(indicatorPositionMode, forKey: "indicatorPositionMode") }
+    }
+
+    @Published var secureInputASCIIFallback: Bool {
+        didSet { defaults.set(secureInputASCIIFallback, forKey: "secureInputASCIIFallback") }
     }
 
     @Published var preventABCSwitch: Bool {
@@ -164,6 +169,8 @@ final class SettingsStore: ObservableObject {
         let towVal = defaults.double(forKey: "tapOverlapWindow")
         tapOverlapWindow = towVal > 0 ? towVal : 0.05
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
+        secureInputASCIIFallback = defaults.object(forKey: "secureInputASCIIFallback") == nil
+            ? true : defaults.bool(forKey: "secureInputASCIIFallback")
         developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")
         perAppModeEnabled = defaults.bool(forKey: "perAppModeEnabled")
         perAppModeType = defaults.string(forKey: "perAppModeType") ?? "whitelist"

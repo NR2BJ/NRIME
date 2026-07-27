@@ -198,3 +198,7 @@
 "tapHoldBuffering.enable" = "Fast tap-switch correction (experimental)";
 "tapHoldBuffering.description" = "Fixes stray capitals/double consonants when typing too quickly after a Shift tap. A letter arriving while Shift is still held is briefly buffered; releasing Shift right away switches language and types it in the new mode.";
 "tapHoldBuffering.windowDescription" = "Decision window: releasing Shift within this time after the letter counts as a tap. Lower it if fast capitals get misread as switches.";
+
+/* Secure input ASCII fallback */
+"secureInput.asciiFallback" = "Switch to ABC while typing passwords";
+"secureInput.asciiFallbackDescription" = "While macOS secure input is on (password fields), composition is impossible. Hand the keyboard to the ABC layout for the duration and switch back afterwards.";

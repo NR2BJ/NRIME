@@ -119,6 +119,18 @@ final class Settings {
         set { defaults.set(newValue, forKey: "preventABCSwitch") }
     }
 
+    /// While macOS secure input is on, hand the keyboard to a plain ASCII
+    /// layout and come back afterwards. Composition is impossible during
+    /// secure input anyway, so this keeps password fields typable instead of
+    /// showing a Korean/Japanese indicator that no longer reflects reality.
+    var secureInputASCIIFallback: Bool {
+        get {
+            if defaults.object(forKey: "secureInputASCIIFallback") == nil { return true }
+            return defaults.bool(forKey: "secureInputASCIIFallback")
+        }
+        set { defaults.set(newValue, forKey: "secureInputASCIIFallback") }
+    }
+
     var developerModeEnabled: Bool {
         get { defaults.bool(forKey: "developerModeEnabled") }
         set { defaults.set(newValue, forKey: "developerModeEnabled") }
