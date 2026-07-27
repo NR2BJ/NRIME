@@ -62,8 +62,11 @@ class NRIMEInputController: IMKInputController {
 
         let mode = StateManager.shared.currentMode
 
-        // 1. Secure Input: bypass all internal logic
-        if secureInputDetector.isSecureInputActive() {
+        // 1. Secure Input: bypass all internal logic.
+        //    The flag alone is not enough — it can lag the authentication panel
+        //    appearing, so also recognize those clients by bundle ID.
+        if secureInputDetector.isSecureInputActive()
+            || secureInputDetector.isAuthenticationClient(client.bundleIdentifier()) {
             return false
         }
 
@@ -542,6 +545,9 @@ class NRIMEInputController: IMKInputController {
         // the async global monitor callback fires.
         guard let client = (cachedClient as? (any IMKTextInput))
                 ?? resolvedClient() else { return }
+        // Never commit into an authentication panel — the click may well be the
+        // one that just raised it.
+        guard !secureInputDetector.isAuthenticationClient(client.bundleIdentifier()) else { return }
         let mode = StateManager.shared.currentMode
         if mode == .korean && koreanEngine.isCurrentlyComposing {
             logControllerEvent("mouseClickCommit", client: client, extra: [

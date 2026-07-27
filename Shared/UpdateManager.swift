@@ -1,3 +1,4 @@
+import AppKit
 import CryptoKit
 import Foundation
 
@@ -199,7 +200,16 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         state = .installing
 
         let escapedPath = path.replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "do shell script \"installer -pkg \\\"\(escapedPath)\\\" -target /\" with administrator privileges"
+        // `with prompt` makes the panel say what is asking (otherwise it reads
+        // "osascript"), and gives it a proper owning context.
+        let script = "do shell script \"installer -pkg \\\"\(escapedPath)\\\" -target /\""
+            + " with administrator privileges"
+            + " with prompt \"NRIME needs to install an update.\""
+
+        // This app is LSUIElement: a child process raising the authentication
+        // panel from the background can leave that panel without keyboard
+        // focus, so the user cannot type their password. Come forward first.
+        NSApplication.shared.activate(ignoringOtherApps: true)
 
         Task.detached { [weak self] in
             let process = Process()

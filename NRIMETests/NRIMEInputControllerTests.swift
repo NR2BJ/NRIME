@@ -45,15 +45,36 @@ final class NRIMEInputControllerTests: XCTestCase {
         super.tearDown()
     }
 
-    func testSettingsClientBypassesControllerHandling() {
-        client.bundleID = "com.nrime.settings"
+    // The settings app used to be bypassed wholesale; that was removed in
+    // 2026-04 because it also blocked normal typing there. Authentication
+    // panels, however, must still never see composition — and not only when the
+    // secure-input flag is up, since that flag can lag the panel appearing.
+    func testAuthenticationClientBypassesControllerHandling() {
+        client.bundleID = "com.apple.SecurityAgent"
         StateManager.shared.switchTo(.korean)
 
         let handled = controller.handle(keyEvent(keyCode: 0x0F), client: client) // r
 
-        XCTAssertFalse(handled)
-        XCTAssertEqual(client.markedString, "")
+        XCTAssertFalse(handled, "Keys must pass straight through to the password field")
+        XCTAssertEqual(client.markedString, "", "No composition may start")
         XCTAssertEqual(client.insertedTexts, [])
+    }
+
+    func testLoginWindowClientBypassesControllerHandling() {
+        client.bundleID = "com.apple.loginwindow"
+        StateManager.shared.switchTo(.korean)
+
+        XCTAssertFalse(controller.handle(keyEvent(keyCode: 0x0F), client: client))
+        XCTAssertEqual(client.markedString, "")
+    }
+
+    func testOrdinaryClientStillComposes() {
+        client.bundleID = "com.apple.TextEdit"
+        StateManager.shared.switchTo(.korean)
+
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x0F), client: client)) // r
+        XCTAssertTrue(controller.handle(keyEvent(keyCode: 0x28), client: client)) // k
+        XCTAssertEqual(client.markedString, "가", "The bypass must not leak to normal apps")
     }
 
     func testShortcutSwitchToJapaneseCommitsKoreanCompositionFirst() {
