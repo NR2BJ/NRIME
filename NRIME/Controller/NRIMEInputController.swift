@@ -18,6 +18,8 @@ class NRIMEInputController: IMKInputController {
     /// Cached client from the last handle() call. Used by the mouse monitor
     /// because self.client() may be nil by the time the callback fires.
     private var cachedClient: AnyObject?
+    /// Last observed secure-input state, so only transitions are logged.
+    private var lastSecureInputState = false
 
 #if DEBUG
     /// Test seam for controller-level unit tests that run without a real IMK client proxy.
@@ -65,7 +67,20 @@ class NRIMEInputController: IMKInputController {
         // 1. Secure Input: bypass all internal logic.
         //    The flag alone is not enough — it can lag the authentication panel
         //    appearing, so also recognize those clients by bundle ID.
-        if secureInputDetector.isSecureInputActive()
+        //
+        //    Note this flag is process-global: any app that enables secure input
+        //    (password managers, browser password fields) suppresses composition
+        //    everywhere until it clears, which surfaces as Korean keystrokes
+        //    coming out as plain letters. Log the transitions so that case is
+        //    distinguishable from an engine-side passthrough.
+        let secureActive = secureInputDetector.isSecureInputActive()
+        if secureActive != lastSecureInputState {
+            lastSecureInputState = secureActive
+            logControllerEvent("secureInputChanged", client: client, extra: [
+                "active": "\(secureActive)"
+            ])
+        }
+        if secureActive
             || secureInputDetector.isAuthenticationClient(client.bundleIdentifier()) {
             return false
         }

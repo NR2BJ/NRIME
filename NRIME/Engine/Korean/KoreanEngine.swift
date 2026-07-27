@@ -59,6 +59,10 @@ final class KoreanEngine: InputEngine {
                 }
                 return true
             }
+            // Not composing: the key falls through to the app as ASCII. If a
+            // modifier flag is set spuriously (e.g. lingering from Cmd+Tab),
+            // this is where a Korean keystroke silently becomes a letter.
+            Self.logPassthrough(event, reason: "modifier")
             return false
         }
 
@@ -95,8 +99,23 @@ final class KoreanEngine: InputEngine {
         }
 
         // All other non-jamo keys: commit and let the system handle the key.
+        // A letter key reaching here means the jamo lookup failed — the other
+        // way a Korean keystroke can come out as ASCII.
+        Self.logPassthrough(event, reason: "noJamo")
         commitComposing(client: client)
         return false
+    }
+
+    /// Record why a keystroke was handed to the app instead of composed.
+    /// Only the key identity and modifier state — never the character — so the
+    /// log stays free of typed content. Developer mode gates the write.
+    private static func logPassthrough(_ event: NSEvent, reason: String) {
+        DeveloperLogger.shared.log("Korean", "passthrough", metadata: [
+            "reason": reason,
+            "keyCode": String(format: "0x%02X", event.keyCode),
+            "flags": String(format: "0x%08X", event.modifierFlags.rawValue),
+            "liveFlags": String(format: "0x%08X", NSEvent.modifierFlags.rawValue),
+        ])
     }
 
     func reset(client: any IMKTextInput) {

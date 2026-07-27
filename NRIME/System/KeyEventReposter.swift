@@ -32,6 +32,11 @@ enum KeyEventReposter {
 
     /// Post a tagged key press (down+up) after a delay. The controller sees the
     /// tag and passes the event straight through to the host app.
+    ///
+    /// The event source is `.hidSystemState` rather than nil: an event built
+    /// with no source carries no HID state, and Chromium renderers can treat it
+    /// differently from a real key press (the March experiments, where CGEvent
+    /// replay "only committed", used a nil source).
     static func postKeyPress(keyCode: UInt16, flags: CGEventFlags, after delay: TimeInterval) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
 #if DEBUG
@@ -40,19 +45,26 @@ enum KeyEventReposter {
                 return
             }
 #endif
-            guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
+            let source = CGEventSource(stateID: .hidSystemState)
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) else { return }
             keyDown.flags = flags
             keyDown.setIntegerValueField(.eventSourceUserData, value: repostTag)
             keyDown.post(tap: .cghidEventTap)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-                guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
+                guard let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else { return }
                 keyUp.flags = flags
                 keyUp.setIntegerValueField(.eventSourceUserData, value: repostTag)
                 keyUp.post(tap: .cghidEventTap)
             }
         }
     }
+
+    /// A replayed key needs longer than an insertText does: the renderer has to
+    /// finish applying the committed text and settle its composition state
+    /// before it will treat the key as a plain Shift+Enter. The shiftEnterDelay
+    /// slider tops out at 50ms, which measured too short here.
+    static let replayDelay: TimeInterval = 0.12
 
     /// The Chromium Shift+Enter newline, performed after the commit has been
     /// issued. Quirk apps (insertText("\n") submits there) get a replayed key
@@ -61,7 +73,8 @@ enum KeyEventReposter {
                                        client: any IMKTextInput,
                                        delay: TimeInterval) {
         if ChromiumDetector.frontmostAppTreatsNewlineInsertAsSubmit {
-            postKeyPress(keyCode: keyCode, flags: .maskShift, after: delay)
+            postKeyPress(keyCode: keyCode, flags: .maskShift,
+                         after: max(delay, replayDelay))
         } else {
             let capturedClient = client
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {

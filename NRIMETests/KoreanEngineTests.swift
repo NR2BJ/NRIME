@@ -117,11 +117,13 @@ final class KoreanEngineTests: XCTestCase {
         XCTAssertTrue(handled)
         XCTAssertEqual(client.insertedTexts, ["가"], "Commit lands synchronously")
 
+        // The replay waits longer than the slider value: the renderer needs the
+        // commit to settle before it will read the key as a plain Shift+Enter.
         let settled = expectation(description: "async repost")
-        DispatchQueue.main.asyncAfter(deadline: .now() + Settings.shared.shiftEnterDelay + 0.05) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + KeyEventReposter.replayDelay + 0.05) {
             settled.fulfill()
         }
-        wait(for: [settled], timeout: 1.0)
+        wait(for: [settled], timeout: 2.0)
 
         XCTAssertEqual(client.insertedTexts, ["가"],
                        "No \\n insert — it would submit the message in this app")
