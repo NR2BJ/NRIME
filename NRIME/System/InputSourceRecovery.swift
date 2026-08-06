@@ -30,8 +30,8 @@ final class InputSourceRecovery {
     /// that lying state, hand the keyboard to a real ASCII layout for the
     /// duration, which also keeps password fields typable.
     private var secureInputTimer: Timer?
-    private var wasSecureInputActive = false
     private var sourceBeforeSecureInput: String?
+    private var steppedAsideAt: Date?
     private var _userInitiatedSwitch = false
     private var _userInitiatedSwitchExpiresAt: Date?
     private var _consecutiveRecoveries = 0
@@ -260,31 +260,31 @@ final class InputSourceRecovery {
     }
 
     private func checkSecureInput() {
-        let isActive = secureInputDetector.isSecureInputActive()
         let action = Self.secureInputAction(
             fallbackEnabled: Settings.shared.secureInputASCIIFallback,
-            wasActive: wasSecureInputActive,
-            isActive: isActive,
+            heldByAuthenticationUI: secureInputDetector.secureInputHeldByAuthenticationUI(),
             currentSourceID: InputSourceSelector.currentInputSourceID(),
-            rememberedSourceID: sourceBeforeSecureInput
+            rememberedSourceID: sourceBeforeSecureInput,
+            secondsSinceSteppedAside: steppedAsideAt.map { Date().timeIntervalSince($0) }
         )
-        wasSecureInputActive = isActive
 
         switch action {
         case .switchToASCII(let remembering):
             sourceBeforeSecureInput = remembering
+            steppedAsideAt = Date()
             // Our own switch — don't let recovery treat it as a stray change.
             userInitiatedSwitch = true
             let result = InputSourceSelector.selectASCIIFallback()
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input — switched to ASCII", metadata: [
+            DeveloperLogger.shared.log("InputSourceRecovery", "Authentication UI — switched to ASCII", metadata: [
                 "from": remembering,
                 "result": "\(result)"
             ])
         case .restore(let sourceID):
             sourceBeforeSecureInput = nil
+            steppedAsideAt = nil
             userInitiatedSwitch = false
             let result = InputSourceSelector.select(sourceID: sourceID)
-            DeveloperLogger.shared.log("InputSourceRecovery", "Secure input ended — restored", metadata: [
+            DeveloperLogger.shared.log("InputSourceRecovery", "Restored input source", metadata: [
                 "to": sourceID,
                 "result": "\(result)"
             ])
@@ -293,32 +293,46 @@ final class InputSourceRecovery {
         }
     }
 
+    /// How long we are willing to stay stepped aside. A password is typed in
+    /// seconds; anything longer means the flag is stuck, and being off NRIME
+    /// costs the user their language-switch hotkeys entirely.
+    static let maxStepAsideDuration: TimeInterval = 20
+
     /// Decide what to do about a secure-input observation.
     ///
-    /// Only steps aside when NRIME is the source that would otherwise swallow
-    /// the keystrokes, and only restores a source it stepped away from, so a
-    /// layout the user picked themselves is never overridden.
+    /// Deliberately state-based rather than edge-based: an edge trigger loses
+    /// its footing whenever the input method restarts mid-secure-input, and a
+    /// missed edge is what strands someone. Every tick re-derives the answer
+    /// from what is true now.
+    ///
+    /// Steps aside only for the system authentication UI. A general app holding
+    /// secure input — which happens, for hours — must not take the keyboard
+    /// away from NRIME, because while another source is selected the input
+    /// method receives no events at all and hotkeys stop working.
+    ///
+    /// Restoring is deliberately generous: it also fires when the setting was
+    /// switched off mid-flight, or when the cap expires, so no path leaves the
+    /// user parked on ASCII.
     static func secureInputAction(
         fallbackEnabled: Bool,
-        wasActive: Bool,
-        isActive: Bool,
+        heldByAuthenticationUI: Bool,
         currentSourceID: String?,
-        rememberedSourceID: String?
+        rememberedSourceID: String?,
+        secondsSinceSteppedAside: TimeInterval?,
+        maxStepAsideDuration: TimeInterval = InputSourceRecovery.maxStepAsideDuration
     ) -> SecureInputAction {
-        guard fallbackEnabled else { return .none }
-
-        if !wasActive && isActive {
-            guard let currentSourceID,
-                  currentSourceID.hasPrefix(InputSourceSelector.bundleID) else { return .none }
-            return .switchToASCII(remembering: currentSourceID)
+        if let rememberedSourceID {
+            let expired = (secondsSinceSteppedAside ?? .greatestFiniteMagnitude) >= maxStepAsideDuration
+            if !fallbackEnabled || !heldByAuthenticationUI || expired {
+                return .restore(rememberedSourceID)
+            }
+            return .none
         }
 
-        if wasActive && !isActive {
-            guard let rememberedSourceID else { return .none }
-            return .restore(rememberedSourceID)
-        }
-
-        return .none
+        guard fallbackEnabled, heldByAuthenticationUI,
+              let currentSourceID,
+              currentSourceID.hasPrefix(InputSourceSelector.bundleID) else { return .none }
+        return .switchToASCII(remembering: currentSourceID)
     }
 
     static func shouldRecoverInputSource(

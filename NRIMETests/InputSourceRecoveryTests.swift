@@ -160,57 +160,117 @@ final class InputSourceRecoveryTests: XCTestCase {
     // MARK: - Secure input ASCII fallback
 
     private let nrimeSource = InputSourceSelector.visibleInputSourceID
+    private let abc = "com.apple.keylayout.ABC"
 
-    func testStepsAsideWhenSecureInputBeginsWhileNRIMEIsActive() {
+    func testStepsAsideForAuthenticationUIWhileNRIMEIsActive() {
         let action = InputSourceRecovery.secureInputAction(
-            fallbackEnabled: true, wasActive: false, isActive: true,
-            currentSourceID: nrimeSource, rememberedSourceID: nil)
+            fallbackEnabled: true, heldByAuthenticationUI: true,
+            currentSourceID: nrimeSource, rememberedSourceID: nil,
+            secondsSinceSteppedAside: nil)
 
         XCTAssertEqual(action, .switchToASCII(remembering: nrimeSource))
     }
 
-    func testDoesNotStepAsideWhenAnotherLayoutIsAlreadyActive() {
-        // The user picked a non-NRIME layout themselves — leave it alone, and
-        // remember nothing so secure input ending does not move them.
+    /// The regression that shipped in 1.0.11-beta.5: a chat app held secure
+    /// input for hours, the input source was swapped to ABC, and with NRIME no
+    /// longer selected it received no events — so language hotkeys died.
+    func testOrdinaryAppHoldingSecureInputNeverTakesTheKeyboard() {
         let action = InputSourceRecovery.secureInputAction(
-            fallbackEnabled: true, wasActive: false, isActive: true,
-            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nil)
+            fallbackEnabled: true, heldByAuthenticationUI: false,
+            currentSourceID: nrimeSource, rememberedSourceID: nil,
+            secondsSinceSteppedAside: nil)
 
         XCTAssertEqual(action, .none)
     }
 
-    func testRestoresRememberedSourceWhenSecureInputEnds() {
+    func testDoesNotStepAsideWhenAnotherLayoutIsAlreadyActive() {
         let action = InputSourceRecovery.secureInputAction(
-            fallbackEnabled: true, wasActive: true, isActive: false,
-            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nrimeSource)
+            fallbackEnabled: true, heldByAuthenticationUI: true,
+            currentSourceID: abc, rememberedSourceID: nil,
+            secondsSinceSteppedAside: nil)
+
+        XCTAssertEqual(action, .none)
+    }
+
+    func testRestoresOnceAuthenticationUIReleasesSecureInput() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, heldByAuthenticationUI: false,
+            currentSourceID: abc, rememberedSourceID: nrimeSource,
+            secondsSinceSteppedAside: 3)
 
         XCTAssertEqual(action, .restore(nrimeSource))
     }
 
-    func testDoesNotRestoreWhenNothingWasRemembered() {
+    func testStaysAsideWhileAuthenticationUIStillHoldsIt() {
         let action = InputSourceRecovery.secureInputAction(
-            fallbackEnabled: true, wasActive: true, isActive: false,
-            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nil)
+            fallbackEnabled: true, heldByAuthenticationUI: true,
+            currentSourceID: abc, rememberedSourceID: nrimeSource,
+            secondsSinceSteppedAside: 3)
 
         XCTAssertEqual(action, .none)
     }
 
-    func testStableSecureInputStateDoesNothing() {
-        // Every poll tick lands here — it must not re-issue switches.
-        XCTAssertEqual(InputSourceRecovery.secureInputAction(
-            fallbackEnabled: true, wasActive: true, isActive: true,
-            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nrimeSource), .none)
-        XCTAssertEqual(InputSourceRecovery.secureInputAction(
-            fallbackEnabled: true, wasActive: false, isActive: false,
-            currentSourceID: nrimeSource, rememberedSourceID: nil), .none)
+    /// Backstop: even a panel that never releases cannot keep the keyboard.
+    func testRestoresAfterTheCapEvenIfStillHeld() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, heldByAuthenticationUI: true,
+            currentSourceID: abc, rememberedSourceID: nrimeSource,
+            secondsSinceSteppedAside: InputSourceRecovery.maxStepAsideDuration + 1)
+
+        XCTAssertEqual(action, .restore(nrimeSource))
     }
 
-    func testDisabledSettingNeverActs() {
-        XCTAssertEqual(InputSourceRecovery.secureInputAction(
-            fallbackEnabled: false, wasActive: false, isActive: true,
-            currentSourceID: nrimeSource, rememberedSourceID: nil), .none)
-        XCTAssertEqual(InputSourceRecovery.secureInputAction(
-            fallbackEnabled: false, wasActive: true, isActive: false,
-            currentSourceID: "com.apple.keylayout.ABC", rememberedSourceID: nrimeSource), .none)
+    /// Losing the stepped-aside timestamp (input method restarted) must resolve
+    /// to restoring, never to staying parked on ASCII forever.
+    func testMissingTimestampRestoresRatherThanStranding() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: true, heldByAuthenticationUI: true,
+            currentSourceID: abc, rememberedSourceID: nrimeSource,
+            secondsSinceSteppedAside: nil)
+
+        XCTAssertEqual(action, .restore(nrimeSource))
+    }
+
+    func testTurningTheSettingOffWhileAsideRestores() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: false, heldByAuthenticationUI: true,
+            currentSourceID: abc, rememberedSourceID: nrimeSource,
+            secondsSinceSteppedAside: 1)
+
+        XCTAssertEqual(action, .restore(nrimeSource))
+    }
+
+    func testDisabledSettingNeverStepsAside() {
+        let action = InputSourceRecovery.secureInputAction(
+            fallbackEnabled: false, heldByAuthenticationUI: true,
+            currentSourceID: nrimeSource, rememberedSourceID: nil,
+            secondsSinceSteppedAside: nil)
+
+        XCTAssertEqual(action, .none)
+    }
+
+    // MARK: - Composition suppression
+
+    func testSuppressesCompositionWhenAuthenticationUIHoldsSecureInput() {
+        XCTAssertTrue(SecureInputDetector.shouldSuppressComposition(
+            holderBundleID: "com.apple.SecurityAgent", frontmostBundleID: "com.apple.Safari"))
+    }
+
+    func testSuppressesCompositionWhenTheHolderIsFrontmost() {
+        // The password field is plausibly the one being typed into.
+        XCTAssertTrue(SecureInputDetector.shouldSuppressComposition(
+            holderBundleID: "com.apple.Safari", frontmostBundleID: "com.apple.Safari"))
+    }
+
+    func testKeepsComposingWhenABackgroundAppHoldsSecureInput() {
+        // The case that broke Korean input for hours: holder is not frontmost,
+        // so typing here has nothing to do with its password field.
+        XCTAssertFalse(SecureInputDetector.shouldSuppressComposition(
+            holderBundleID: "com.anthropic.claudefordesktop", frontmostBundleID: "com.apple.Safari"))
+    }
+
+    func testSuppressesCompositionWhenTheHolderCannotBeIdentified() {
+        XCTAssertTrue(SecureInputDetector.shouldSuppressComposition(
+            holderBundleID: nil, frontmostBundleID: "com.apple.Safari"))
     }
 }

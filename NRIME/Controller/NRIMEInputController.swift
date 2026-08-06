@@ -73,14 +73,15 @@ class NRIMEInputController: IMKInputController {
         //    everywhere until it clears, which surfaces as Korean keystrokes
         //    coming out as plain letters. Log the transitions so that case is
         //    distinguishable from an engine-side passthrough.
-        let secureActive = secureInputDetector.isSecureInputActive()
-        if secureActive != lastSecureInputState {
-            lastSecureInputState = secureActive
+        let suppress = secureInputDetector.shouldSuppressComposition()
+        if suppress != lastSecureInputState {
+            lastSecureInputState = suppress
             logControllerEvent("secureInputChanged", client: client, extra: [
-                "active": "\(secureActive)"
+                "suppress": "\(suppress)",
+                "holder": secureInputDetector.secureInputHolderBundleID() ?? "unknown"
             ])
         }
-        if secureActive
+        if suppress
             || secureInputDetector.isAuthenticationClient(client.bundleIdentifier()) {
             return false
         }
@@ -544,9 +545,11 @@ class NRIMEInputController: IMKInputController {
     /// Called by the global mouse monitor when a click is detected in any app.
     /// Commits composing text before the click changes focus.
     private func commitOnMouseClick() {
-        // Mirror handle()'s secure-input gate: a click that lands on (or races
-        // with) a secure field must never trigger a commit into it.
-        guard !secureInputDetector.isSecureInputActive() else { return }
+        // Mirror handle()'s gate: a click that lands on (or races with) a
+        // secure field must never trigger a commit into it. Uses the same
+        // holder-aware rule, so a background app holding the flag does not
+        // disable committing everywhere.
+        guard !secureInputDetector.shouldSuppressComposition() else { return }
 
         // A click ends any candidate session — without this the panel stays
         // visible over stale candidates and hijacks subsequent keys (Enter
