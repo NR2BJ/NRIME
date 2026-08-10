@@ -64,15 +64,25 @@ class NRIMEInputController: IMKInputController {
 
         let mode = StateManager.shared.currentMode
 
-        // 1. Secure Input: bypass all internal logic.
+        // 1. Language-switch hotkeys run before any suppression below.
+        //    Switching mode types nothing, so nothing about a password field
+        //    makes it unsafe — whereas gating it behind secure input locks the
+        //    user into whichever mode they were in, for as long as some app
+        //    (or a dead process's stale claim) holds the flag. Feeding
+        //    flagsChanged here also keeps the handler's modifier tracking in
+        //    sync; a release it never sees corrupts the next tap.
+        if event.type == .flagsChanged {
+            if shortcutHandler.onAction == nil {
+                wireUpShortcutHandler()
+            }
+            if shortcutHandler.handleEvent(event) {
+                return true
+            }
+        }
+
+        // 2. Secure Input: no composition.
         //    The flag alone is not enough — it can lag the authentication panel
         //    appearing, so also recognize those clients by bundle ID.
-        //
-        //    Note this flag is process-global: any app that enables secure input
-        //    (password managers, browser password fields) suppresses composition
-        //    everywhere until it clears, which surfaces as Korean keystrokes
-        //    coming out as plain letters. Log the transitions so that case is
-        //    distinguishable from an engine-side passthrough.
         let suppress = secureInputDetector.shouldSuppressComposition()
         if suppress != lastSecureInputState {
             lastSecureInputState = suppress
@@ -103,21 +113,6 @@ class NRIMEInputController: IMKInputController {
                 if japaneseEngine.isCurrentlyComposing {
                     japaneseEngine.forceCommit(client: client)
                 }
-            }
-        }
-
-        // 1.9. Give the shortcut handler every flagsChanged exactly once, even in
-        // conversion/candidate states that bypass routeEvent below. Without this
-        // its modifier tracking desyncs (a release seen during conversion never
-        // arrives), and the first Shift tap after a conversion is silently
-        // ignored. This also lets tap mode-switches work during conversion —
-        // the onAction handler force-commits the active engine first.
-        if event.type == .flagsChanged {
-            if shortcutHandler.onAction == nil {
-                wireUpShortcutHandler()
-            }
-            if shortcutHandler.handleEvent(event) {
-                return true
             }
         }
 
@@ -614,7 +609,7 @@ class NRIMEInputController: IMKInputController {
         // tap modifier was held is now settled — route it to the current mode.
         shortcutHandler.onReplay = { [weak self] original, keepShift in
             guard let self, let client = self.resolvedClient() else { return }
-            guard !self.secureInputDetector.isSecureInputActive() else { return }
+            guard !self.secureInputDetector.shouldSuppressComposition() else { return }
             let event = keepShift ? original : Self.strippingShift(original)
             switch StateManager.shared.currentMode {
             case .korean:
@@ -660,6 +655,9 @@ class NRIMEInputController: IMKInputController {
                 return true
 
             case .hanjaConvert:
+                // Unlike a mode switch, this reads the selection and inserts
+                // text, so it stays behind the suppression check.
+                guard !self.secureInputDetector.shouldSuppressComposition() else { return false }
                 if StateManager.shared.currentMode == .korean {
                     return self.koreanEngine.triggerHanjaConversion(client: client)
                 }

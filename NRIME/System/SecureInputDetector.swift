@@ -16,7 +16,7 @@ final class SecureInputDetector {
     /// why. Apps can and do leave it on for hours — a real case had a chat app
     /// holding it all day — so treating "flag is on" as "a password field is
     /// focused right here" locks the user out of composing everywhere.
-    func secureInputHolderBundleID() -> String? {
+    func secureInputHolderPID() -> pid_t? {
         let root = IORegistryGetRootEntry(kIOMainPortDefault)
         guard root != 0 else { return nil }
         defer { IOObjectRelease(root) }
@@ -33,31 +33,54 @@ final class SecureInputDetector {
 
         for session in sessions {
             if let pid = session["kCGSSessionSecureInputPID"] as? pid_t, pid != 0 {
-                return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+                return pid
             }
         }
         return nil
     }
 
+    func secureInputHolderBundleID() -> String? {
+        guard let pid = secureInputHolderPID() else { return nil }
+        return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+    }
+
+    /// Whether the process that claimed secure input is still running.
+    /// macOS keeps the claim registered even after that process dies, and the
+    /// flag then stays on until logout — observed in the wild.
+    static func processIsAlive(_ pid: pid_t) -> Bool {
+        if kill(pid, 0) == 0 { return true }
+        return errno == EPERM // exists, we just may not signal it
+    }
+
     /// Whether composition must be suppressed for this keystroke.
-    ///
-    /// Suppress when the secure field is plausibly the one being typed into:
-    /// the holder is frontmost, or it is the system authentication UI. A
-    /// background app holding the flag stale is not a reason to disable the
-    /// input method everywhere. When the holder cannot be identified we stay
-    /// conservative and suppress, matching the previous behavior.
     func shouldSuppressComposition() -> Bool {
         guard isSecureInputActive() else { return false }
-        let holder = secureInputHolderBundleID()
-        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        return Self.shouldSuppressComposition(holderBundleID: holder,
-                                              frontmostBundleID: frontmost)
+        let pid = secureInputHolderPID()
+        return Self.shouldSuppressComposition(
+            holderPID: pid,
+            holderIsAlive: pid.map { Self.processIsAlive($0) } ?? false,
+            holderBundleID: pid.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier },
+            frontmostBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        )
     }
 
     /// Pure decision half of `shouldSuppressComposition()`, for testing.
-    static func shouldSuppressComposition(holderBundleID: String?,
+    ///
+    /// Suppress only when a live claimant plausibly owns the field being typed
+    /// into. The flag alone cannot carry that judgement: it is process-global,
+    /// apps hold it for hours, and it survives the claiming process's death —
+    /// a dead claimant leaves it on until logout, which would otherwise disable
+    /// Korean and Japanese input for the rest of the session.
+    static func shouldSuppressComposition(holderPID: pid_t?,
+                                          holderIsAlive: Bool,
+                                          holderBundleID: String?,
                                           frontmostBundleID: String?) -> Bool {
-        guard let holderBundleID else { return true } // unknown holder: be safe
+        // Registry unreadable: nothing to reason about, so stay careful.
+        guard holderPID != nil else { return true }
+        // Claim outlived its process — stale, not a focused password field.
+        guard holderIsAlive else { return false }
+        // Alive but not an app (daemon, helper): cannot be the focused field.
+        guard let holderBundleID else { return false }
         if authenticationBundleIDs.contains(holderBundleID) { return true }
         return holderBundleID == frontmostBundleID
     }

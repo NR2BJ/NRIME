@@ -251,26 +251,45 @@ final class InputSourceRecoveryTests: XCTestCase {
 
     // MARK: - Composition suppression
 
-    func testSuppressesCompositionWhenAuthenticationUIHoldsSecureInput() {
+    private let livePID: pid_t = 4242
+
+    func testSuppressesWhenAuthenticationUIHoldsSecureInput() {
         XCTAssertTrue(SecureInputDetector.shouldSuppressComposition(
+            holderPID: livePID, holderIsAlive: true,
             holderBundleID: "com.apple.SecurityAgent", frontmostBundleID: "com.apple.Safari"))
     }
 
-    func testSuppressesCompositionWhenTheHolderIsFrontmost() {
-        // The password field is plausibly the one being typed into.
+    func testSuppressesWhenTheHolderIsFrontmost() {
         XCTAssertTrue(SecureInputDetector.shouldSuppressComposition(
+            holderPID: livePID, holderIsAlive: true,
             holderBundleID: "com.apple.Safari", frontmostBundleID: "com.apple.Safari"))
     }
 
     func testKeepsComposingWhenABackgroundAppHoldsSecureInput() {
-        // The case that broke Korean input for hours: holder is not frontmost,
-        // so typing here has nothing to do with its password field.
         XCTAssertFalse(SecureInputDetector.shouldSuppressComposition(
+            holderPID: livePID, holderIsAlive: true,
             holderBundleID: "com.anthropic.claudefordesktop", frontmostBundleID: "com.apple.Safari"))
     }
 
-    func testSuppressesCompositionWhenTheHolderCannotBeIdentified() {
+    /// macOS leaves the claim registered after the claiming process exits, and
+    /// the flag then stays on until logout. Honouring it would disable Korean
+    /// and Japanese for the rest of the session.
+    func testKeepsComposingWhenTheClaimOutlivedItsProcess() {
+        XCTAssertFalse(SecureInputDetector.shouldSuppressComposition(
+            holderPID: 1019, holderIsAlive: false,
+            holderBundleID: nil, frontmostBundleID: "com.apple.Safari"))
+    }
+
+    /// A daemon cannot own the focused field.
+    func testKeepsComposingWhenTheHolderIsNotAnApp() {
+        XCTAssertFalse(SecureInputDetector.shouldSuppressComposition(
+            holderPID: livePID, holderIsAlive: true,
+            holderBundleID: nil, frontmostBundleID: "com.apple.Safari"))
+    }
+
+    func testSuppressesWhenTheRegistryCannotBeRead() {
         XCTAssertTrue(SecureInputDetector.shouldSuppressComposition(
+            holderPID: nil, holderIsAlive: false,
             holderBundleID: nil, frontmostBundleID: "com.apple.Safari"))
     }
 }
