@@ -123,17 +123,45 @@ final class JapaneseEngine: InputEngine {
         }
 
         mozcConverter.reset()
-        liveConversionActive = false
-        liveConvertedText = nil
-        shiftKatakanaActive = false
-        capsLockKatakanaActive = false
-        guard composer.isComposing else { return }
-        let text = composer.flush()
+        guard composer.isComposing else {
+            clearDisplayModeState()
+            return
+        }
+        // Resolve what the user is actually looking at before clearing the
+        // flags that decide it — katakana mode and live conversion both change
+        // the committed string, and clearing first commits raw hiragana instead.
+        let text = takeComposingCommitText()
         if !text.isEmpty {
             // Commit via insertText only — setMarkedText("") first deletes the
             // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
+    }
+
+    /// Drop the display-mode flags without committing anything.
+    private func clearDisplayModeState() {
+        liveConversionActive = false
+        liveConvertedText = nil
+        shiftKatakanaActive = false
+        capsLockKatakanaActive = false
+    }
+
+    /// The string to commit for the current composing buffer, matching what is
+    /// displayed, consuming the display-mode state it depends on.
+    private func takeComposingCommitText() -> String {
+        let composedKana = composer.composedKana
+        var text = composer.flush()
+        if liveConversionActive {
+            text = Self.liveConversionCommitText(
+                convertedText: liveConvertedText,
+                composedKana: composedKana,
+                flushedText: text
+            )
+        } else if shiftKatakanaActive || capsLockKatakanaActive {
+            text = hiraganaToKatakana(text)
+        }
+        clearDisplayModeState()
+        return text
     }
 
     /// Clear all engine state without inserting text.

@@ -1,0 +1,19 @@
+root = ARGV.fetch(0)
+Dir.glob("#{root}/{NRIME,Shared,NRIMESettings,NRIMERestoreHelper}/**/*.swift").each do |path|
+  s = File.read(path)
+  s = s.gsub('group.com.nrime.inputmethod', 'test.nrime.review20260913')
+  s = s.gsub(/\b(keyDown|keyUp)\.post\(tap: \.cghidEventTap\)/, '_ = 0 // Review isolation: never inject system keys')
+  File.write(path, s)
+end
+changes = {
+ 'NRIME/App/AppDelegate.swift' => ['func applicationDidFinishLaunching(_ notification: Notification) {', "func applicationDidFinishLaunching(_ notification: Notification) {\n        candidatePanel = CandidatePanel()\n        return // Review isolation: no IMK registration, server, timers or status item"],
+ 'NRIME/System/SecureInputDetector.swift' => ['return IsSecureEventInputEnabled()', 'return false // Review isolation: deterministic normal input; pure policy tests unchanged'],
+ 'NRIME/Engine/Japanese/Mozc/MozcClient.swift' => ['private func ensureSession() -> Bool {', "private func ensureSession() -> Bool {\n        return false // Review isolation: never touch the real Mozc session or server"],
+ 'NRIME/State/ShortcutHandler.swift' => ['IOHIDSetModifierLockState(service, Int32(kIOHIDCapsLockState), on)', '_ = 0 // Review isolation: never change physical Caps Lock']
+}
+changes.each do |path, (from, to)|
+  p = File.join(root, path)
+  s = File.read(p)
+  raise "Missing anchor #{path}" unless s.include?(from)
+  File.write(p, s.sub(from, to))
+end

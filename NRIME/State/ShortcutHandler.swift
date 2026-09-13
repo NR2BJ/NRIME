@@ -132,8 +132,24 @@ final class ShortcutHandler {
             return false
         }
 
-        let isNowDown = newFlags.contains(flag)
-        let wasDown = oldFlags.contains(flag)
+        // Prefer the event's device-dependent bits: the aggregate flag cannot
+        // tell the left and right keys apart, so while both are held a release
+        // of one looks like nothing changed. Fall back to the aggregate when an
+        // event carries no side information (synthetic events).
+        let sides = Self.deviceModifierMasks(for: keyCode)
+        let sideInfoAvailable = sides.map {
+            ((newFlags.rawValue | oldFlags.rawValue) & $0.eitherSide) != 0
+        } ?? false
+
+        let isNowDown: Bool
+        let wasDown: Bool
+        if let sides, sideInfoAvailable {
+            isNowDown = (newFlags.rawValue & sides.requiredSide) != 0
+            wasDown = (oldFlags.rawValue & sides.requiredSide) != 0
+        } else {
+            isNowDown = newFlags.contains(flag)
+            wasDown = oldFlags.contains(flag)
+        }
 
         if isNowDown && !wasDown {
             // Another modifier joining while a letter is buffered settles it as
@@ -141,10 +157,20 @@ final class ShortcutHandler {
             if pendingLetter != nil {
                 flushPendingAsHold()
             }
-            // Modifier pressed down — start tracking for potential tap
+            // Modifier pressed down — start tracking for potential tap.
+            //
+            // A gesture that starts with something else already held is a chord,
+            // not a solo tap, and must not clear the flag that says so —
+            // otherwise Command+Shift, released without a letter, switches the
+            // language. This includes the twin key of the same family: holding
+            // one Shift and tapping the other is not a solo tap either.
+            let twinAlreadyDown = sides.map {
+                (oldFlags.rawValue & ($0.eitherSide & ~$0.requiredSide)) != 0
+            } ?? false
             activeModifierKeyCode = keyCode
             modifierDownEventTimestamp = event.timestamp
-            modifierWasUsedAsCombo = false
+            modifierWasUsedAsCombo = Self.otherModifiersPresent(newFlags, excluding: flag)
+                || twinAlreadyDown
             return false // Don't consume yet
         }
 
@@ -179,7 +205,11 @@ final class ShortcutHandler {
             activeModifierKeyCode = nil
             modifierDownEventTimestamp = nil
 
-            if !modifierWasUsedAsCombo && elapsed < Settings.shared.tapThreshold {
+            // Still holding another modifier means this release ends a chord,
+            // not a solo tap.
+            let otherStillHeld = Self.otherModifiersPresent(newFlags, excluding: flag)
+
+            if !modifierWasUsedAsCombo && !otherStillHeld && elapsed < Settings.shared.tapThreshold {
                 // Double-Shift tap → toggle Caps Lock (only for shift keys NOT registered as shortcuts)
                 let isShiftKey = (keyCode == ShortcutConfig.keyCodeLeftShift ||
                                   keyCode == ShortcutConfig.keyCodeRightShift)
@@ -204,6 +234,23 @@ final class ShortcutHandler {
         }
 
         return false
+    }
+
+    /// Note a keyDown that another part of the controller is consuming.
+    ///
+    /// Candidate windows and Mozc conversion answer keys before routeEvent runs,
+    /// so the handler never sees them and still believes the held modifier is
+    /// untouched — releasing it then fires a language switch the user never
+    /// asked for. Observation is deliberately separate from matching: this only
+    /// records that the gesture used another key.
+    func observeConsumedKeyDown(_ event: NSEvent) {
+        guard event.type == .keyDown else { return }
+        if pendingLetter != nil {
+            flushPendingAsHold()
+        }
+        if activeModifierKeyCode != nil {
+            modifierWasUsedAsCombo = true
+        }
     }
 
     // MARK: - Key Down
@@ -453,6 +500,13 @@ final class ShortcutHandler {
     }
 
     // MARK: - Helpers
+
+    /// Whether any significant modifier other than `flag` is present.
+    private static func otherModifiersPresent(_ flags: NSEvent.ModifierFlags,
+                                              excluding flag: NSEvent.ModifierFlags) -> Bool {
+        let significant: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+        return !flags.intersection(significant).subtracting(flag).isEmpty
+    }
 
     /// Device-dependent modifier bits (IOLLEvent.h NX_DEVICE*KEYMASK) for a physical
     /// modifier keyCode: the bit for that exact key, plus the bits for both sides so

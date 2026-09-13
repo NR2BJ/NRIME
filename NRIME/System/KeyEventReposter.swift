@@ -76,11 +76,53 @@ enum KeyEventReposter {
             postKeyPress(keyCode: keyCode, flags: .maskShift,
                          after: max(delay, replayDelay))
         } else {
-            let capturedClient = client
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                capturedClient.insertText("\n" as NSString,
-                                          replacementRange: NSRange(location: NSNotFound, length: 0))
-            }
+            scheduleNewlineInsert(into: client, after: delay)
         }
+    }
+
+    // MARK: - Pending newline
+
+    /// A newline waiting out the oldHasMarkedText delay.
+    ///
+    /// It inserts with an NSNotFound replacement range, which replaces whatever
+    /// marked text is active when it lands — so if the user starts the next
+    /// word inside the delay, the newline eats that composition instead of
+    /// following the committed text. Keeping the work item here lets the
+    /// controller deliver it in order before handling the next key, rather than
+    /// cancelling it and losing the newline outright.
+    private struct PendingNewline {
+        let client: any IMKTextInput
+        let work: DispatchWorkItem
+    }
+
+    /// Main-thread only: scheduled from handle() and fired on the main queue.
+    private static var pendingNewline: PendingNewline?
+
+    private static func scheduleNewlineInsert(into client: any IMKTextInput,
+                                              after delay: TimeInterval) {
+        // Only one can be outstanding; an earlier one belongs before this key.
+        flushPendingNewline()
+
+        let work = DispatchWorkItem {
+            guard pendingNewline != nil else { return }
+            pendingNewline = nil
+            insertNewline(into: client)
+        }
+        pendingNewline = PendingNewline(client: client, work: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// Deliver a scheduled newline now, before anything else can start a new
+    /// composition for it to overwrite. No-op when nothing is pending.
+    static func flushPendingNewline() {
+        guard let pending = pendingNewline else { return }
+        pendingNewline = nil
+        pending.work.cancel()
+        insertNewline(into: pending.client)
+    }
+
+    private static func insertNewline(into client: any IMKTextInput) {
+        client.insertText("\n" as NSString,
+                          replacementRange: NSRange(location: NSNotFound, length: 0))
     }
 }

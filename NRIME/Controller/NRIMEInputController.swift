@@ -62,6 +62,13 @@ class NRIMEInputController: IMKInputController {
         // Cache client for the global mouse monitor callback.
         cachedClient = client as AnyObject
 
+        // A newline still waiting out its delay belongs before this keystroke.
+        // Delivering it now keeps the order the user typed and stops its
+        // replacement range from swallowing the composition this key starts.
+        if event.type == .keyDown {
+            KeyEventReposter.flushPendingNewline()
+        }
+
         let mode = StateManager.shared.currentMode
 
         // 1. Language-switch hotkeys run before any suppression below.
@@ -118,11 +125,13 @@ class NRIMEInputController: IMKInputController {
 
         // 2. Japanese conversion state: Mozc manages ALL key handling (including candidates)
         if mode == .japanese && japaneseEngine.isInConversionState {
+            shortcutHandler.observeConsumedKeyDown(event)
             return handleJapaneseConversion(event, client: client)
         }
 
         // 3. Candidate panel navigation (Korean hanja only at this point)
         if let panel = NSApp.candidatePanel, panel.isVisible() {
+            shortcutHandler.observeConsumedKeyDown(event)
             return handleCandidateNavigation(event, client: client, panel: panel)
         }
 
@@ -219,6 +228,7 @@ class NRIMEInputController: IMKInputController {
                 syncPanelSelectionToMozc(panel: panel, client: client)
                 return true
             case 0x24, 0x4C: // Enter — highlight selected candidate, then submit all
+                let wantsNewline = event.modifierFlags.contains(.shift)
                 let candidateIndex = panel.selectedIndex
                 if candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count {
                     // Sync highlight to Mozc first (so submit commits the right candidate)
@@ -237,6 +247,9 @@ class NRIMEInputController: IMKInputController {
                 }
                 japaneseEngine.exitConversionState()
                 panel.hide()
+                if wantsNewline {
+                    return completeShiftEnterNewline(keyCode: event.keyCode, client: client)
+                }
                 return true
             case 0x35: // Escape — revert to composing
                 panel.hide()
@@ -317,7 +330,11 @@ class NRIMEInputController: IMKInputController {
             return true
 
         case 0x24, 0x4C: // Return/Enter — select current candidate
+            let wantsNewline = event.modifierFlags.contains(.shift)
             selectCurrentCandidate(client: client, panel: panel)
+            if wantsNewline {
+                return completeShiftEnterNewline(keyCode: event.keyCode, client: client)
+            }
             return true
 
         case 0x35: // Escape — dismiss
@@ -357,11 +374,43 @@ class NRIMEInputController: IMKInputController {
         }
     }
 
+    /// Whether committed text may be written to this client. Authentication
+    /// panels never accept composed text, and suppression means no composition
+    /// should be landing anywhere.
+    private func canCommitText(to client: any IMKTextInput) -> Bool {
+        !secureInputDetector.isAuthenticationClient(client.bundleIdentifier())
+            && !secureInputDetector.shouldSuppressComposition()
+    }
+
+    /// Close a hanja candidate session that something outside the panel is
+    /// ending (mode switch, mouse click). Settles the original text first,
+    /// while the source is still known, then takes the panel down so it stops
+    /// consuming keys meant for the new mode.
+    private func endKoreanCandidateSession(client: any IMKTextInput) {
+        guard let panel = NSApp.candidatePanel, panel.isVisible() else { return }
+        endHanjaSessionIfNeeded(client: client)
+        panel.hide()
+    }
+
     /// End the Korean hanja session, committing a selected-text original so the
     /// user's own text can't be replaced by the next keystroke.
     private func endHanjaSessionIfNeeded(client: any IMKTextInput) {
         guard StateManager.shared.currentMode == .korean else { return }
         koreanEngine.endHanjaSession(client: client)
+    }
+
+    /// Finish a Shift+Enter that also confirmed a candidate. The newline belongs
+    /// to the user's keystroke, not to the candidate list, so the same key means
+    /// the same thing whether or not a candidate window happened to be open.
+    private func completeShiftEnterNewline(keyCode: UInt16, client: any IMKTextInput) -> Bool {
+        if ChromiumDetector.isFrontmostAppChromium {
+            KeyEventReposter.performChromiumNewline(keyCode: keyCode,
+                                                    client: client,
+                                                    delay: Settings.shared.shiftEnterDelay)
+            return true
+        }
+        // Elsewhere the host inserts the newline from the original key event.
+        return false
     }
 
     /// Select the currently highlighted candidate and commit.
@@ -546,14 +595,6 @@ class NRIMEInputController: IMKInputController {
         // disable committing everywhere.
         guard !secureInputDetector.shouldSuppressComposition() else { return }
 
-        // A click ends any candidate session — without this the panel stays
-        // visible over stale candidates and hijacks subsequent keys (Enter
-        // would insert an old hanja at the new caret).
-        if let panel = NSApp.candidatePanel, panel.isVisible() {
-            koreanEngine.clearHanjaSession()
-            panel.hide()
-        }
-
         // Use cached client because self.client() may be nil by the time
         // the async global monitor callback fires.
         guard let client = (cachedClient as? (any IMKTextInput))
@@ -561,6 +602,15 @@ class NRIMEInputController: IMKInputController {
         // Never commit into an authentication panel — the click may well be the
         // one that just raised it.
         guard !secureInputDetector.isAuthenticationClient(client.bundleIdentifier()) else { return }
+
+        // A click ends any candidate session — without this the panel stays
+        // visible over stale candidates and hijacks subsequent keys (Enter
+        // would insert an old hanja at the new caret). Ending it needs the
+        // client: a selected-text session is showing the user's own text as
+        // marked text, and dropping the session without settling that leaves it
+        // for the next keystroke to overwrite.
+        endKoreanCandidateSession(client: client)
+
         let mode = StateManager.shared.currentMode
         if mode == .korean && koreanEngine.isCurrentlyComposing {
             logControllerEvent("mouseClickCommit", client: client, extra: [
@@ -635,10 +685,19 @@ class NRIMEInputController: IMKInputController {
 
             switch action {
             case .toggleEnglish, .toggleNonEnglish, .switchKorean, .switchJapanese:
-                if previousMode == .korean {
-                    self.koreanEngine.forceCommit(client: client)
-                } else if previousMode == .japanese {
-                    self.japaneseEngine.forceCommit(client: client)
+                // Switching modes is always allowed, but the text of a
+                // composition that belongs to another field is not: by the time
+                // this runs the client may already be an authentication panel,
+                // and committing there types the previous field's characters
+                // into a password box. Leave it pending instead — it still
+                // commits when a normal field is focused again.
+                if self.canCommitText(to: client) {
+                    self.endKoreanCandidateSession(client: client)
+                    if previousMode == .korean {
+                        self.koreanEngine.forceCommit(client: client)
+                    } else if previousMode == .japanese {
+                        self.japaneseEngine.forceCommit(client: client)
+                    }
                 }
                 switch action {
                 case .toggleEnglish:    StateManager.shared.toggleEnglish()
