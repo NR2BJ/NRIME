@@ -93,6 +93,10 @@ if [ -f "$LOGINRESTORE_PATH" ]; then
 fi
 
 echo "Installing Mozc server LaunchAgent..."
+# A fresh account has no ~/Library/LaunchAgents; without this the redirect
+# below fails and the script stops after having already disabled the input
+# source and killed the running processes.
+mkdir -p "$LAUNCH_AGENTS_DIR"
 cat > "$MOZC_LAUNCH_AGENT_PATH" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

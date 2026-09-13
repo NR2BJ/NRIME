@@ -808,9 +808,11 @@ final class JapaneseEngine: InputEngine {
             return false
         }
 
-        // Send to Mozc
-        guard let output = mozcConverter.sendKeyEvent(mozcKey) else {
-            // IPC error — commit whatever we have
+        // Send to Mozc. An Output carrying an error code is a failed request,
+        // not an empty conversion — processing it as a normal answer silently
+        // ends the composition the user is still editing.
+        guard let output = mozcConverter.sendKeyEvent(mozcKey), !output.hasErrorCode else {
+            // IPC or session error — commit whatever we have
             commitConversion(client: client)
             return false
         }

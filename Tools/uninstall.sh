@@ -36,10 +36,23 @@ rm -f "$HOME/Library/Preferences/com.nrime.settings.plist.lockfile"
 rm -f "$HOME/Library/Preferences/group.com.nrime.inputmethod.plist"
 rm -f "$HOME/Library/Preferences/group.com.nrime.inputmethod.plist.lockfile"
 
-# 4. Remove Mozc engine data and NRIME logs
-echo "[4/7] Removing Mozc data and logs..."
-rm -rf "$HOME/Library/Application Support/Mozc"
+# 4. Remove NRIME logs, and only NRIME's own Mozc runtime files
+echo "[4/7] Removing NRIME data and logs..."
 rm -rf "$HOME/Library/Application Support/NRIME"
+
+# ~/Library/Application Support/Mozc is the shared location every Mozc-based
+# input method uses, so removing it would take another one's dictionary and
+# learning data with it. Only the runtime files NRIME itself creates go.
+MOZC_DIR="$HOME/Library/Application Support/Mozc"
+if [ -d "$MOZC_DIR" ]; then
+    rm -f "$MOZC_DIR/.server.lock" "$MOZC_DIR/.session.ipc"
+    echo "  Removed Mozc runtime lock files"
+    if [ -f "$MOZC_DIR/user_dictionary.db" ] || [ -f "$MOZC_DIR/user_history.db" ]; then
+        echo "  Kept your Mozc dictionary and learning data in:"
+        echo "    $MOZC_DIR"
+        echo "  Delete that folder yourself if no other Mozc input method uses it."
+    fi
+fi
 
 # 5. Remove caches and containers
 echo "[5/7] Removing caches..."

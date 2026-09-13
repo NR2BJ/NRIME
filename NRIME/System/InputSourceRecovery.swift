@@ -174,7 +174,7 @@ final class InputSourceRecovery {
 
     private func attemptStartupRecovery(after delay: TimeInterval) {
         let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
-        let secureInputActive = secureInputDetector.isSecureInputActive()
+        let secureInputActive = secureInputDetector.blocksInputSourceRecovery()
         let shouldRecover = Self.shouldRecoverInputSource(
             preventABCSwitch: Settings.shared.preventABCSwitch,
             userInitiatedSwitch: false,
@@ -207,7 +207,7 @@ final class InputSourceRecovery {
             currentSourceID,
             allowUnknownSourceRecovery: allowUnknownSourceRecovery
         )
-        let secureInputActive = secureInputDetector.isSecureInputActive()
+        let secureInputActive = secureInputDetector.blocksInputSourceRecovery()
         let currentUserInitiatedSwitch = userInitiatedSwitch
         let shouldRecover = Self.shouldRecoverInputSource(
             preventABCSwitch: Settings.shared.preventABCSwitch,
@@ -230,7 +230,7 @@ final class InputSourceRecovery {
 
     @objc private func inputSourceChanged(_ notification: Notification) {
         let currentSourceIsNonNRIME = isCurrentSourceNonNRIME()
-        let secureInputActive = secureInputDetector.isSecureInputActive()
+        let secureInputActive = secureInputDetector.blocksInputSourceRecovery()
         let currentUserInitiatedSwitch = userInitiatedSwitch
         let shouldRecover = Self.shouldRecoverInputSource(
             preventABCSwitch: Settings.shared.preventABCSwitch,

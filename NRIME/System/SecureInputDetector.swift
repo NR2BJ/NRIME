@@ -52,44 +52,92 @@ final class SecureInputDetector {
         return errno == EPERM // exists, we just may not signal it
     }
 
-    /// Whether composition must be suppressed for this keystroke.
-    func shouldSuppressComposition() -> Bool {
-        guard isSecureInputActive() else { return false }
-        let pid = secureInputHolderPID()
-        return Self.shouldSuppressComposition(
-            holderPID: pid,
-            holderIsAlive: pid.map { Self.processIsAlive($0) } ?? false,
-            holderBundleID: pid.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier },
-            frontmostBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    /// One reading of the secure-input state.
+    ///
+    /// Composition gating and input-source recovery both need to reason about
+    /// secure input, but they are not the same question — refusing to compose
+    /// is cheap, forcibly selecting an input source during someone's password
+    /// entry is not. They take their answers from the same snapshot so the two
+    /// cannot drift apart, but each applies its own rule to it.
+    struct Status {
+        let isActive: Bool
+        let holderIsLive: Bool
+        let holderIsAuthenticationUI: Bool
+        let holderIsFrontmost: Bool
+        let holderIsIdentifiable: Bool
+
+        /// Composition must not run: a live claimant plausibly owns the field
+        /// being typed into. An unidentifiable holder is treated as one.
+        var suppressesComposition: Bool {
+            guard isActive else { return false }
+            guard holderIsIdentifiable else { return true }
+            guard holderIsLive else { return false }
+            return holderIsAuthenticationUI || holderIsFrontmost
+        }
+
+        /// Recovery must stand down. Deliberately broader than composition
+        /// gating: any live claim is someone's secure session, wherever it is,
+        /// and yanking the input source out from under it is worse than simply
+        /// not composing. A claim left behind by a dead process is not.
+        var blocksInputSourceRecovery: Bool {
+            isActive && (!holderIsIdentifiable || holderIsLive)
+        }
+    }
+
+    func currentStatus() -> Status {
+        let active = isSecureInputActive()
+        guard active else {
+            return Status(isActive: false, holderIsLive: false,
+                          holderIsAuthenticationUI: false, holderIsFrontmost: false,
+                          holderIsIdentifiable: true)
+        }
+        guard let pid = secureInputHolderPID() else {
+            return Status(isActive: true, holderIsLive: false,
+                          holderIsAuthenticationUI: false, holderIsFrontmost: false,
+                          holderIsIdentifiable: false)
+        }
+        let live = Self.processIsAlive(pid)
+        let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        return Status(
+            isActive: true,
+            holderIsLive: live,
+            holderIsAuthenticationUI: bundleID.map { Self.authenticationBundleIDs.contains($0) } ?? false,
+            holderIsFrontmost: bundleID != nil && bundleID == frontmost,
+            holderIsIdentifiable: true
         )
     }
 
-    /// Pure decision half of `shouldSuppressComposition()`, for testing.
-    ///
-    /// Suppress only when a live claimant plausibly owns the field being typed
-    /// into. The flag alone cannot carry that judgement: it is process-global,
-    /// apps hold it for hours, and it survives the claiming process's death —
-    /// a dead claimant leaves it on until logout, which would otherwise disable
-    /// Korean and Japanese input for the rest of the session.
+    /// Whether input-source recovery should stand down right now.
+    func blocksInputSourceRecovery() -> Bool {
+        currentStatus().blocksInputSourceRecovery
+    }
+
+    /// Whether composition must be suppressed for this keystroke.
+    func shouldSuppressComposition() -> Bool {
+        currentStatus().suppressesComposition
+    }
+
+    /// Build a Status from an already-known reading, for testing. The rule
+    /// itself lives only in `Status` so the two consumers cannot diverge.
     static func shouldSuppressComposition(holderPID: pid_t?,
                                           holderIsAlive: Bool,
                                           holderBundleID: String?,
                                           frontmostBundleID: String?) -> Bool {
-        // Registry unreadable: nothing to reason about, so stay careful.
-        guard holderPID != nil else { return true }
-        // Claim outlived its process — stale, not a focused password field.
-        guard holderIsAlive else { return false }
-        // Alive but not an app (daemon, helper): cannot be the focused field.
-        guard let holderBundleID else { return false }
-        if authenticationBundleIDs.contains(holderBundleID) { return true }
-        return holderBundleID == frontmostBundleID
+        Status(
+            isActive: true,
+            holderIsLive: holderIsAlive,
+            holderIsAuthenticationUI: holderBundleID.map { authenticationBundleIDs.contains($0) } ?? false,
+            holderIsFrontmost: holderBundleID != nil && holderBundleID == frontmostBundleID,
+            holderIsIdentifiable: holderPID != nil
+        ).suppressesComposition
     }
 
     /// Whether secure input is held by the system authentication UI, which is
     /// the only case where stepping the input source aside is warranted.
     func secureInputHeldByAuthenticationUI() -> Bool {
-        guard isSecureInputActive(), let holder = secureInputHolderBundleID() else { return false }
-        return Self.authenticationBundleIDs.contains(holder)
+        let status = currentStatus()
+        return status.isActive && status.holderIsLive && status.holderIsAuthenticationUI
     }
 
     /// Bundle IDs of the system authentication UI.

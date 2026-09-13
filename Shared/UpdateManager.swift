@@ -116,6 +116,10 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
     /// IME and the settings app agree.
     @Published var channel: UpdateChannel = .stable
 
+    /// Incremented whenever something invalidates in-flight work (a new check,
+    /// a channel switch). A late response carrying an old generation is stale
+    /// and must not overwrite current state.
+    private var requestGeneration = 0
     private var downloadTask: URLSessionDownloadTask?
     private lazy var downloadSession: URLSession = {
         let config = URLSessionConfiguration.default
@@ -161,6 +165,7 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         guard newChannel != channel else { return }
         downloadTask?.cancel()
         downloadTask = nil
+        requestGeneration += 1
         channel = newChannel
         defaults?.set(newChannel.rawValue, forKey: Self.channelKey)
         latestRelease = nil
@@ -211,6 +216,14 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         // focus, so the user cannot type their password. Come forward first.
         NSApplication.shared.activate(ignoringOtherApps: true)
 
+        // Promote before launching: postinstall kills this app, so a write that
+        // waits for success may never happen. A failed install puts it back.
+        let promotedChannel = channel
+        let previousInstalled = defaults?.string(forKey: pkgTimestampKey(for: promotedChannel))
+        if let ts = defaults?.string(forKey: downloadedPkgTimestampKey(for: promotedChannel)) {
+            defaults?.set(ts, forKey: pkgTimestampKey(for: promotedChannel))
+        }
+
         Task.detached { [weak self] in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -220,12 +233,20 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
                 try process.run()
                 process.waitUntilExit()
 
+                let key = self?.pkgTimestampKey(for: promotedChannel) ?? ""
                 await MainActor.run {
                     if process.terminationStatus == 0 {
                         // Clean up downloaded PKG
                         try? FileManager.default.removeItem(atPath: path)
                         self?.state = .idle
                     } else {
+                        // Not installed after all — restore what was there so the
+                        // build is still offered next time.
+                        if let previousInstalled {
+                            self?.defaults?.set(previousInstalled, forKey: key)
+                        } else {
+                            self?.defaults?.removeObject(forKey: key)
+                        }
                         self?.state = .error("Installation failed (exit code \(process.terminationStatus)).")
                     }
                 }
@@ -253,9 +274,10 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
     // MARK: - Check Logic
 
     private func check() async {
-        let activeChannel = await MainActor.run { () -> UpdateChannel in
+        let (activeChannel, generation) = await MainActor.run { () -> (UpdateChannel, Int) in
             state = .checking
-            return channel
+            requestGeneration += 1
+            return (channel, requestGeneration)
         }
 
         guard let url = URL(string: endpoint(for: activeChannel)) else {
@@ -312,7 +334,12 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
             }
             cacheRelease(release, for: activeChannel)
 
-            await MainActor.run { evaluate(release, channel: activeChannel) }
+            await MainActor.run {
+                // A channel switch or newer check while this was in flight makes
+                // this answer obsolete.
+                guard generation == requestGeneration, activeChannel == channel else { return }
+                evaluate(release, channel: activeChannel)
+            }
         } catch is CancellationError {
             await MainActor.run { state = .idle }
         } catch {
@@ -334,7 +361,11 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         // Detect same-version re-uploads by comparing the asset's upload timestamp,
         // so a rebuilt test build under an unchanged tag still reaches beta users.
         let sameVersionChanged: Bool = {
+            // Only a genuine re-upload of the version already installed counts.
+            // Keying this off "not newer" also matched *older* releases, which
+            // would be offered as an update purely for having a new timestamp.
             guard !isNewer,
+                  Self.versionsAreEqual(remoteVersion, currentVersion),
                   let remoteTimestamp = release.pkgAsset?.updatedAt else { return false }
             let saved = defaults?.string(forKey: timestampKey) ?? ""
             return !saved.isEmpty && remoteTimestamp != saved
@@ -388,6 +419,19 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
         "UpdateETag_\(activeChannel.rawValue)"
     }
 
+    /// What has been downloaded but not yet installed, per channel.
+    private func downloadedPkgTimestampKey(for activeChannel: UpdateChannel) -> String {
+        "lastDownloadedPkgTimestamp_\(activeChannel.rawValue)"
+    }
+
+    /// Whether two version strings name the same version.
+    static func versionsAreEqual(_ lhs: String, _ rhs: String) -> Bool {
+        guard let left = SemanticVersion(lhs), let right = SemanticVersion(rhs) else {
+            return lhs == rhs
+        }
+        return left == right
+    }
+
     private func pkgTimestampKey(for activeChannel: UpdateChannel) -> String {
         "lastInstalledPkgTimestamp_\(activeChannel.rawValue)"
     }
@@ -424,6 +468,8 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // A cancelled task can still report; only the current one owns the state.
+        guard downloadTask === self.downloadTask else { return }
         let cacheDir = cacheDirectory()
         // Name the file from the release metadata, not the response's
         // suggestedFilename (a server-influenced header), and strip any
@@ -445,9 +491,11 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
                 return
             }
 
-            // Save PKG timestamp now (before install kills the app via postinstall)
+            // Downloading is not installing. Recording this as installed here
+            // meant a cancelled install still counted, and the same build was
+            // never offered again.
             if let ts = latestRelease?.pkgAsset?.updatedAt {
-                defaults?.set(ts, forKey: pkgTimestampKey(for: channel))
+                defaults?.set(ts, forKey: downloadedPkgTimestampKey(for: channel))
             }
             state = .readyToInstall(path: destination.path)
         } catch {

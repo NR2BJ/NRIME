@@ -21,13 +21,21 @@ final class UserDictionaryManager: ObservableObject {
         var value: String      // 변환 (conversion result)
         var pos: PosType       // 품사 (part of speech)
         var comment: String    // 코멘트
+        /// The entry exactly as it was read. This editor models only part of
+        /// Mozc's schema — a dictionary written elsewhere can hold parts of
+        /// speech and fields it cannot show — so rewriting every entry from the
+        /// model would quietly rewrite entries the user never touched.
+        var original: Mozc_UserDictionary_UserDictionary.Entry?
 
-        init(id: UUID = UUID(), key: String, value: String, pos: PosType = .noun, comment: String = "") {
+        init(id: UUID = UUID(), key: String, value: String, pos: PosType = .noun,
+             comment: String = "",
+             original: Mozc_UserDictionary_UserDictionary.Entry? = nil) {
             self.id = id
             self.key = key
             self.value = value
             self.pos = pos
             self.comment = comment
+            self.original = original
         }
     }
 
@@ -142,6 +150,10 @@ final class UserDictionaryManager: ObservableObject {
 
     // MARK: - Internal State
 
+    /// Set when the last load failed, so a save cannot overwrite a dictionary
+    /// that was never successfully read.
+    private var loadFailed = false
+
     /// The raw protobuf storage (preserved for lossless save).
     private var storage = Mozc_UserDictionary_UserDictionaryStorage()
 
@@ -159,6 +171,7 @@ final class UserDictionaryManager: ObservableObject {
     func load() {
         isLoading = true
         lastError = nil
+        loadFailed = false
 
         defer { isLoading = false }
 
@@ -192,12 +205,16 @@ final class UserDictionaryManager: ObservableObject {
                     key: entry.key,
                     value: entry.value,
                     pos: PosType.from(mozcPos: entry.pos),
-                    comment: entry.comment
+                    comment: entry.comment,
+                    original: entry
                 )
             }
         } catch {
             lastError = "Failed to load dictionary: \(error.localizedDescription)"
             entries = []
+            // Saving now would write this empty list over a dictionary we simply
+            // failed to read.
+            loadFailed = true
         }
     }
 
@@ -205,6 +222,10 @@ final class UserDictionaryManager: ObservableObject {
 
     @discardableResult
     func save() -> Bool {
+        guard !loadFailed else {
+            lastError = "Refusing to save: the dictionary could not be read."
+            return false
+        }
         lastError = nil
 
         // Ensure at least one dictionary exists
@@ -218,13 +239,18 @@ final class UserDictionaryManager: ObservableObject {
 
         // Convert our model back to protobuf entries
         storage.dictionaries[activeDictionaryIndex].entries = entries.map { entry in
-            var pbEntry = Mozc_UserDictionary_UserDictionary.Entry()
+            var pbEntry = entry.original ?? Mozc_UserDictionary_UserDictionary.Entry()
             pbEntry.key = entry.key
             pbEntry.value = entry.value
-            pbEntry.pos = entry.pos.mozcPosType
-            if !entry.comment.isEmpty {
-                pbEntry.comment = entry.comment
+            // Write the part of speech only when the editor's value differs from
+            // what the original maps to. Otherwise an entry whose real part of
+            // speech this UI cannot show would be rewritten as the noun it was
+            // displayed as.
+            if entry.original == nil || PosType.from(mozcPos: pbEntry.pos) != entry.pos {
+                pbEntry.pos = entry.pos.mozcPosType
             }
+            // Set unconditionally so clearing a comment actually clears it.
+            pbEntry.comment = entry.comment
             return pbEntry
         }
 

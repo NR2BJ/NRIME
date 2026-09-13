@@ -101,4 +101,38 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertNil(targetDefaults.data(forKey: SettingsTransfer.japaneseKeyConfigKey))
         XCTAssertNil(targetDefaults.data(forKey: HanjaSelectionStore.defaultsKey))
     }
+
+    /// The user's Korean/Japanese toggle lives in toggleNonEnglish, which the
+    /// first schema never captured — an export written before it existed must
+    /// not be read as "the user cleared that shortcut".
+    func testOlderSnapshotDoesNotClearShortcutsItCouldNotHaveCaptured() throws {
+        let existing = Data([9, 9, 9])
+        targetDefaults.set(existing, forKey: SettingsTransfer.shortcutKey(for: "toggleNonEnglish"))
+
+        var snapshot = SettingsTransfer.capture(from: sourceDefaults, appVersion: "1.0.3")
+        snapshot.shortcutData.removeValue(forKey: "toggleNonEnglish")
+        snapshot.capturedShortcutNames = nil // as written by the first schema
+
+        SettingsTransfer.apply(snapshot, to: targetDefaults)
+
+        XCTAssertEqual(targetDefaults.data(forKey: SettingsTransfer.shortcutKey(for: "toggleNonEnglish")),
+                       existing)
+    }
+
+    func testSnapshotCarriesTheKeyTimingSettings() throws {
+        sourceDefaults.set(true, forKey: "tapHoldBufferingEnabled")
+        sourceDefaults.set(0.07, forKey: "tapOverlapWindow")
+        sourceDefaults.set(0.035, forKey: "shiftEnterDelay")
+        sourceDefaults.set(false, forKey: "shiftDoubleTapEnabled")
+        sourceDefaults.set("mouse", forKey: "indicatorPositionMode")
+
+        let snapshot = SettingsTransfer.capture(from: sourceDefaults, appVersion: "1.0.11")
+        SettingsTransfer.apply(snapshot, to: targetDefaults)
+
+        XCTAssertTrue(targetDefaults.bool(forKey: "tapHoldBufferingEnabled"))
+        XCTAssertEqual(targetDefaults.double(forKey: "tapOverlapWindow"), 0.07)
+        XCTAssertEqual(targetDefaults.double(forKey: "shiftEnterDelay"), 0.035)
+        XCTAssertFalse(targetDefaults.bool(forKey: "shiftDoubleTapEnabled"))
+        XCTAssertEqual(targetDefaults.string(forKey: "indicatorPositionMode"), "mouse")
+    }
 }

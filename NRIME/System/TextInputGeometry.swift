@@ -22,70 +22,56 @@ enum TextInputGeometry {
 
     /// Memorize last good caret position to prevent jumping to (0,0) on failure.
     /// (Inspired by fcitx5-macos coordinate memorization strategy.)
+    ///
+    /// Scoped to the client it came from and to a short window: a remembered
+    /// position is only a better guess than nothing while it still describes
+    /// the same field. Unscoped, a lookup that fails in a newly focused field
+    /// would place the candidate window over the previous one's caret, which is
+    /// worse than admitting the position is unknown.
     private static var lastGoodResult: CaretResult?
+    private static var lastGoodClientID: String?
+    private static var lastGoodTimestamp: Date?
+    /// How long a remembered position stays usable.
+    private static let lastGoodLifetime: TimeInterval = 10
+
     /// Public read-only access for InlineIndicator's attributesAtZero X fallback.
     static var lastGoodCaretRect: CaretResult? { lastGoodResult }
 
     /// Reset cached position (e.g., on text field switch).
-    static func resetCache() { lastGoodResult = nil }
-
-    /// Manually set last good result (e.g., pre-commit position capture).
-    static func setLastGoodResult(_ result: CaretResult) { lastGoodResult = result }
-
-    /// Fast pre-commit position capture using IMKit only (no AX).
-    /// Called before forceCommit when composition is still active.
-    /// Uses fcitx5-macos trick: if caret is at end, try pos-1 and add offset.
-    static func capturePreCommitPosition(for client: (any IMKTextInput)?) {
-        guard let client else { return }
-        if let index = caretIndex(for: client) {
-            var rect = NSRect.zero
-            client.attributes(forCharacterIndex: index, lineHeightRectangle: &rect)
-            if isUsableRect(rect) {
-                lastGoodResult = CaretResult(rect: rect, source: .attributesAtCaret)
-                DeveloperLogger.shared.log("Geometry", "preCommit success at index", metadata: [
-                    "index": "\(index)",
-                    "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", rect.origin.x, rect.origin.y, rect.width, rect.height)
-                ])
-                return
-            }
-
-            // fcitx5 trick: if current position fails, try one character back + 10px offset.
-            if index > 0 {
-                var prevRect = NSRect.zero
-                client.attributes(forCharacterIndex: index - 1, lineHeightRectangle: &prevRect)
-                DeveloperLogger.shared.log("Geometry", "preCommit pos-1 attempt", metadata: [
-                    "index": "\(index-1)",
-                    "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", prevRect.origin.x, prevRect.origin.y, prevRect.width, prevRect.height),
-                    "usable": "\(isUsableRect(prevRect))"
-                ])
-                if isUsableRect(prevRect) {
-                    let offsetRect = NSRect(
-                        x: prevRect.origin.x + 10,
-                        y: prevRect.origin.y,
-                        width: prevRect.width,
-                        height: prevRect.height
-                    )
-                    lastGoodResult = CaretResult(rect: offsetRect, source: .attributesAtCaret)
-                    return
-                }
-            }
-
-            DeveloperLogger.shared.log("Geometry", "preCommit all failed", metadata: [
-                "index": "\(index)",
-                "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", rect.origin.x, rect.origin.y, rect.width, rect.height)
-            ])
-        }
+    static func resetCache() {
+        lastGoodResult = nil
+        lastGoodClientID = nil
+        lastGoodTimestamp = nil
     }
 
+    /// Remember a position together with who it belongs to.
+    private static func rememberGoodResult(_ result: CaretResult,
+                                           for client: (any IMKTextInput)?) {
+        lastGoodResult = result
+        lastGoodClientID = client?.uniqueClientIdentifierString()
+        lastGoodTimestamp = Date()
+    }
+
+    /// The remembered position, if it still describes this client and is recent.
+    private static func rememberedResult(for client: (any IMKTextInput)?) -> CaretResult? {
+        guard let result = lastGoodResult else { return nil }
+        if let timestamp = lastGoodTimestamp,
+           Date().timeIntervalSince(timestamp) > lastGoodLifetime {
+            return nil
+        }
+        guard let clientID = lastGoodClientID else { return result }
+        guard let currentID = client?.uniqueClientIdentifierString() else { return nil }
+        return clientID == currentID ? result : nil
+    }
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
-        guard let client else { return lastGoodResult }
+        guard let client else { return rememberedResult(for: nil) }
 
         // 1. Accessibility API — most accurate, works across all apps including Electron.
         //    Only called on mode switch (not per-keystroke), so 10ms overhead is acceptable.
         if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
             let result = CaretResult(rect: axRect, source: .accessibility)
             if axRect.origin.x > 1 {
-                lastGoodResult = result
+                rememberGoodResult(result, for: client)
             }
             DeveloperLogger.shared.log("Geometry", "AX success", metadata: [
                 "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", axRect.origin.x, axRect.origin.y, axRect.width, axRect.height),
@@ -103,7 +89,7 @@ enum TextInputGeometry {
             client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
             if isUsableRect(lineHeightRect) {
                 let result = CaretResult(rect: lineHeightRect, source: .attributesAtCaret)
-                lastGoodResult = result
+                rememberGoodResult(result, for: client)
                 DeveloperLogger.shared.log("Geometry", "attributesAtCaret success", metadata: [
                     "index": "\(index)",
                     "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", lineHeightRect.origin.x, lineHeightRect.origin.y, lineHeightRect.width, lineHeightRect.height)
@@ -130,7 +116,7 @@ enum TextInputGeometry {
         DeveloperLogger.shared.log("Geometry", "All methods failed", metadata: [
             "lastGood": lastGoodResult.map { String(format: "(%.0f,%.0f)", $0.rect.origin.x, $0.rect.origin.y) } ?? "nil"
         ])
-        return lastGoodResult
+        return rememberedResult(for: client)
     }
 
     static func screenFrame(containing rect: NSRect) -> NSRect? {
@@ -177,38 +163,6 @@ enum TextInputGeometry {
         }
 
         return nil
-    }
-
-    private static func candidateRanges(for client: any IMKTextInput) -> [NSRange] {
-        var ranges: [NSRange] = []
-
-        let selectedRange = client.selectedRange()
-        let markedRange = client.markedRange()
-
-        // During composition (markedRange exists), prefer selectedRange within marked text.
-        // Many apps return the field start for markedRange end position, so avoid that.
-        if isPreferredSelectedRange(selectedRange, relativeTo: markedRange) {
-            ranges.append(selectedRange)
-            if selectedRange.length == 0 {
-                ranges.append(NSRange(location: selectedRange.location, length: 1))
-            }
-        }
-
-        // Only use markedRange as fallback when selectedRange is unavailable
-        if ranges.isEmpty, markedRange.location != NSNotFound {
-            let caretLocation = markedRange.location + markedRange.length
-            ranges.append(NSRange(location: caretLocation, length: 0))
-            ranges.append(NSRange(location: caretLocation, length: 1))
-        }
-
-        if selectedRange.location != NSNotFound && !isPreferredSelectedRange(selectedRange, relativeTo: markedRange) {
-            ranges.append(selectedRange)
-            if selectedRange.length == 0 {
-                ranges.append(NSRange(location: selectedRange.location, length: 1))
-            }
-        }
-
-        return ranges
     }
 
     static func bestScreenFrame(for anchorRect: NSRect, screenFrames: [NSRect]) -> NSRect? {

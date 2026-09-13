@@ -8,6 +8,9 @@ final class InlineIndicator {
     private var textField: NSTextField?
     private var fadeTimer: Timer?
     private var isFading = false
+    /// Bumped on every show. A fade that belongs to an earlier one must not
+    /// order out the panel this one just put up.
+    private var showGeneration = 0
     private let displayDuration: TimeInterval = 1.0
     private let fadeDuration: TimeInterval = 0.3
 
@@ -22,13 +25,15 @@ final class InlineIndicator {
     ///   "caret" — attributes(forCharacterIndex: 0), fail = don't show
     ///   "mouse" — NSEvent.mouseLocation, always works
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
-        fadeTimer?.invalidate()
-
         let labelWidth: CGFloat = mode.label.count > 1 ? 36 : 26
         let panelSize = NSSize(width: labelWidth, height: 24)
 
         ensurePanel(for: mode, size: panelSize)
         guard let panel = panel else { return }
+
+        // Past this point the show is going ahead; only now is it safe to drop
+        // the pending fade. Cancelling it before the guards below could leave a
+        // panel from an earlier show on screen with nothing left to hide it.
 
         let gap: CGFloat = 4
         let origin: NSPoint
@@ -54,8 +59,14 @@ final class InlineIndicator {
             }
         }
 
-        // Suppress screen corner failures
-        if origin.x < 20 && origin.y < 20 { return }
+        // A failed lookup reports the screen origin; a monitor placed to the
+        // left or below has genuinely negative coordinates, so test against the
+        // actual origin rather than treating everything low-and-left as failure.
+        if Self.looksLikeOriginFailure(origin) { return }
+
+        fadeTimer?.invalidate()
+        showGeneration &+= 1
+        let generation = showGeneration
 
         panel.setFrameOrigin(origin)
         isFading = false
@@ -63,16 +74,24 @@ final class InlineIndicator {
         panel.orderFront(nil)
 
         fadeTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
-            guard let self = self else { return }
+            guard let self = self, generation == self.showGeneration else { return }
             self.isFading = true
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = self.fadeDuration
                 self.panel?.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
-                self?.isFading = false
-                self?.panel?.orderOut(nil)
+                guard let self, generation == self.showGeneration else { return }
+                self.isFading = false
+                self.panel?.orderOut(nil)
             })
         }
+    }
+
+    /// Whether this origin is the (0,0)-ish result of a failed caret lookup
+    /// rather than a real position. Only the true origin qualifies: screens
+    /// arranged left of or below the main display use negative coordinates.
+    static func looksLikeOriginFailure(_ origin: NSPoint) -> Bool {
+        origin.x >= 0 && origin.x < 20 && origin.y >= 0 && origin.y < 20
     }
 
     // MARK: - Private
