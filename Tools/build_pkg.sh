@@ -24,6 +24,10 @@ echo "Generating Xcode project..."
 xcodegen generate --spec "$PROJECT_DIR/project.yml" --project "$PROJECT_DIR"
 
 # 2. Build Release
+# Start from fresh app bundles: an incremental build never removes a resource
+# that left the project, and 1.0.12-beta.2 first shipped with the old 48 MB
+# mozc_server still inside NRIME.app.
+rm -rf "$BUILD_DIR/Release/NRIME.app" "$BUILD_DIR/Release/NRIMESettings.app"
 echo "Building NRIME (Release)..."
 xcodebuild -project "$PROJECT_DIR/NRIME.xcodeproj" \
     -scheme NRIME -configuration Release \
