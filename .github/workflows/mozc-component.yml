@@ -31,7 +31,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Decide
         id: decide
@@ -39,7 +39,7 @@ jobs:
 
       - name: Restore Bazel caches
         if: steps.decide.outputs.build == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/nrime-bazel-disk
