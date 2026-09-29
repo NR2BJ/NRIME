@@ -3,27 +3,15 @@ import XCTest
 
 final class StateManagerTests: XCTestCase {
     private var originalLastNonEnglishMode: InputMode!
-    private var originalPerAppModeEnabled: Bool!
-    private var originalPerAppModeType: String!
-    private var originalPerAppModeList: [String]!
-    private var originalPerAppSavedModes: [String: String]!
 
     override func setUp() {
         super.setUp()
         originalLastNonEnglishMode = Settings.shared.lastNonEnglishMode
-        originalPerAppModeEnabled = Settings.shared.perAppModeEnabled
-        originalPerAppModeType = Settings.shared.perAppModeType
-        originalPerAppModeList = Settings.shared.perAppModeList
-        originalPerAppSavedModes = Settings.shared.perAppSavedModes
         StateManager.shared.resetForTesting()
     }
 
     override func tearDown() {
         Settings.shared.lastNonEnglishMode = originalLastNonEnglishMode
-        Settings.shared.perAppModeEnabled = originalPerAppModeEnabled
-        Settings.shared.perAppModeType = originalPerAppModeType
-        Settings.shared.perAppModeList = originalPerAppModeList
-        Settings.shared.perAppSavedModes = originalPerAppSavedModes
         StateManager.shared.reloadPersistedModePreferences()
         StateManager.shared.resetForTesting()
         super.tearDown()
@@ -44,31 +32,23 @@ final class StateManagerTests: XCTestCase {
         XCTAssertEqual(StateManager.shared.currentMode, .japanese)
     }
 
-    func testInitialActivationSkipsPerAppNonEnglishRestore() {
-        Settings.shared.perAppModeEnabled = true
-        Settings.shared.perAppModeType = "whitelist"
-        Settings.shared.perAppModeList = ["com.apple.TextEdit"]
-        Settings.shared.perAppSavedModes = [
-            "com.apple.TextEdit": InputMode.japanese.rawValue
-        ]
+    /// Per-app mode memory was removed: the mode is global, and moving between
+    /// apps never changes it — even when an old per-app record is still stored.
+    func testActivatingAnAppNeverChangesTheMode() {
+        let defaults = UserDefaults(suiteName: AppGroupDefaults.testingSuiteName)
+        defaults?.set(true, forKey: "perAppModeEnabled")
+        defaults?.set("whitelist", forKey: "perAppModeType")
+        defaults?.set(["com.apple.TextEdit"], forKey: "perAppModeList")
+        defaults?.set(["com.apple.TextEdit": InputMode.japanese.rawValue], forKey: "perAppSavedModes")
+        defer {
+            for key in ["perAppModeEnabled", "perAppModeType", "perAppModeList", "perAppSavedModes"] {
+                defaults?.removeObject(forKey: key)
+            }
+        }
+        StateManager.shared.switchTo(.korean)
 
-        StateManager.shared.activateApp("com.apple.TextEdit")
-
-        XCTAssertEqual(StateManager.shared.currentMode, .english)
-    }
-
-    func testSubsequentActivationRestoresPerAppMode() {
-        Settings.shared.perAppModeEnabled = true
-        Settings.shared.perAppModeType = "whitelist"
-        Settings.shared.perAppModeList = ["com.apple.TextEdit", "com.apple.Terminal"]
-        Settings.shared.perAppSavedModes = [
-            "com.apple.TextEdit": InputMode.japanese.rawValue,
-            "com.apple.Terminal": InputMode.korean.rawValue
-        ]
-
-        StateManager.shared.activateApp("com.apple.TextEdit")
-        StateManager.shared.deactivateApp("com.apple.TextEdit")
         StateManager.shared.activateApp("com.apple.Terminal")
+        StateManager.shared.activateApp("com.apple.TextEdit")
 
         XCTAssertEqual(StateManager.shared.currentMode, .korean)
     }

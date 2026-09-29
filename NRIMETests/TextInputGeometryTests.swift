@@ -3,45 +3,6 @@ import XCTest
 
 final class TextInputGeometryTests: XCTestCase {
 
-    func testCaretRectUsesSelectedRangeForFirstRectLookup() {
-        let client = MockTextInputClient()
-        client.setSelectedRange(NSRange(location: 12, length: 0))
-        client.firstRectResponse = NSRect(x: 320, y: 240, width: 14, height: 20)
-
-        let result = TextInputGeometry.caretRect(for: client)
-
-        XCTAssertEqual(result?.rect, client.firstRectResponse)
-        XCTAssertEqual(result?.source, .precise)
-        XCTAssertEqual(client.lastFirstRectRange, NSRange(location: 12, length: 0))
-        XCTAssertNil(client.lastAttributesCharacterIndex)
-    }
-
-    func testCaretRectPrefersMarkedRangeOverSelectedRange() {
-        let client = MockTextInputClient()
-        client.setSelectedRange(NSRange(location: 0, length: 0))
-        client.setMarkedText("かな", selectionRange: NSRange(location: 2, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
-        client.firstRectResponse = NSRect(x: 840, y: 520, width: 14, height: 20)
-
-        let result = TextInputGeometry.caretRect(for: client)
-
-        XCTAssertEqual(result?.rect, client.firstRectResponse)
-        XCTAssertEqual(result?.source, .precise)
-        XCTAssertEqual(client.lastFirstRectRange, NSRange(location: 2, length: 0))
-    }
-
-    func testCaretRectPrefersSelectedRangeWhenItMatchesMarkedTextCaret() {
-        let client = MockTextInputClient()
-        client.setSelectedRange(NSRange(location: 9, length: 0))
-        client.setMarkedRangeForTesting(NSRange(location: 8, length: 3))
-        client.firstRectResponse = NSRect(x: 500, y: 420, width: 12, height: 18)
-
-        let result = TextInputGeometry.caretRect(for: client)
-
-        XCTAssertEqual(result?.rect, client.firstRectResponse)
-        XCTAssertEqual(result?.source, .precise)
-        XCTAssertEqual(client.lastFirstRectRange, NSRange(location: 9, length: 0))
-    }
-
     func testCaretIndexFallsBackToMarkedRangeEnd() {
         let client = MockTextInputClient()
         client.setSelectedRange(NSRange(location: NSNotFound, length: 0))
@@ -76,55 +37,6 @@ final class TextInputGeometryTests: XCTestCase {
         XCTAssertEqual(client.lastAttributesCharacterIndex, 5)
     }
 
-    func testCaretRectRejectsOriginRectThatWouldPinPanelToScreenCorner() {
-        let client = MockTextInputClient()
-        client.setSelectedRange(NSRange(location: 0, length: 0))
-        client.setMarkedRangeForTesting(NSRange(location: 4, length: 2))
-        client.firstRectResponse = NSRect(x: 0, y: 0, width: 12, height: 18)
-        client.attributesRectResponse = NSRect(x: 0, y: 0, width: 12, height: 18)
-
-        let result = TextInputGeometry.caretRect(for: client)
-
-        XCTAssertNil(result)
-    }
-
-    func testCaretRectUsesFirstRectWhenExpandedMarkedSpanIsUsable() {
-        let client = MockTextInputClient()
-        client.setSelectedRange(NSRange(location: 9, length: 0))
-        client.setMarkedRangeForTesting(NSRange(location: 8, length: 3))
-        client.firstRectResponse = NSRect(x: 420, y: 260, width: 88, height: 18)
-        client.firstRectActualRangeResponse = NSRange(location: 8, length: 3)
-        client.attributesRectResponse = NSRect(x: 486, y: 260, width: 12, height: 18)
-
-        let result = TextInputGeometry.caretRect(for: client)
-
-        XCTAssertEqual(result?.rect, client.firstRectResponse)
-        XCTAssertEqual(result?.source, .precise)
-        XCTAssertNil(client.lastAttributesCharacterIndex)
-    }
-
-    func testCaretRectSkipsSuspiciousWideZeroLengthRectInFavorOfSingleCharacterRect() {
-        let client = MockTextInputClient()
-        client.setSelectedRange(NSRange(location: 12, length: 0))
-        client.setMarkedRangeForTesting(NSRange(location: 10, length: 3))
-        client.setFirstRectResponse(
-            NSRect(x: 24, y: 320, width: 680, height: 20),
-            actualRange: NSRange(location: 0, length: 1),
-            for: NSRange(location: 12, length: 0)
-        )
-        client.setFirstRectResponse(
-            NSRect(x: 216, y: 320, width: 14, height: 20),
-            actualRange: NSRange(location: 12, length: 1),
-            for: NSRange(location: 12, length: 1)
-        )
-
-        let result = TextInputGeometry.caretRect(for: client)
-
-        XCTAssertEqual(result?.rect, NSRect(x: 216, y: 320, width: 14, height: 20))
-        XCTAssertEqual(result?.source, .precise)
-        XCTAssertEqual(client.lastFirstRectRange, NSRange(location: 12, length: 1))
-    }
-
     func testCaretRectFallsBackToAttributesIndex0WhenAllElseFails() {
         // Simulates Electron apps: firstRect returns wide rect, attributes(caretIndex) returns zero.
         // Should fall back to attributes(0) — only Y/height are reliable, not X.
@@ -144,19 +56,6 @@ final class TextInputGeometryTests: XCTestCase {
         XCTAssertEqual(result?.rect.height, 20)
         // X from index 0 is unreliable — source should indicate this
         XCTAssertTrue(result?.source == .attributesAtCaret || result?.source == .attributesAtZero)
-    }
-
-    func testCaretRectReturnsNilWhenAllSourcesFail() {
-        // All sources return unusable data
-        let client = MockTextInputClient()
-        client.setSelectedRange(NSRange(location: 5, length: 0))
-        client.setMarkedRangeForTesting(NSRange(location: 4, length: 2))
-        client.firstRectResponse = NSRect(x: 100, y: 300, width: 800, height: 20)
-        client.attributesRectResponse = .zero
-
-        let result = TextInputGeometry.caretRect(for: client)
-
-        XCTAssertNil(result)
     }
 
     func testCaretRectPrefersAttributesOverSuspiciousRect() {

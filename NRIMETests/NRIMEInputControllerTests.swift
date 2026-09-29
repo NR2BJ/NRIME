@@ -9,20 +9,21 @@ final class NRIMEInputControllerTests: XCTestCase {
     private var client: MockTextInputClient!
     private var controller: NRIMEInputController!
     private var originalToggleEnglish: ShortcutConfig!
-    private var originalSwitchKorean: ShortcutConfig!
-    private var originalSwitchJapanese: ShortcutConfig!
     private var originalHanjaConvert: ShortcutConfig!
+    private var originalToggleNonEnglish: ShortcutConfig!
 
     override func setUp() {
         super.setUp()
         originalToggleEnglish = Settings.shared.shortcut(for: "toggleEnglish")
-        originalSwitchKorean = Settings.shared.shortcut(for: "switchKorean")
-        originalSwitchJapanese = Settings.shared.shortcut(for: "switchJapanese")
         originalHanjaConvert = Settings.shared.shortcut(for: "hanjaConvert")
         Settings.shared.setShortcut(.defaultToggleEnglish, for: "toggleEnglish")
-        Settings.shared.setShortcut(.defaultSwitchKorean, for: "switchKorean")
-        Settings.shared.setShortcut(.defaultSwitchJapanese, for: "switchJapanese")
         Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
+        originalToggleNonEnglish = Settings.shared.shortcut(for: "toggleNonEnglish")
+        // Right Shift + 2 toggles Korean/Japanese in these tests.
+        Settings.shared.setShortcut(ShortcutConfig(
+            keyCode: 0x13, modifierKeyCode: ShortcutConfig.keyCodeRightShift,
+            modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
+            isModifierOnlyTap: false, label: "Right Shift + 2"), for: "toggleNonEnglish")
         client = MockTextInputClient()
         controller = NRIMEInputController(server: nil, delegate: nil, client: nil)
         controller.testingClientOverride = client
@@ -37,9 +38,8 @@ final class NRIMEInputControllerTests: XCTestCase {
         StateManager.shared.switchTo(.english)
         InputSourceRecovery.shared.userInitiatedSwitch = false
         Settings.shared.setShortcut(originalToggleEnglish, for: "toggleEnglish")
-        Settings.shared.setShortcut(originalSwitchKorean, for: "switchKorean")
-        Settings.shared.setShortcut(originalSwitchJapanese, for: "switchJapanese")
         Settings.shared.setShortcut(originalHanjaConvert, for: "hanjaConvert")
+        Settings.shared.setShortcut(originalToggleNonEnglish, for: "toggleNonEnglish")
         controller = nil
         client = nil
         super.tearDown()

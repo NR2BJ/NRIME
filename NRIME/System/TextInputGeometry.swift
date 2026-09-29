@@ -66,24 +66,18 @@ enum TextInputGeometry {
     static func caretRect(for client: (any IMKTextInput)?) -> CaretResult? {
         guard let client else { return rememberedResult(for: nil) }
 
-        // 1. Accessibility API — most accurate, works across all apps including Electron.
-        //    Only called on mode switch (not per-keystroke), so 10ms overhead is acceptable.
-        if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
-            let result = CaretResult(rect: axRect, source: .accessibility)
-            if axRect.origin.x > 1 {
-                rememberGoodResult(result, for: client)
-            }
-            DeveloperLogger.shared.log("Geometry", "AX success", metadata: [
-                "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", axRect.origin.x, axRect.origin.y, axRect.width, axRect.height),
-                "cached": axRect.origin.x > 1 ? "yes" : "no(x<=1)"
-            ])
-            return result
-        }
+        // The client's own answers come first; accessibility is the last resort.
+        //
+        // Accessibility used to go first, and it set AXEnhancedUserInterface on
+        // every non-Apple app it looked at. Chromium, Electron and Firefox read
+        // that as "a screen reader is running" and build their full
+        // accessibility tree from then on, which costs CPU and typing latency
+        // for as long as the app runs. NRIME's grant had silently lapsed (it
+        // was tied to an old binary), so in practice the client answers have
+        // been doing this job all along; keeping that order means restoring the
+        // grant changes nothing here.
 
-        // AX failed — try attributes at caret index (fcitx5-macos approach)
-        DeveloperLogger.shared.log("Geometry", "AX failed, trying attributesAtCaret")
-
-        // 2. attributes at caret index — works during composition in Firefox/native apps
+        // 1. attributes at caret index — works during composition in Firefox/native apps
         if let index = caretIndex(for: client) {
             var lineHeightRect = NSRect.zero
             client.attributes(forCharacterIndex: index, lineHeightRectangle: &lineHeightRect)
@@ -102,7 +96,7 @@ enum TextInputGeometry {
             ])
         }
 
-        // 3. attributes at index 0 — simple fallback (Squirrel's approach).
+        // 2. attributes at index 0 — simple fallback (Squirrel's approach).
         var zeroRect = NSRect.zero
         client.attributes(forCharacterIndex: 0, lineHeightRectangle: &zeroRect)
         let zeroOnScreen = NSScreen.screens.contains { $0.frame.intersects(zeroRect.insetBy(dx: -50, dy: -50)) }
@@ -111,6 +105,19 @@ enum TextInputGeometry {
                 "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", zeroRect.origin.x, zeroRect.origin.y, zeroRect.width, zeroRect.height)
             ])
             return CaretResult(rect: zeroRect, source: .attributesAtZero)
+        }
+
+        // 3. Accessibility — only when the client could not say where its caret is.
+        if let axRect = accessibilityCaretRect(), isUsableRect(axRect) {
+            let result = CaretResult(rect: axRect, source: .accessibility)
+            if axRect.origin.x > 1 {
+                rememberGoodResult(result, for: client)
+            }
+            DeveloperLogger.shared.log("Geometry", "AX success", metadata: [
+                "rect": String(format: "(%.0f,%.0f,%.0f,%.0f)", axRect.origin.x, axRect.origin.y, axRect.width, axRect.height),
+                "cached": axRect.origin.x > 1 ? "yes" : "no(x<=1)"
+            ])
+            return result
         }
 
         DeveloperLogger.shared.log("Geometry", "All methods failed", metadata: [
@@ -206,26 +213,16 @@ enum TextInputGeometry {
     // MARK: - Accessibility API
 
     /// Query the focused UI element's caret bounds via AXUIElement.
-    /// Uses PID-direct access with 10ms timeout.
-    /// Applies Input Source Pro's techniques:
-    ///   - length:1 to work around macOS zero-length kAXBoundsForRange bug
-    ///   - AXEnhancedUserInterface for Electron/Chromium apps
-    /// Public wrapper for InlineIndicator's direct AX access.
-    static func accessibilityCaretRectPublic() -> NSRect? {
-        accessibilityCaretRect()
-    }
-
+    /// Uses PID-direct access with 10ms timeout, and length:1 to work around
+    /// the macOS zero-length kAXBoundsForRange bug (Input Source Pro's trick).
+    /// Never sets AXEnhancedUserInterface: that turns on an app's full
+    /// accessibility mode for the rest of its life (see caretRect).
     private static func accessibilityCaretRect() -> NSRect? {
         guard let frontApp = NSWorkspace.shared.frontmostApplication else { return nil }
         let pid = frontApp.processIdentifier
 
         let appElement = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(appElement, 0.01) // 10ms — fast timeout, preCommitCapture handles composition
-
-        // Activate AX on Electron/Chromium apps (they hide their AX tree by default)
-        if let bundleId = frontApp.bundleIdentifier, !bundleId.hasPrefix("com.apple.") {
-            AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, true as CFTypeRef)
-        }
 
         var focusedElementValue: AnyObject?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedElementValue) == .success else {

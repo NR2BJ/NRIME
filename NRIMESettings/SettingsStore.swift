@@ -19,20 +19,14 @@ final class SettingsStore: ObservableObject {
         _preventABCSwitch = Published(initialValue: false)
         _secureInputASCIIFallback = Published(initialValue: true)
         _developerModeEnabled = Published(initialValue: false)
-        _perAppModeEnabled = Published(initialValue: false)
-        _perAppModeType = Published(initialValue: "whitelist")
-        _perAppModeList = Published(initialValue: [])
         _toggleEnglishShortcut = Published(initialValue: .defaultToggleEnglish)
         _toggleNonEnglishShortcut = Published(initialValue: .defaultToggleNonEnglish)
-        _switchKoreanShortcut = Published(initialValue: .defaultSwitchKorean)
-        _switchJapaneseShortcut = Published(initialValue: .defaultSwitchJapanese)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
-        _shiftDoubleTapEnabled = Published(initialValue: true)
-        _doubleTapWindow = Published(initialValue: 0.3)
         _shiftEnterDelay = Published(initialValue: 0.015)
         _tapHoldBufferingEnabled = Published(initialValue: false)
         _tapOverlapWindow = Published(initialValue: 0.05)
         _japaneseKeyConfig = Published(initialValue: .default)
+        _permissionStatus = Published(initialValue: nil)
 
         reloadFromDefaults()
     }
@@ -41,12 +35,6 @@ final class SettingsStore: ObservableObject {
 
     @Published var toggleEnglishShortcut: ShortcutConfig {
         didSet { saveShortcut(toggleEnglishShortcut, for: "toggleEnglish") }
-    }
-    @Published var switchKoreanShortcut: ShortcutConfig {
-        didSet { saveShortcut(switchKoreanShortcut, for: "switchKorean") }
-    }
-    @Published var switchJapaneseShortcut: ShortcutConfig {
-        didSet { saveShortcut(switchJapaneseShortcut, for: "switchJapanese") }
     }
     @Published var toggleNonEnglishShortcut: ShortcutConfig {
         didSet { saveShortcut(toggleNonEnglishShortcut, for: "toggleNonEnglish") }
@@ -81,14 +69,6 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(tapThreshold, forKey: "tapThreshold") }
     }
 
-    @Published var shiftDoubleTapEnabled: Bool {
-        didSet { defaults.set(shiftDoubleTapEnabled, forKey: "shiftDoubleTapEnabled") }
-    }
-
-    @Published var doubleTapWindow: Double {
-        didSet { defaults.set(doubleTapWindow, forKey: "doubleTapWindow") }
-    }
-
     @Published var tapHoldBufferingEnabled: Bool {
         didSet { defaults.set(tapHoldBufferingEnabled, forKey: "tapHoldBufferingEnabled") }
     }
@@ -101,18 +81,23 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(shiftEnterDelay, forKey: "shiftEnterDelay") }
     }
 
-    // MARK: - Per-App Mode
+    // MARK: - Input Method Permissions
 
-    @Published var perAppModeEnabled: Bool {
-        didSet { defaults.set(perAppModeEnabled, forKey: "perAppModeEnabled") }
+    /// What the input method last reported about its own grants. Read-only here.
+    @Published private(set) var permissionStatus: PermissionStatus?
+
+    func reloadPermissionStatus() {
+        permissionStatus = PermissionStatus.load(from: defaults)
     }
 
-    @Published var perAppModeType: String {
-        didSet { defaults.set(perAppModeType, forKey: "perAppModeType") }
-    }
-
-    @Published var perAppModeList: [String] {
-        didSet { defaults.set(perAppModeList, forKey: "perAppModeList") }
+    /// Ask the input method to check again and to request what is missing.
+    /// The answer arrives in the shared defaults a moment later.
+    func requestPermissionRecheck() {
+        DistributedNotificationCenter.default().postNotificationName(
+            PermissionStatus.recheckNotification, object: nil, userInfo: nil, deliverImmediately: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.reloadPermissionStatus()
+        }
     }
 
     // MARK: - Japanese Key Config
@@ -140,9 +125,9 @@ final class SettingsStore: ObservableObject {
     private static func loadJapaneseKeyConfig(from defaults: UserDefaults) -> JapaneseKeyConfig {
         guard let data = defaults.data(forKey: "japaneseKeyConfig"),
               let config = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
-            return .default
+            return JapaneseKeyConfig.default.withRetiredOptionsOff()
         }
-        return config
+        return config.withRetiredOptionsOff()
     }
 
     private func saveJapaneseKeyConfig() {
@@ -159,10 +144,6 @@ final class SettingsStore: ObservableObject {
 
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2
-        shiftDoubleTapEnabled = defaults.object(forKey: "shiftDoubleTapEnabled") == nil
-            ? true : defaults.bool(forKey: "shiftDoubleTapEnabled")
-        let dtVal = defaults.double(forKey: "doubleTapWindow")
-        doubleTapWindow = dtVal > 0 ? dtVal : 0.3
         let seVal = defaults.double(forKey: "shiftEnterDelay")
         shiftEnterDelay = seVal > 0 ? seVal : 0.015
         tapHoldBufferingEnabled = defaults.bool(forKey: "tapHoldBufferingEnabled")
@@ -172,16 +153,12 @@ final class SettingsStore: ObservableObject {
         secureInputASCIIFallback = defaults.object(forKey: "secureInputASCIIFallback") == nil
             ? true : defaults.bool(forKey: "secureInputASCIIFallback")
         developerModeEnabled = defaults.bool(forKey: "developerModeEnabled")
-        perAppModeEnabled = defaults.bool(forKey: "perAppModeEnabled")
-        perAppModeType = defaults.string(forKey: "perAppModeType") ?? "whitelist"
-        perAppModeList = defaults.stringArray(forKey: "perAppModeList") ?? []
 
         toggleEnglishShortcut = Self.loadShortcut("toggleEnglish", from: defaults) ?? .defaultToggleEnglish
         toggleNonEnglishShortcut = Self.loadShortcut("toggleNonEnglish", from: defaults) ?? .defaultToggleNonEnglish
-        switchKoreanShortcut = Self.loadShortcut("switchKorean", from: defaults) ?? .defaultSwitchKorean
-        switchJapaneseShortcut = Self.loadShortcut("switchJapanese", from: defaults) ?? .defaultSwitchJapanese
         hanjaConvertShortcut = Self.loadShortcut("hanjaConvert", from: defaults) ?? .defaultHanjaConvert
         japaneseKeyConfig = Self.loadJapaneseKeyConfig(from: defaults)
+        reloadPermissionStatus()
     }
 
     func exportSettingsInteractively() throws -> URL? {

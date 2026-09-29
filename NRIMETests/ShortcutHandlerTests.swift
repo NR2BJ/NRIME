@@ -6,24 +6,28 @@ final class ShortcutHandlerTests: XCTestCase {
 
     private var handler: ShortcutHandler!
     private var originalToggleEnglish: ShortcutConfig!
-    private var originalSwitchKorean: ShortcutConfig!
-    private var originalSwitchJapanese: ShortcutConfig!
     private var originalHanjaConvert: ShortcutConfig!
+    private var originalToggleNonEnglish: ShortcutConfig!
+
+    /// A combo shortcut for the Korean/Japanese toggle, so combo matching is
+    /// still covered now that the direct-switch shortcuts are gone.
+    static let rightShiftTwo = ShortcutConfig(
+        keyCode: 0x13, modifierKeyCode: ShortcutConfig.keyCodeRightShift,
+        modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
+        isModifierOnlyTap: false, label: "Right Shift + 2")
     private var originalTapThreshold: TimeInterval = 0
 
     override func setUp() {
         super.setUp()
         handler = ShortcutHandler()
         originalToggleEnglish = Settings.shared.shortcut(for: "toggleEnglish")
-        originalSwitchKorean = Settings.shared.shortcut(for: "switchKorean")
-        originalSwitchJapanese = Settings.shared.shortcut(for: "switchJapanese")
         originalHanjaConvert = Settings.shared.shortcut(for: "hanjaConvert")
         originalTapThreshold = Settings.shared.tapThreshold
         Settings.shared.tapThreshold = 0.2
         Settings.shared.setShortcut(.defaultToggleEnglish, for: "toggleEnglish")
-        Settings.shared.setShortcut(.defaultSwitchKorean, for: "switchKorean")
-        Settings.shared.setShortcut(.defaultSwitchJapanese, for: "switchJapanese")
         Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
+        originalToggleNonEnglish = Settings.shared.shortcut(for: "toggleNonEnglish")
+        Settings.shared.setShortcut(Self.rightShiftTwo, for: "toggleNonEnglish")
         // Reset StateManager to known state
         StateManager.shared.switchTo(.korean)
         StateManager.shared.switchTo(.english)
@@ -31,9 +35,8 @@ final class ShortcutHandlerTests: XCTestCase {
 
     override func tearDown() {
         Settings.shared.setShortcut(originalToggleEnglish, for: "toggleEnglish")
-        Settings.shared.setShortcut(originalSwitchKorean, for: "switchKorean")
-        Settings.shared.setShortcut(originalSwitchJapanese, for: "switchJapanese")
         Settings.shared.setShortcut(originalHanjaConvert, for: "hanjaConvert")
+        Settings.shared.setShortcut(originalToggleNonEnglish, for: "toggleNonEnglish")
         Settings.shared.tapThreshold = originalTapThreshold
         handler = nil
         super.tearDown()
@@ -111,7 +114,9 @@ final class ShortcutHandlerTests: XCTestCase {
         XCTAssertEqual(StateManager.shared.currentMode, .korean)
     }
 
-    func testModifierComboSwitchesJapanese() {
+    func testModifierComboTriggersItsAction() {
+        // Right Shift + 2 is the Korean/Japanese toggle here; from English it
+        // goes to the non-English mode not used last (Korean was), Japanese.
         XCTAssertFalse(handler.handleEvent(flagsChangedEvent(
             keyCode: ShortcutConfig.keyCodeRightShift,
             modifiers: [.shift]

@@ -28,7 +28,34 @@ enum KeyEventReposter {
 #if DEBUG
     /// Test seam: captures reposts instead of injecting real system events.
     static var captureForTesting: ((_ keyCode: UInt16, _ flags: CGEventFlags) -> Void)?
+    /// Test seam: the answer `canPostEvents` gives under tests (granted unless set).
+    static var postEventAccessForTesting: Bool?
 #endif
+
+    /// Whether NRIME may post key events. Without it macOS drops posted events
+    /// silently — the commit happens and the key it was meant to deliver does not.
+    ///
+    /// NRIME has been ad-hoc signed, and macOS records such a grant against
+    /// the exact binary (its cdhash): every update loses it while System
+    /// Settings still shows NRIME as allowed. That is why the Codex Shift+Enter
+    /// replay "never worked" — the replayed key never left NRIME.
+    static var canPostEvents: Bool {
+#if DEBUG
+        if AppGroupDefaults.isRunningTests {
+            return postEventAccessForTesting ?? true
+        }
+#endif
+        return CGPreflightPostEventAccess()
+    }
+
+    /// Re-send a modifier shortcut (Cmd/Ctrl/Option+key) after the commit.
+    /// Callers check `canPostEvents` first: when the event cannot be posted,
+    /// handing the original key to the app beats consuming it for nothing.
+    static func repost(_ event: NSEvent, after delay: TimeInterval) {
+        let flags = CGEventFlags(rawValue: UInt64(
+            event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue))
+        postKeyPress(keyCode: event.keyCode, flags: flags, after: delay)
+    }
 
     /// Post a tagged key press (down+up) after a delay. The controller sees the
     /// tag and passes the event straight through to the host app.
@@ -38,12 +65,19 @@ enum KeyEventReposter {
     /// differently from a real key press (the March experiments, where CGEvent
     /// replay "only committed", used a nil source).
     static func postKeyPress(keyCode: UInt16, flags: CGEventFlags, after delay: TimeInterval) {
+#if DEBUG
+        // Taken when scheduled, so a delayed repost reaches the test that made
+        // it rather than whichever test is running when it fires.
+        let capture = captureForTesting
+#endif
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
 #if DEBUG
-            if let capture = captureForTesting {
+            if let capture {
                 capture(keyCode, flags)
                 return
             }
+            // Tests must never type into the user's session.
+            if AppGroupDefaults.isRunningTests { return }
 #endif
             let source = CGEventSource(stateID: .hidSystemState)
             guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) else { return }
@@ -73,6 +107,13 @@ enum KeyEventReposter {
                                        client: any IMKTextInput,
                                        delay: TimeInterval) {
         if ChromiumDetector.frontmostAppTreatsNewlineInsertAsSubmit {
+            // Without permission the replayed key is dropped, and inserting
+            // "\n" instead would send the message. Commit only; pressing
+            // Shift+Enter again gives the newline.
+            guard canPostEvents else {
+                DeveloperLogger.shared.log("Reposter", "Newline replay skipped: no post-event access")
+                return
+            }
             postKeyPress(keyCode: keyCode, flags: .maskShift,
                          after: max(delay, replayDelay))
         } else {

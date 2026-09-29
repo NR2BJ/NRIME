@@ -12,8 +12,6 @@ final class JapaneseSymbolRoutingTests: XCTestCase {
     private var controller: NRIMEInputController!
     private var originalToggleEnglish: ShortcutConfig!
     private var originalToggleNonEnglish: ShortcutConfig!
-    private var originalSwitchKorean: ShortcutConfig!
-    private var originalSwitchJapanese: ShortcutConfig!
     private var originalHanjaConvert: ShortcutConfig!
     private var originalJapaneseConfig: JapaneseKeyConfig!
 
@@ -21,15 +19,16 @@ final class JapaneseSymbolRoutingTests: XCTestCase {
         super.setUp()
         originalToggleEnglish = Settings.shared.shortcut(for: "toggleEnglish")
         originalToggleNonEnglish = Settings.shared.shortcut(for: "toggleNonEnglish")
-        originalSwitchKorean = Settings.shared.shortcut(for: "switchKorean")
-        originalSwitchJapanese = Settings.shared.shortcut(for: "switchJapanese")
         originalHanjaConvert = Settings.shared.shortcut(for: "hanjaConvert")
         originalJapaneseConfig = Settings.shared.japaneseKeyConfig
 
         Settings.shared.setShortcut(.defaultToggleEnglish, for: "toggleEnglish")
-        Settings.shared.setShortcut(.defaultToggleNonEnglish, for: "toggleNonEnglish")
-        Settings.shared.setShortcut(.defaultSwitchKorean, for: "switchKorean")
-        Settings.shared.setShortcut(.defaultSwitchJapanese, for: "switchJapanese")
+        // A combo on Right Shift + 1: the case where a symbol key is also part
+        // of a shortcut, which is what these routing tests are about.
+        Settings.shared.setShortcut(ShortcutConfig(
+            keyCode: 0x12, modifierKeyCode: ShortcutConfig.keyCodeRightShift,
+            modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
+            isModifierOnlyTap: false, label: "Right Shift + 1"), for: "toggleNonEnglish")
         Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
 
         var config = JapaneseKeyConfig.default
@@ -47,8 +46,6 @@ final class JapaneseSymbolRoutingTests: XCTestCase {
         StateManager.shared.switchTo(.english)
         Settings.shared.setShortcut(originalToggleEnglish, for: "toggleEnglish")
         Settings.shared.setShortcut(originalToggleNonEnglish, for: "toggleNonEnglish")
-        Settings.shared.setShortcut(originalSwitchKorean, for: "switchKorean")
-        Settings.shared.setShortcut(originalSwitchJapanese, for: "switchJapanese")
         Settings.shared.setShortcut(originalHanjaConvert, for: "hanjaConvert")
         Settings.shared.japaneseKeyConfig = originalJapaneseConfig
         controller = nil
@@ -82,7 +79,7 @@ final class JapaneseSymbolRoutingTests: XCTestCase {
         XCTAssertEqual(StateManager.shared.currentMode, .japanese)
     }
 
-    func testRightShiftOneStillSwitchesToKorean() {
+    func testRightShiftOneComboStillSwitches() {
         pressModifier(keyCode: ShortcutConfig.keyCodeRightShift)
 
         let handled = controller.handle(
@@ -91,7 +88,7 @@ final class JapaneseSymbolRoutingTests: XCTestCase {
         XCTAssertTrue(handled)
         XCTAssertEqual(client.insertedTexts, [])
         XCTAssertEqual(StateManager.shared.currentMode, .korean,
-                       "Right Shift + 1 is the configured mode-switch shortcut")
+                       "Right Shift + 1 is the configured Korean/Japanese toggle")
     }
 
     /// The real-world case: no flagsChanged reached the IME (focus changed while

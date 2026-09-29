@@ -9,8 +9,6 @@ final class ShortcutHandler {
     enum Action {
         case toggleEnglish
         case toggleNonEnglish
-        case switchKorean
-        case switchJapanese
         case hanjaConvert
     }
 
@@ -43,8 +41,6 @@ final class ShortcutHandler {
     private static let allShortcuts: [(String, Action)] = [
         ("toggleEnglish", .toggleEnglish),
         ("toggleNonEnglish", .toggleNonEnglish),
-        ("switchKorean", .switchKorean),
-        ("switchJapanese", .switchJapanese),
         ("hanjaConvert", .hanjaConvert),
     ]
 
@@ -145,10 +141,6 @@ final class ShortcutHandler {
     }
 #endif
 
-    // Double-Shift tracking for Caps Lock toggle
-    private var lastShiftTapTimestamp: TimeInterval?
-    private var lastShiftTapKeyCode: UInt16?
-    private var doubleTapWindow: TimeInterval { Settings.shared.doubleTapWindow }
 
     /// Process an event for shortcut detection.
     /// Returns true if the event was consumed as a shortcut action.
@@ -388,8 +380,6 @@ final class ShortcutHandler {
             let hold = event.timestamp - (modifierDownEventTimestamp ?? event.timestamp)
             activeModifierKeyCode = nil
             modifierDownEventTimestamp = nil
-            // Deliberately skip the double-tap bookkeeping below: a buffer-resolving
-            // release is not a clean tap and must not pair into a Caps Lock toggle.
             if overlap < Settings.shared.tapOverlapWindow && hold < Settings.shared.tapThreshold {
                 _ = checkModifierOnlyTap(keyCode)
                 onReplay?(pending.event, false)
@@ -425,24 +415,6 @@ final class ShortcutHandler {
             }
 
             if isTap {
-                // Double-Shift tap → toggle Caps Lock (only for shift keys NOT registered as shortcuts)
-                let isShiftKey = (keyCode == ShortcutConfig.keyCodeLeftShift ||
-                                  keyCode == ShortcutConfig.keyCodeRightShift)
-                let isRegisteredShortcut = isShiftKey && isKeyRegisteredAsShortcut(keyCode)
-                if isShiftKey && !isRegisteredShortcut && Settings.shared.shiftDoubleTapEnabled,
-                   let lastTimestamp = lastShiftTapTimestamp,
-                   lastShiftTapKeyCode == keyCode,
-                   (event.timestamp - lastTimestamp) >= 0,
-                   (event.timestamp - lastTimestamp) < doubleTapWindow {
-                    lastShiftTapTimestamp = nil
-                    lastShiftTapKeyCode = nil
-                    toggleCapsLock()
-                    return true
-                }
-                if isShiftKey && !isRegisteredShortcut {
-                    lastShiftTapTimestamp = event.timestamp
-                    lastShiftTapKeyCode = keyCode
-                }
                 // Solo tap — check modifier-only shortcuts
                 return checkModifierOnlyTap(keyCode)
             }
@@ -734,10 +706,6 @@ final class ShortcutHandler {
             StateManager.shared.toggleEnglish()
         case .toggleNonEnglish:
             StateManager.shared.toggleNonEnglish()
-        case .switchKorean:
-            StateManager.shared.switchTo(.korean)
-        case .switchJapanese:
-            StateManager.shared.switchTo(.japanese)
         case .hanjaConvert:
             return false // Needs engine context, handled elsewhere
         }
@@ -893,11 +861,6 @@ final class ShortcutHandler {
 
     /// Track Caps Lock state ourselves since IOHIDGetModifierLockState returns stale values.
     private var capsLockIsOn = false
-
-    /// Toggle Caps Lock using IOKit (double-Shift-tap path).
-    private func toggleCapsLock() {
-        setCapsLock(!capsLockIsOn)
-    }
 
     /// Set Caps Lock to an explicit state using IOKit (no Accessibility permission needed).
     private func setCapsLock(_ on: Bool) {

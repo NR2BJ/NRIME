@@ -110,6 +110,14 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
     private static let betaScanCount = 20
 
     @Published var state: UpdateState = .idle
+
+    /// Downloading or installing — quitting now would lose the work.
+    var isBusy: Bool {
+        switch state {
+        case .downloading, .installing: return true
+        default: return false
+        }
+    }
     @Published var latestRelease: GitHubRelease?
 
     /// Release channel this install follows. Persisted in the App Group so the

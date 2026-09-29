@@ -47,6 +47,8 @@ targets:
         type: file
       - path: Shared/AppGroupDefaults.swift
         type: file
+      - path: Shared/PermissionStatus.swift
+        type: file
       - path: NRIME/Resources/mozc_server
         buildPhase: resources
         type: file
@@ -104,6 +106,8 @@ targets:
         type: file
       - path: Shared/AppGroupDefaults.swift
         type: file
+      - path: Shared/PermissionStatus.swift
+        type: file
       - path: NRIME/Engine/Japanese/Proto/user_dictionary_storage.pb.swift
         type: file
     settings:
@@ -117,7 +121,11 @@ targets:
     info:
       path: NRIMESettings/Info.plist
       properties:
-        LSUIElement: true
+        # A regular app while open: Dock icon and app switcher, quits when its
+        # window closes (SettingsAppDelegate).
+        LSUIElement: false
+        CFBundleDisplayName: "NRIME 설정"
+        CFBundleIconFile: AppIcon
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
     postBuildScripts:

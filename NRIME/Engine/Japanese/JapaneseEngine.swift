@@ -61,22 +61,9 @@ final class JapaneseEngine: InputEngine {
                 commitComposing(client: client)
             }
             if wasActive {
-                // shiftEnterDelay is already in seconds (default 0.015)
-                let delay = Settings.shared.shiftEnterDelay
-                let keyCode = event.keyCode
-                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
-                    keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
-                    keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
-                    keyDown.post(tap: .cghidEventTap)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-                        guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
-                        keyUp.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
-                        keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
-                        keyUp.post(tap: .cghidEventTap)
-                    }
-                }
+                // A repost that cannot be delivered would swallow the shortcut.
+                guard KeyEventReposter.canPostEvents else { return false }
+                KeyEventReposter.repost(event, after: Settings.shared.shiftEnterDelay)
                 return true
             }
             return false
@@ -1293,37 +1280,6 @@ final class JapaneseEngine: InputEngine {
 
     private func replacementRange() -> NSRange {
         NSRange(location: NSNotFound, length: NSNotFound)
-    }
-
-    // MARK: - Modifier Key Passthrough
-
-    /// Commit text from any state (composing or converting) and repost the key event
-    /// via CGEvent with a repost tag so the controller passes it through to the host app.
-    /// Used for Cmd+key (performKeyEquivalent path) and Shift+Enter (no StandardKeyBinding).
-    private func commitAndRepostEvent(event: NSEvent, client: any IMKTextInput) {
-        // Gather and commit text from current state
-        if conversionState == .converting {
-            commitConversion(client: client)
-        } else if composer.isComposing {
-            commitComposing(client: client)
-        }
-
-        // Repost the key event via CGEvent with our repost tag.
-        let keyCode = event.keyCode
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        DispatchQueue.main.async {
-            guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return }
-            keyDown.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
-            keyDown.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
-            keyDown.post(tap: .cghidEventTap)
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-                guard let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return }
-                keyUp.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
-                keyUp.setIntegerValueField(.eventSourceUserData, value: KeyEventReposter.repostTag)
-                keyUp.post(tap: .cghidEventTap)
-            }
-        }
     }
 
     /// Convert hiragana string to full-width katakana.

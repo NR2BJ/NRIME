@@ -21,6 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         InputSourceRecovery.shared.startMonitoring()
         DeveloperLogger.shared.startMainThreadStallMonitor()
+        PermissionMonitor.start()
         setupStatusItem()
 
         NSLog("NRIME: Server started with connection name: \(connectionName)")

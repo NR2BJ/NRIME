@@ -74,14 +74,38 @@ if [ ! -x "$MOZC_PAYLOAD" ]; then
     echo "ERROR: mozc_server is not executable in payload"
     exit 1
 fi
-# Ad-hoc code sign (inside-out to avoid broken nested signatures)
-echo "Ad-hoc signing apps..."
-find "$PKG_DIR/payload" -name "*.bundle" -exec codesign -s - --force {} \;
-codesign -s - --force "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
-codesign -s - --force "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" 2>/dev/null || true
+# Code signing (inside-out to avoid broken nested signatures).
+#
+# Signed with the self-signed "NRIME Code Signing" certificate
+# (Tools/make_signing_identity.sh), not ad-hoc: macOS remembers an ad-hoc app
+# by its binary hash, so every update silently dropped NRIME's Accessibility /
+# post-event grant — the reason Codex Shift+Enter replay and ⌘+key reposting
+# never reached apps. With one certificate the grant survives updates.
+# NRIME_ALLOW_ADHOC=1 builds ad-hoc anyway (the grant will not survive).
+IDENTITY_NAME="NRIME Code Signing"
+SIGN_ID="$(security find-identity -p codesigning 2>/dev/null \
+    | awk -v n="\"$IDENTITY_NAME\"" 'index($0, n) {print $2; exit}')"
+if [ -z "$SIGN_ID" ]; then
+    if [ "${NRIME_ALLOW_ADHOC:-0}" = "1" ]; then
+        echo "WARNING: \"$IDENTITY_NAME\" not found — signing ad-hoc (permissions will not survive updates)"
+        SIGN_ID="-"
+    else
+        echo "ERROR: signing identity \"$IDENTITY_NAME\" not found."
+        echo "       Create it once with: bash Tools/make_signing_identity.sh"
+        echo "       (or set NRIME_ALLOW_ADHOC=1 to build ad-hoc)"
+        exit 1
+    fi
+fi
+echo "Signing apps with: $IDENTITY_NAME ($SIGN_ID)"
+find "$PKG_DIR/payload" -name "*.bundle" -exec codesign --force --sign "$SIGN_ID" --timestamp=none {} \;
+codesign --force --sign "$SIGN_ID" --timestamp=none "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
+codesign --force --sign "$SIGN_ID" --timestamp=none "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app"
 echo "Verifying signatures..."
-codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIME.app" && echo "  NRIME.app: OK" || echo "  NRIME.app: FAILED"
-codesign -v "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app" && echo "  NRIMESettings.app: OK" || echo "  NRIMESettings.app: FAILED"
+for app in NRIME NRIMESettings; do
+    bundle="$PKG_DIR/payload/Library/Input Methods/$app.app"
+    codesign --verify --strict "$bundle"
+    echo "  $app.app: OK — $(codesign -d -r- "$bundle" 2>&1 | grep designated)"
+done
 
 # Copy postinstall script and pre-compiled helper
 cp "$SCRIPTS_DIR/postinstall" "$PKG_DIR/scripts/postinstall"

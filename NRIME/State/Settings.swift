@@ -38,8 +38,6 @@ final class Settings {
             switch key {
             case "toggleEnglish": return .defaultToggleEnglish
             case "toggleNonEnglish": return .defaultToggleNonEnglish
-            case "switchKorean": return .defaultSwitchKorean
-            case "switchJapanese": return .defaultSwitchJapanese
             case "hanjaConvert": return .defaultHanjaConvert
             default: return .defaultToggleEnglish
             }
@@ -63,16 +61,6 @@ final class Settings {
         set { defaults.set(newValue, forKey: "tapThreshold") }
     }
 
-    // MARK: - Shift Double-Tap → Caps Lock
-
-    var shiftDoubleTapEnabled: Bool {
-        get {
-            if defaults.object(forKey: "shiftDoubleTapEnabled") == nil { return true }
-            return defaults.bool(forKey: "shiftDoubleTapEnabled")
-        }
-        set { defaults.set(newValue, forKey: "shiftDoubleTapEnabled") }
-    }
-
     // MARK: - Tap-Hold Buffering (fast tap-then-type correction)
 
     /// When ON, a letter typed while a tap-shortcut modifier is still held is
@@ -90,16 +78,6 @@ final class Settings {
             return val > 0 ? val : 0.05
         }
         set { defaults.set(newValue, forKey: "tapOverlapWindow") }
-    }
-
-    // MARK: - Double-Tap Window (Shift double-tap → Caps Lock)
-
-    var doubleTapWindow: TimeInterval {
-        get {
-            let val = defaults.double(forKey: "doubleTapWindow")
-            return val > 0 ? val : 0.3
-        }
-        set { defaults.set(newValue, forKey: "doubleTapWindow") }
     }
 
     // MARK: - Electron Shift+Enter Delay
@@ -151,6 +129,14 @@ final class Settings {
         }
     }
 
+    // MARK: - Permissions
+
+    /// The input method's own grants, published for the settings app.
+    var permissionStatus: PermissionStatus? {
+        get { PermissionStatus.load(from: defaults) }
+        set { newValue?.save(to: defaults) }
+    }
+
     // MARK: - Inline Indicator
 
     var inlineIndicatorEnabled: Bool {
@@ -170,31 +156,6 @@ final class Settings {
         set { defaults.set(newValue, forKey: "indicatorPositionMode") }
     }
 
-    // MARK: - Per-App Mode Memory
-
-    var perAppModeEnabled: Bool {
-        get { defaults.bool(forKey: "perAppModeEnabled") }
-        set { defaults.set(newValue, forKey: "perAppModeEnabled") }
-    }
-
-    /// "whitelist" or "blacklist"
-    var perAppModeType: String {
-        get { defaults.string(forKey: "perAppModeType") ?? "whitelist" }
-        set { defaults.set(newValue, forKey: "perAppModeType") }
-    }
-
-    /// Bundle IDs in the whitelist/blacklist
-    var perAppModeList: [String] {
-        get { defaults.stringArray(forKey: "perAppModeList") ?? [] }
-        set { defaults.set(newValue, forKey: "perAppModeList") }
-    }
-
-    /// Per-app saved modes: [bundleId: InputMode.rawValue]
-    var perAppSavedModes: [String: String] {
-        get { defaults.dictionary(forKey: "perAppSavedModes") as? [String: String] ?? [:] }
-        set { defaults.set(newValue, forKey: "perAppSavedModes") }
-    }
-
     // MARK: - Japanese IME Keys
     // JapaneseKeyConfig, CapsLockAction, ShiftKeyAction, PunctuationStyle
     // are defined in Shared/SettingsModels.swift
@@ -206,18 +167,20 @@ final class Settings {
                 return cached
             }
             guard let data = defaults.data(forKey: "japaneseKeyConfig"),
-                  let config = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
-                let defaultConfig = JapaneseKeyConfig.default
+                  let stored = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
+                let defaultConfig = JapaneseKeyConfig.default.withRetiredOptionsOff()
                 _cachedJapaneseKeyConfig = defaultConfig
                 return defaultConfig
             }
+            let config = stored.withRetiredOptionsOff()
             _cachedJapaneseKeyConfig = config
             _configCacheTime = Date()
             return config
         }
         set {
-            _cachedJapaneseKeyConfig = newValue
-            if let data = try? JSONEncoder().encode(newValue) {
+            let config = newValue.withRetiredOptionsOff()
+            _cachedJapaneseKeyConfig = config
+            if let data = try? JSONEncoder().encode(config) {
                 defaults.set(data, forKey: "japaneseKeyConfig")
             }
         }

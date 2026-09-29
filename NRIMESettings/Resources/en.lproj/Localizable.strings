@@ -53,7 +53,7 @@
 "section.backupRestore" = "Backup & Restore";
 "backup.export" = "Export Settings...";
 "backup.import" = "Import Settings...";
-"backup.description" = "Exports shortcuts, Japanese settings, per-app mode memory, and remembered Hanja candidate priority as a JSON file.";
+"backup.description" = "Exports shortcuts, Japanese settings, and remembered Hanja candidate priority as a JSON file.";
 "backup.exported" = "Exported settings to %@";
 "backup.imported" = "Imported settings from %@";
 
@@ -122,7 +122,7 @@
 /* JapaneseTab - Conversion Shortcuts */
 "section.conversionShortcuts" = "Conversion Shortcuts";
 "convShortcut.startConversion" = "Start conversion";
-"convShortcut.moveSegments" = "Move between segments";
+"convShortcut.moveSegments" = "Move between segments (pages the list when there is one)";
 "convShortcut.resizeSegment" = "Resize segment";
 "convShortcut.navigateCandidates" = "Navigate candidates";
 "convShortcut.confirmConversion" = "Confirm conversion";
@@ -152,7 +152,7 @@
 "dictionary.delete" = "Delete";
 "dictionary.deleteConfirm" = "Delete %lld entry(ies)?";
 "dictionary.deleteMessage" = "This cannot be undone. The word(s) will be removed from your user dictionary.";
-"dictionary.autoLearnInfo" = "Auto-learned conversions are stored as hashes and cannot be listed. To clear them, go to the **Japanese** tab → Clear Conversion History.";
+"dictionary.autoLearnInfo" = "Auto-learned conversions are stored as hashes and cannot be listed. To clear them, use Settings above → Clear Conversion History.";
 "dictionary.addTitle" = "Add Entry";
 "dictionary.editTitle" = "Edit Entry";
 "dictionary.fieldReading" = "Reading (hiragana):";
@@ -202,3 +202,23 @@
 /* Secure input ASCII fallback */
 "secureInput.asciiFallback" = "Switch to ABC while typing passwords";
 "secureInput.asciiFallbackDescription" = "While macOS secure input is on (password fields), composition is impossible. Hand the keyboard to the ABC layout for the duration and switch back afterwards.";
+
+/* 2026-09-29: 일본어 탭 재구성 */
+"japanese.page.settings" = "Settings";
+"japanese.page.dictionary" = "User Dictionary";
+"punctuation.preview" = "Output";
+"punctuation.previewNote" = "What the . , [ ] ~ ! ? keys type. Other symbols (@ # % & * ( ) …) are full-width in the Japanese and full-width Western styles, and unchanged in half-width Western.";
+"convShortcut.selectByNumber" = "Pick a candidate by number";
+"convShortcut.toggleGrid" = "Expand / collapse candidates";
+
+/* 2026-09-29: 입력기 권한 */
+"section.permissions" = "Input method permissions";
+"permissions.postEvents" = "Post key events";
+"permissions.accessibility" = "Accessibility";
+"permissions.granted" = "Allowed";
+"permissions.denied" = "Off";
+"permissions.unknown" = "Not checked yet";
+"permissions.description" = "Needed to re-send ⌘+key or Codex Shift+Enter to the app after committing. If it shows Off, remove NRIME from System Settings > Privacy & Security > Accessibility (−) and add /Library/Input Methods/NRIME.app again (+). An entry that looks enabled may belong to an older build and not apply.";
+"permissions.checkedAt" = "Last checked by the input method: %@";
+"permissions.recheck" = "Check again / Request";
+"permissions.openSettings" = "Open System Settings";

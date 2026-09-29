@@ -6,7 +6,6 @@ final class StateManager {
     private(set) var currentMode: InputMode = .english
     private var previousNonEnglishMode: InputMode
     private var currentAppBundleId: String?
-    private var hasCompletedInitialActivation = false
 
     /// Callback invoked when mode changes. Set by NRIMEInputController.
     var onModeChanged: ((InputMode) -> Void)?
@@ -64,69 +63,12 @@ final class StateManager {
         onStatusIconUpdate?(mode)
     }
 
-    // MARK: - Per-App Mode Memory
+    // MARK: - Active App
 
-    /// Called when an app gains focus. Restores saved mode if applicable.
+    /// Called when an app gains focus. Only recorded for the developer log:
+    /// the mode is global and never restored per app.
     func activateApp(_ bundleId: String) {
         currentAppBundleId = bundleId
-        defer { hasCompletedInitialActivation = true }
-        guard Settings.shared.perAppModeEnabled else { return }
-        guard shouldRememberApp(bundleId) else { return }
-
-        let saved = Settings.shared.perAppSavedModes
-        if let rawValue = saved[bundleId],
-           let mode = InputMode(rawValue: rawValue) {
-            if !hasCompletedInitialActivation && currentMode == .english && mode != .english {
-                DeveloperLogger.shared.log("StateManager", "Skipped per-app restore on initial activation", metadata: [
-                    "app": bundleId,
-                    "mode": mode.label,
-                    "sourceID": mode.rawValue
-                ])
-                return
-            }
-            if mode != currentMode {
-                currentMode = mode
-                if currentMode != .english {
-                    rememberNonEnglishMode(currentMode)
-                }
-                NSLog("NRIME: Restored mode \(mode.label) for app \(bundleId)")
-                DeveloperLogger.shared.log("StateManager", "Restored per-app mode", metadata: [
-                    "app": bundleId,
-                    "mode": mode.label,
-                    "sourceID": mode.rawValue
-                ])
-                onModeChanged?(mode)
-                onStatusIconUpdate?(mode)
-            }
-        }
-    }
-
-    /// Called when an app loses focus. Saves current mode if applicable.
-    func deactivateApp(_ bundleId: String) {
-        guard Settings.shared.perAppModeEnabled else { return }
-        guard shouldRememberApp(bundleId) else { return }
-        // IMKit does not strictly order deactivate/activate across fast focus
-        // hops. A stale deactivate arriving after another app activated would
-        // save THAT app's mode under this bundleId — skip it.
-        guard bundleId == currentAppBundleId else { return }
-
-        var saved = Settings.shared.perAppSavedModes
-        saved[bundleId] = currentMode.rawValue
-        Settings.shared.perAppSavedModes = saved
-    }
-
-    private func shouldRememberApp(_ bundleId: String) -> Bool {
-        let list = Settings.shared.perAppModeList
-        let isInList = list.contains(bundleId)
-
-        switch Settings.shared.perAppModeType {
-        case "whitelist":
-            return isInList
-        case "blacklist":
-            return !isInList
-        default:
-            return false
-        }
     }
 
     private func rememberNonEnglishMode(_ mode: InputMode) {
@@ -144,7 +86,6 @@ final class StateManager {
         currentMode = .english
         previousNonEnglishMode = Settings.shared.lastNonEnglishMode
         currentAppBundleId = nil
-        hasCompletedInitialActivation = false
         onModeChanged = nil
         onStatusIconUpdate = nil
     }

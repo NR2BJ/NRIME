@@ -522,6 +522,8 @@ class NRIMEInputController: IMKInputController {
             }
         }
 
+        PermissionMonitor.refreshIfStale()
+
         // Clear any orphaned composing state from previous session.
         // Do NOT use forceCommit here — the previous client may be gone and
         // inserting text into the new client causes duplication ("사과" → "사과과").
@@ -578,16 +580,7 @@ class NRIMEInputController: IMKInputController {
         // Mark as user-initiated so InputSourceRecovery doesn't fight it
         InputSourceRecovery.shared.userInitiatedSwitch = true
 
-        // Save per-app mode if enabled
-        if let client = sender as? (any IMKTextInput) {
-            let bundleId = client.bundleIdentifier() ?? "unknown"
-            StateManager.shared.deactivateApp(bundleId)
-            logControllerEvent("deactivateServer", client: client, extra: [
-                "bundleID": bundleId
-            ])
-        } else {
-            logControllerEvent("deactivateServer", client: nil)
-        }
+        logControllerEvent("deactivateServer", client: sender as? (any IMKTextInput))
 
         // Commit composing text — use sender (the client) since self.client()
         // may already be nil during deactivation
@@ -777,7 +770,7 @@ class NRIMEInputController: IMKInputController {
             let previousMode = StateManager.shared.currentMode
 
             switch action {
-            case .toggleEnglish, .toggleNonEnglish, .switchKorean, .switchJapanese:
+            case .toggleEnglish, .toggleNonEnglish:
                 // Switching modes is always allowed, but the text of a
                 // composition that belongs to another field is not: by the time
                 // this runs the client may already be an authentication panel,
@@ -797,8 +790,6 @@ class NRIMEInputController: IMKInputController {
                 switch action {
                 case .toggleEnglish:    StateManager.shared.toggleEnglish()
                 case .toggleNonEnglish: StateManager.shared.toggleNonEnglish()
-                case .switchKorean:     StateManager.shared.switchTo(.korean)
-                case .switchJapanese:   StateManager.shared.switchTo(.japanese)
                 default: break
                 }
                 let switchEnd = ProcessInfo.processInfo.systemUptime

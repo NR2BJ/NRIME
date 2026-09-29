@@ -10,10 +10,8 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     var tapThreshold: Double
     var preventABCSwitch: Bool
     var developerModeEnabled: Bool
-    var perAppModeEnabled: Bool
-    var perAppModeType: String
-    var perAppModeList: [String]
-    var perAppSavedModes: [String: String]
+    // Per-app mode memory (perAppMode*) was removed on 2026-09-29. Older
+    // exports still carry those keys; decoding ignores them.
     var lastNonEnglishMode: String?
     var shortcutData: [String: Data]
     var japaneseKeyConfigData: Data?
@@ -23,8 +21,6 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     // existed still decode; `nil` means "this export knew nothing about it",
     // which is different from "the user turned it off".
     var indicatorPositionMode: String?
-    var shiftDoubleTapEnabled: Bool?
-    var doubleTapWindow: Double?
     var shiftEnterDelay: Double?
     var tapHoldBufferingEnabled: Bool?
     var tapOverlapWindow: Double?
@@ -39,34 +35,25 @@ enum SettingsTransfer {
     static let tapThresholdKey = "tapThreshold"
     static let preventABCSwitchKey = "preventABCSwitch"
     static let developerModeEnabledKey = "developerModeEnabled"
-    static let perAppModeEnabledKey = "perAppModeEnabled"
-    static let perAppModeTypeKey = "perAppModeType"
-    static let perAppModeListKey = "perAppModeList"
-    static let perAppSavedModesKey = "perAppSavedModes"
     static let lastNonEnglishModeKey = "lastNonEnglishMode"
     static let japaneseKeyConfigKey = "japaneseKeyConfig"
 
     static let indicatorPositionModeKey = "indicatorPositionMode"
-    static let shiftDoubleTapEnabledKey = "shiftDoubleTapEnabled"
-    static let doubleTapWindowKey = "doubleTapWindow"
     static let shiftEnterDelayKey = "shiftEnterDelay"
     static let tapHoldBufferingEnabledKey = "tapHoldBufferingEnabled"
     static let tapOverlapWindowKey = "tapOverlapWindow"
     static let secureInputASCIIFallbackKey = "secureInputASCIIFallback"
 
-    /// Shortcut names present in the first schema version.
+    /// Shortcut names present in the first schema version (of those still in
+    /// use — the Korean/Japanese direct-switch shortcuts were removed).
     private static let originalShortcutNames: Set<String> = [
         "toggleEnglish",
-        "switchKorean",
-        "switchJapanese",
         "hanjaConvert",
     ]
 
     static let shortcutNames = [
         "toggleEnglish",
         "toggleNonEnglish",
-        "switchKorean",
-        "switchJapanese",
         "hanjaConvert",
     ]
 
@@ -93,21 +80,11 @@ enum SettingsTransfer {
                 : 0.2,
             preventABCSwitch: defaults.bool(forKey: preventABCSwitchKey),
             developerModeEnabled: defaults.bool(forKey: developerModeEnabledKey),
-            perAppModeEnabled: defaults.bool(forKey: perAppModeEnabledKey),
-            perAppModeType: defaults.string(forKey: perAppModeTypeKey) ?? "whitelist",
-            perAppModeList: defaults.stringArray(forKey: perAppModeListKey) ?? [],
-            perAppSavedModes: defaults.dictionary(forKey: perAppSavedModesKey) as? [String: String] ?? [:],
             lastNonEnglishMode: defaults.string(forKey: lastNonEnglishModeKey),
             shortcutData: shortcutData,
             japaneseKeyConfigData: defaults.data(forKey: japaneseKeyConfigKey),
             hanjaSelectionMemoryData: defaults.data(forKey: HanjaSelectionStore.defaultsKey),
             indicatorPositionMode: defaults.string(forKey: indicatorPositionModeKey) ?? "caret",
-            shiftDoubleTapEnabled: defaults.object(forKey: shiftDoubleTapEnabledKey) == nil
-                ? true
-                : defaults.bool(forKey: shiftDoubleTapEnabledKey),
-            doubleTapWindow: defaults.double(forKey: doubleTapWindowKey) > 0
-                ? defaults.double(forKey: doubleTapWindowKey)
-                : 0.3,
             shiftEnterDelay: defaults.double(forKey: shiftEnterDelayKey) > 0
                 ? defaults.double(forKey: shiftEnterDelayKey)
                 : 0.015,
@@ -144,10 +121,6 @@ enum SettingsTransfer {
         defaults.set(snapshot.tapThreshold, forKey: tapThresholdKey)
         defaults.set(snapshot.preventABCSwitch, forKey: preventABCSwitchKey)
         defaults.set(snapshot.developerModeEnabled, forKey: developerModeEnabledKey)
-        defaults.set(snapshot.perAppModeEnabled, forKey: perAppModeEnabledKey)
-        defaults.set(snapshot.perAppModeType, forKey: perAppModeTypeKey)
-        defaults.set(snapshot.perAppModeList, forKey: perAppModeListKey)
-        defaults.set(snapshot.perAppSavedModes, forKey: perAppSavedModesKey)
 
         if let mode = snapshot.lastNonEnglishMode, !mode.isEmpty {
             defaults.set(mode, forKey: lastNonEnglishModeKey)
@@ -158,12 +131,6 @@ enum SettingsTransfer {
         // A value the export never carried must not overwrite this Mac's.
         if let value = snapshot.indicatorPositionMode {
             defaults.set(value, forKey: indicatorPositionModeKey)
-        }
-        if let value = snapshot.shiftDoubleTapEnabled {
-            defaults.set(value, forKey: shiftDoubleTapEnabledKey)
-        }
-        if let value = snapshot.doubleTapWindow {
-            defaults.set(value, forKey: doubleTapWindowKey)
         }
         if let value = snapshot.shiftEnterDelay {
             defaults.set(value, forKey: shiftEnterDelayKey)

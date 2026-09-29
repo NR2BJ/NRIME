@@ -19,14 +19,6 @@ struct GeneralTab: View {
                     shortcut: $store.toggleNonEnglishShortcut
                 )
                 ShortcutRow(
-                    title: L("shortcut.switchKorean"),
-                    shortcut: $store.switchKoreanShortcut
-                )
-                ShortcutRow(
-                    title: L("shortcut.switchJapanese"),
-                    shortcut: $store.switchJapaneseShortcut
-                )
-                ShortcutRow(
                     title: L("shortcut.hanjaConversion"),
                     shortcut: $store.hanjaConvertShortcut
                 )
@@ -36,8 +28,6 @@ struct GeneralTab: View {
                 VStack(alignment: .leading, spacing: 4) {
                     let needsThreshold = store.toggleEnglishShortcut.isModifierOnlyTap
                         || store.toggleNonEnglishShortcut.isModifierOnlyTap
-                        || store.switchKoreanShortcut.isModifierOnlyTap
-                        || store.switchJapaneseShortcut.isModifierOnlyTap
                         || store.hanjaConvertShortcut.isModifierOnlyTap
                     if needsThreshold {
                         HStack {
@@ -53,18 +43,6 @@ struct GeneralTab: View {
                         Text(L("tapThreshold.notApplicable"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section {
-                Toggle(L("section.shiftDoubleTap"), isOn: $store.shiftDoubleTapEnabled)
-                if store.shiftDoubleTapEnabled {
-                    HStack {
-                        Text("\(String(format: "%.2f", store.doubleTapWindow))s")
-                            .monospacedDigit()
-                            .frame(width: 50, alignment: .trailing)
-                        Slider(value: $store.doubleTapWindow, in: 0.15...0.6, step: 0.05)
                     }
                 }
             }
@@ -143,26 +121,36 @@ struct GeneralTab: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L("display.conversionTriggerKeys"))
-                    Toggle(L("common.space"), isOn: Binding(
-                        get: { store.japaneseKeyConfig.conversionTriggerSpace },
-                        set: { store.japaneseKeyConfig.conversionTriggerSpace = $0 }
-                    ))
-                    Toggle(L("common.tab"), isOn: Binding(
-                        get: { store.japaneseKeyConfig.conversionTriggerTab },
-                        set: { store.japaneseKeyConfig.conversionTriggerTab = $0 }
-                    ))
-                    Toggle(L("common.downArrow"), isOn: Binding(
-                        get: { store.japaneseKeyConfig.conversionTriggerDownArrow },
-                        set: { store.japaneseKeyConfig.conversionTriggerDownArrow = $0 }
-                    ))
-                    Text(L("display.conversionTriggerKeys.description"))
+            Section(L("section.permissions")) {
+                PermissionRow(title: L("permissions.postEvents"),
+                              granted: store.permissionStatus?.postEvents)
+                PermissionRow(title: L("permissions.accessibility"),
+                              granted: store.permissionStatus?.accessibility)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L("permissions.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if let checked = store.permissionStatus?.checkedAt {
+                        Text(String(format: L("permissions.checkedAt"),
+                                    checked.formatted(date: .abbreviated, time: .shortened)))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 10) {
+                        Button(L("permissions.recheck")) {
+                            store.requestPermissionRecheck()
+                        }
+                        Button(L("permissions.openSettings")) {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
                 }
             }
+            .onAppear { store.reloadPermissionStatus() }
 
             Section(L("section.developer")) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -243,6 +231,31 @@ struct GeneralTab: View {
         } catch {
             transferStatusMessage = error.localizedDescription
             transferStatusIsError = true
+        }
+    }
+}
+
+// MARK: - Permission Row
+
+private struct PermissionRow: View {
+    let title: String
+    let granted: Bool?
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            switch granted {
+            case .some(true):
+                Label(L("permissions.granted"), systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .some(false):
+                Label(L("permissions.denied"), systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            case .none:
+                Text(L("permissions.unknown"))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

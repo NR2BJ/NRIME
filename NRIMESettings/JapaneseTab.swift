@@ -3,57 +3,56 @@ import SwiftUI
 struct JapaneseTab: View {
     @ObservedObject private var lang = LocalizedBundle.shared
     @ObservedObject private var store = SettingsStore.shared
+    @State private var page: Page
     @State private var showingClearConfirmation = false
     @State private var historyCleared = false
 
+    init(startOnDictionary: Bool = false) {
+        _page = State(initialValue: startOnDictionary ? .dictionary : .settings)
+    }
+
+    /// The user dictionary lives inside this tab rather than in one of its own.
+    /// It is a table, which does not belong inside a Form, so it gets its own page.
+    private enum Page: Hashable {
+        case settings
+        case dictionary
+    }
+
     var body: some View {
         let _ = lang.revision
+        VStack(spacing: 0) {
+            Picker("", selection: $page) {
+                Text(L("japanese.page.settings")).tag(Page.settings)
+                Text(L("japanese.page.dictionary")).tag(Page.dictionary)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(.bottom, 8)
+
+            switch page {
+            case .settings:
+                settingsForm
+            case .dictionary:
+                DictionaryTab()
+            }
+        }
+    }
+
+    private var settingsForm: some View {
         Form {
-            Section(L("section.conversionKeys")) {
-                Text(L("conversionKeys.description"))
+            Section(L("display.conversionTriggerKeys")) {
+                Toggle(L("common.space"), isOn: Binding(
+                    get: { store.japaneseKeyConfig.conversionTriggerSpace },
+                    set: { store.japaneseKeyConfig.conversionTriggerSpace = $0 }
+                ))
+                Toggle(L("common.tab"), isOn: Binding(
+                    get: { store.japaneseKeyConfig.conversionTriggerTab },
+                    set: { store.japaneseKeyConfig.conversionTriggerTab = $0 }
+                ))
+                Text(L("display.conversionTriggerKeys.description"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                JapaneseKeyRow(
-                    title: L("japanese.hiragana"),
-                    description: "\u{3072}\u{3089}\u{304C}\u{306A}",
-                    keyCode: Binding(
-                        get: { store.japaneseKeyConfig.hiraganaKeyCode },
-                        set: { store.japaneseKeyConfig.hiraganaKeyCode = $0 }
-                    )
-                )
-                JapaneseKeyRow(
-                    title: L("japanese.fullKatakana"),
-                    description: "\u{5168}\u{89D2}\u{30AB}\u{30BF}\u{30AB}\u{30CA}",
-                    keyCode: Binding(
-                        get: { store.japaneseKeyConfig.fullKatakanaKeyCode },
-                        set: { store.japaneseKeyConfig.fullKatakanaKeyCode = $0 }
-                    )
-                )
-                JapaneseKeyRow(
-                    title: L("japanese.halfKatakana"),
-                    description: "\u{534A}\u{89D2}\u{30AB}\u{30BF}\u{30AB}\u{30CA}",
-                    keyCode: Binding(
-                        get: { store.japaneseKeyConfig.halfKatakanaKeyCode },
-                        set: { store.japaneseKeyConfig.halfKatakanaKeyCode = $0 }
-                    )
-                )
-                JapaneseKeyRow(
-                    title: L("japanese.fullRomaji"),
-                    description: "\u{5168}\u{89D2}\u{30ED}\u{30FC}\u{30DE}\u{5B57}",
-                    keyCode: Binding(
-                        get: { store.japaneseKeyConfig.fullRomajiKeyCode },
-                        set: { store.japaneseKeyConfig.fullRomajiKeyCode = $0 }
-                    )
-                )
-                JapaneseKeyRow(
-                    title: L("japanese.halfRomaji"),
-                    description: "\u{534A}\u{89D2}\u{30ED}\u{30FC}\u{30DE}\u{5B57}",
-                    keyCode: Binding(
-                        get: { store.japaneseKeyConfig.halfRomajiKeyCode },
-                        set: { store.japaneseKeyConfig.halfRomajiKeyCode = $0 }
-                    )
-                )
             }
 
             Section(L("section.keyBehavior")) {
@@ -64,15 +63,6 @@ struct JapaneseTab: View {
                     Text(L("capsLock.default")).tag(CapsLockAction.capsLock)
                     Text(L("capsLock.katakana")).tag(CapsLockAction.katakana)
                     Text(L("capsLock.romaji")).tag(CapsLockAction.romaji)
-                }
-
-                Picker(L("keyBehavior.shiftKeyAction"), selection: Binding(
-                    get: { store.japaneseKeyConfig.shiftKeyAction },
-                    set: { store.japaneseKeyConfig.shiftKeyAction = $0 }
-                )) {
-                    Text(L("shiftKey.none")).tag(ShiftKeyAction.none)
-                    Text(L("shiftKey.katakana")).tag(ShiftKeyAction.katakana)
-                    Text(L("shiftKey.romaji")).tag(ShiftKeyAction.romaji)
                 }
             }
 
@@ -97,6 +87,20 @@ struct JapaneseTab: View {
                     Text(L("punctuation.japanese")).tag(PunctuationStyle.japanese)
                     Text(L("punctuation.fullWidthWestern")).tag(PunctuationStyle.fullWidthWestern)
                     Text(L("punctuation.halfWidthWestern")).tag(PunctuationStyle.halfWidthWestern)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(L("punctuation.preview"))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(verbatim: Self.punctuationPreview(store.japaneseKeyConfig.punctuationStyle))
+                            .font(.system(.title3, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                    Text(L("punctuation.previewNote"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Toggle(isOn: Binding(
@@ -124,32 +128,6 @@ struct JapaneseTab: View {
                 }
             }
 
-            Section(L("section.inputFeatures")) {
-                Toggle(isOn: Binding(
-                    get: { store.japaneseKeyConfig.liveConversion },
-                    set: { store.japaneseKeyConfig.liveConversion = $0 }
-                )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L("inputFeatures.liveConversion"))
-                        Text(L("inputFeatures.liveConversion.description"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Toggle(isOn: Binding(
-                    get: { store.japaneseKeyConfig.prediction },
-                    set: { store.japaneseKeyConfig.prediction = $0 }
-                )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L("inputFeatures.prediction"))
-                        Text(L("inputFeatures.prediction.description"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
             Section(L("section.conversionHistory")) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -168,13 +146,14 @@ struct JapaneseTab: View {
 
             Section(L("section.conversionShortcuts")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    KeyboardHintRow(keys: "Space / \u{2193}", description: L("convShortcut.startConversion"))
+                    KeyboardHintRow(keys: "Space / Tab", description: L("convShortcut.startConversion"))
+                    KeyboardHintRow(keys: "\u{2191} / \u{2193}", description: L("convShortcut.navigateCandidates"))
                     KeyboardHintRow(keys: "\u{2190} / \u{2192}", description: L("convShortcut.moveSegments"))
                     KeyboardHintRow(keys: "Shift + \u{2190} / \u{2192}", description: L("convShortcut.resizeSegment"))
-                    KeyboardHintRow(keys: "\u{2191} / \u{2193}", description: L("convShortcut.navigateCandidates"))
+                    KeyboardHintRow(keys: "1 \u{2013} 9", description: L("convShortcut.selectByNumber"))
+                    KeyboardHintRow(keys: "Tab", description: L("convShortcut.toggleGrid"))
                     KeyboardHintRow(keys: "Enter", description: L("convShortcut.confirmConversion"))
                     KeyboardHintRow(keys: "Escape", description: L("convShortcut.cancelConversion"))
-                    KeyboardHintRow(keys: "Tab", description: L("convShortcut.selectPrediction"))
                 }
             }
         }
@@ -191,6 +170,16 @@ struct JapaneseTab: View {
             Button(L("common.ok")) { }
         } message: {
             Text(L("conversionHistory.clearedMessage"))
+        }
+    }
+
+    /// What the period, comma, brackets, tilde, ! and ? keys type in each
+    /// style. Mirrors JapaneseEngine.symbolForms — keep the two in step.
+    static func punctuationPreview(_ style: PunctuationStyle) -> String {
+        switch style {
+        case .japanese:         return "。 、 「 」 〜 ！ ？"
+        case .fullWidthWestern: return "． ， ［ ］ ～ ！ ？"
+        case .halfWidthWestern: return ". , [ ] ~ ! ?"
         }
     }
 
@@ -214,127 +203,6 @@ struct JapaneseTab: View {
     }
 }
 
-// MARK: - Japanese Key Row
-
-private struct JapaneseKeyRow: View {
-    let title: String
-    let description: String
-    @Binding var keyCode: UInt16?
-    @State private var isRecording = false
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if isRecording {
-                Text(L("keyRecorder.pressKey"))
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.orange.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            } else if let kc = keyCode {
-                Text(keyCodeName(kc))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            } else {
-                Text(L("keyRecorder.none"))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-            }
-            if isRecording {
-                Button(L("keyRecorder.cancel")) {
-                    isRecording = false
-                }
-                .buttonStyle(.borderless)
-            } else {
-                Button(L("keyRecorder.record")) {
-                    isRecording = true
-                }
-                .buttonStyle(.borderless)
-
-                if keyCode != nil {
-                    Button(L("keyRecorder.clear")) {
-                        keyCode = nil
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.red)
-                }
-            }
-        }
-        .overlay {
-            if isRecording {
-                SingleKeyRecorderView { recorded in
-                    keyCode = recorded
-                    isRecording = false
-                }
-                .frame(width: 0, height: 0)
-            }
-        }
-    }
-}
-
-// MARK: - Single Key Recorder
-
-private struct SingleKeyRecorderView: NSViewRepresentable {
-    var onRecord: (UInt16) -> Void
-
-    func makeNSView(context: Context) -> SingleKeyRecorderNSView {
-        let view = SingleKeyRecorderNSView()
-        view.onRecord = onRecord
-        DispatchQueue.main.async {
-            view.window?.makeFirstResponder(view)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: SingleKeyRecorderNSView, context: Context) {
-        nsView.onRecord = onRecord
-    }
-}
-
-class SingleKeyRecorderNSView: NSView {
-    var onRecord: ((UInt16) -> Void)?
-    private var monitor: Any?
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil {
-            startMonitoring()
-        } else {
-            stopMonitoring()
-        }
-    }
-
-    private func startMonitoring() {
-        stopMonitoring()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.onRecord?(event.keyCode)
-            self?.stopMonitoring()
-            return nil
-        }
-    }
-
-    private func stopMonitoring() {
-        if let m = monitor {
-            NSEvent.removeMonitor(m)
-            monitor = nil
-        }
-    }
-
-    deinit { stopMonitoring() }
-}
-
 // MARK: - Keyboard Hint Row
 
 private struct KeyboardHintRow: View {
@@ -345,11 +213,9 @@ private struct KeyboardHintRow: View {
         HStack {
             Text(keys)
                 .font(.system(.body, design: .monospaced))
-                .frame(width: 140, alignment: .leading)
+                .frame(width: 170, alignment: .leading)
             Text(description)
                 .foregroundStyle(.secondary)
         }
     }
 }
-
-// keyCodeName is defined in KeyCodeNames.swift

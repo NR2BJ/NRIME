@@ -77,9 +77,9 @@ final class SwitchReliabilityTests: XCTestCase {
                       "Test runs must be detected, or every test writes the user's live settings")
         let marker = ShortcutConfig(keyCode: 0x69, modifierKeyCode: 0x69, modifiers: 0,
                                     isModifierOnlyTap: false, label: "F13 isolation marker")
-        Settings.shared.setShortcut(marker, for: "switchKorean")
+        Settings.shared.setShortcut(marker, for: "hanjaConvert")
         let testing = UserDefaults(suiteName: AppGroupDefaults.testingSuiteName)
-        let stored = testing?.data(forKey: "shortcut_switchKorean")
+        let stored = testing?.data(forKey: "shortcut_hanjaConvert")
             .flatMap { try? JSONDecoder().decode(ShortcutConfig.self, from: $0) }
         XCTAssertEqual(stored, marker, "Settings must write to the throwaway test domain")
     }

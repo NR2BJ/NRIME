@@ -27,7 +27,7 @@ final class TapHoldBufferingTests: XCTestCase {
         originalEnabled = Settings.shared.tapHoldBufferingEnabled
         originalWindow = Settings.shared.tapOverlapWindow
         originalThreshold = Settings.shared.tapThreshold
-        for key in ["toggleEnglish", "toggleNonEnglish", "switchKorean", "switchJapanese", "hanjaConvert"] {
+        for key in ["toggleEnglish", "toggleNonEnglish", "hanjaConvert"] {
             originalShortcuts[key] = Settings.shared.shortcut(for: key)
         }
         Settings.shared.tapHoldBufferingEnabled = true
@@ -35,12 +35,6 @@ final class TapHoldBufferingTests: XCTestCase {
         Settings.shared.tapThreshold = 0.2
         Settings.shared.setShortcut(.defaultToggleEnglish, for: "toggleEnglish")     // RS tap
         Settings.shared.setShortcut(.defaultToggleNonEnglish, for: "toggleNonEnglish") // Shift+Space combo
-        var disabledKorean = ShortcutConfig.defaultSwitchKorean
-        disabledKorean.disabled = true
-        Settings.shared.setShortcut(disabledKorean, for: "switchKorean")
-        var disabledJapanese = ShortcutConfig.defaultSwitchJapanese
-        disabledJapanese.disabled = true
-        Settings.shared.setShortcut(disabledJapanese, for: "switchJapanese")
         Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
 
         handler = ShortcutHandler()
@@ -164,9 +158,10 @@ final class TapHoldBufferingTests: XCTestCase {
 
     // Guard: a modifier that also drives an enabled combo shortcut never buffers.
     func testComboRegisteredModifierIsExcluded() {
-        var combo = ShortcutConfig.defaultSwitchKorean // Right Shift + 1
-        combo.disabled = false
-        Settings.shared.setShortcut(combo, for: "switchKorean")
+        let combo = ShortcutConfig(keyCode: 0x12, modifierKeyCode: rightShift,
+                                   modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
+                                   isModifierOnlyTap: false, label: "Right Shift + 1")
+        Settings.shared.setShortcut(combo, for: "toggleNonEnglish")
 
         _ = handler.handleEvent(shiftDown(rightShift, at: 0))
         let consumed = handler.handleEvent(letterDown(keyA, side: .right, at: 0.040))

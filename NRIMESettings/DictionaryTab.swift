@@ -32,7 +32,7 @@ struct DictionaryTab: View {
 
                 Spacer()
 
-                Text("\(manager.entries.count) \(L("dictionary.entriesCount"))")
+                Text(String(format: L("dictionary.entriesCount"), manager.entries.count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

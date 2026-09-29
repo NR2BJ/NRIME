@@ -32,14 +32,10 @@ final class SettingsTransferTests: XCTestCase {
         sourceDefaults.set(0.34, forKey: SettingsTransfer.tapThresholdKey)
         sourceDefaults.set(true, forKey: SettingsTransfer.preventABCSwitchKey)
         sourceDefaults.set(true, forKey: SettingsTransfer.developerModeEnabledKey)
-        sourceDefaults.set(true, forKey: SettingsTransfer.perAppModeEnabledKey)
-        sourceDefaults.set("blacklist", forKey: SettingsTransfer.perAppModeTypeKey)
-        sourceDefaults.set(["com.apple.Terminal"], forKey: SettingsTransfer.perAppModeListKey)
-        sourceDefaults.set(["com.apple.Terminal": InputMode.english.rawValue], forKey: SettingsTransfer.perAppSavedModesKey)
         sourceDefaults.set(InputMode.japanese.rawValue, forKey: SettingsTransfer.lastNonEnglishModeKey)
         sourceDefaults.set(
-            try JSONEncoder().encode(ShortcutConfig.defaultSwitchJapanese),
-            forKey: SettingsTransfer.shortcutKey(for: "switchJapanese")
+            try JSONEncoder().encode(ShortcutConfig.defaultHanjaConvert),
+            forKey: SettingsTransfer.shortcutKey(for: "hanjaConvert")
         )
         sourceDefaults.set(
             try JSONEncoder().encode(JapaneseKeyConfig.default),
@@ -59,15 +55,8 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertEqual(targetDefaults.double(forKey: SettingsTransfer.tapThresholdKey), 0.34, accuracy: 0.0001)
         XCTAssertEqual(targetDefaults.bool(forKey: SettingsTransfer.preventABCSwitchKey), true)
         XCTAssertEqual(targetDefaults.bool(forKey: SettingsTransfer.developerModeEnabledKey), true)
-        XCTAssertEqual(targetDefaults.bool(forKey: SettingsTransfer.perAppModeEnabledKey), true)
-        XCTAssertEqual(targetDefaults.string(forKey: SettingsTransfer.perAppModeTypeKey), "blacklist")
-        XCTAssertEqual(targetDefaults.stringArray(forKey: SettingsTransfer.perAppModeListKey), ["com.apple.Terminal"])
-        XCTAssertEqual(
-            targetDefaults.dictionary(forKey: SettingsTransfer.perAppSavedModesKey) as? [String: String],
-            ["com.apple.Terminal": InputMode.english.rawValue]
-        )
         XCTAssertEqual(targetDefaults.string(forKey: SettingsTransfer.lastNonEnglishModeKey), InputMode.japanese.rawValue)
-        XCTAssertNotNil(targetDefaults.data(forKey: SettingsTransfer.shortcutKey(for: "switchJapanese")))
+        XCTAssertNotNil(targetDefaults.data(forKey: SettingsTransfer.shortcutKey(for: "hanjaConvert")))
         XCTAssertNotNil(targetDefaults.data(forKey: SettingsTransfer.japaneseKeyConfigKey))
         XCTAssertNotNil(targetDefaults.data(forKey: HanjaSelectionStore.defaultsKey))
     }
@@ -85,10 +74,6 @@ final class SettingsTransferTests: XCTestCase {
             tapThreshold: 0.2,
             preventABCSwitch: false,
             developerModeEnabled: false,
-            perAppModeEnabled: false,
-            perAppModeType: "whitelist",
-            perAppModeList: [],
-            perAppSavedModes: [:],
             lastNonEnglishMode: nil,
             shortcutData: [:],
             japaneseKeyConfigData: nil,
@@ -123,7 +108,6 @@ final class SettingsTransferTests: XCTestCase {
         sourceDefaults.set(true, forKey: "tapHoldBufferingEnabled")
         sourceDefaults.set(0.07, forKey: "tapOverlapWindow")
         sourceDefaults.set(0.035, forKey: "shiftEnterDelay")
-        sourceDefaults.set(false, forKey: "shiftDoubleTapEnabled")
         sourceDefaults.set("mouse", forKey: "indicatorPositionMode")
 
         let snapshot = SettingsTransfer.capture(from: sourceDefaults, appVersion: "1.0.11")
@@ -132,7 +116,36 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertTrue(targetDefaults.bool(forKey: "tapHoldBufferingEnabled"))
         XCTAssertEqual(targetDefaults.double(forKey: "tapOverlapWindow"), 0.07)
         XCTAssertEqual(targetDefaults.double(forKey: "shiftEnterDelay"), 0.035)
-        XCTAssertFalse(targetDefaults.bool(forKey: "shiftDoubleTapEnabled"))
         XCTAssertEqual(targetDefaults.string(forKey: "indicatorPositionMode"), "mouse")
+    }
+
+    /// Exports written before the per-app, double-tap and direct-switch
+    /// settings were removed still import: their extra keys are ignored.
+    func testExportWithRemovedSettingsStillImports() throws {
+        let legacy = """
+        {
+          "schemaVersion": 1,
+          "exportedAt": "2026-07-22T09:00:00Z",
+          "appVersion": "1.0.10",
+          "inlineIndicatorEnabled": true,
+          "tapThreshold": 0.25,
+          "preventABCSwitch": false,
+          "developerModeEnabled": true,
+          "perAppModeEnabled": true,
+          "perAppModeType": "whitelist",
+          "perAppModeList": ["com.apple.TextEdit"],
+          "perAppSavedModes": {"com.apple.TextEdit": "com.nrime.inputmethod.app.ja"},
+          "shiftDoubleTapEnabled": true,
+          "doubleTapWindow": 0.3,
+          "shortcutData": {},
+          "capturedShortcutNames": ["toggleEnglish", "toggleNonEnglish", "switchKorean", "switchJapanese", "hanjaConvert"]
+        }
+        """
+        let snapshot = try SettingsTransfer.decode(from: Data(legacy.utf8))
+        SettingsTransfer.apply(snapshot, to: targetDefaults)
+
+        XCTAssertEqual(targetDefaults.double(forKey: SettingsTransfer.tapThresholdKey), 0.25, accuracy: 0.0001)
+        XCTAssertNil(targetDefaults.object(forKey: "perAppModeEnabled"), "Removed settings are not written back")
+        XCTAssertNil(targetDefaults.object(forKey: "shiftDoubleTapEnabled"))
     }
 }

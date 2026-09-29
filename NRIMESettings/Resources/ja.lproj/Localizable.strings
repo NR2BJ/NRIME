@@ -53,7 +53,7 @@
 "section.backupRestore" = "バックアップと復元";
 "backup.export" = "設定をエクスポート...";
 "backup.import" = "設定をインポート...";
-"backup.description" = "ショートカット、日本語設定、アプリ別モード記憶、漢字候補の優先順位をJSONファイルとしてエクスポートします。";
+"backup.description" = "ショートカット、日本語設定、漢字候補の優先順位をJSONファイルとしてエクスポートします。";
 "backup.exported" = "設定をエクスポートしました: %@";
 "backup.imported" = "設定をインポートしました: %@";
 
@@ -122,8 +122,8 @@
 /* JapaneseTab - Conversion Shortcuts */
 "section.conversionShortcuts" = "変換ショートカット";
 "convShortcut.startConversion" = "変換開始";
-"convShortcut.moveSegments" = "文節間を移動";
-"convShortcut.resizeSegment" = "文節サイズを変更";
+"convShortcut.moveSegments" = "文節間を移動（文節が1つなら候補のページ送り）";
+"convShortcut.resizeSegment" = "文節の長さを変更";
 "convShortcut.navigateCandidates" = "候補を選択";
 "convShortcut.confirmConversion" = "変換を確定";
 "convShortcut.cancelConversion" = "変換をキャンセル";
@@ -152,7 +152,7 @@
 "dictionary.delete" = "削除";
 "dictionary.deleteConfirm" = "%lld件の項目を削除しますか？";
 "dictionary.deleteMessage" = "この操作は取り消せません。ユーザー辞書から単語が削除されます。";
-"dictionary.autoLearnInfo" = "自動学習された変換はハッシュとして保存されるため一覧表示できません。クリアするには**日本語**タブ→変換履歴をクリアを使用してください。";
+"dictionary.autoLearnInfo" = "自動学習された変換はハッシュとして保存されるため一覧表示できません。クリアするには上の［設定］→ 変換履歴をクリアを使用してください。";
 "dictionary.addTitle" = "項目を追加";
 "dictionary.editTitle" = "項目を編集";
 "dictionary.fieldReading" = "読み（ひらがな）:";
@@ -202,3 +202,23 @@
 /* Secure input ASCII fallback */
 "secureInput.asciiFallback" = "パスワード入力時に英字キーボードへ切替";
 "secureInput.asciiFallbackDescription" = "パスワード欄などmacOSのセキュア入力が有効な間は、かな/漢字変換ができません。その間は自動的にABCキーボードへ切り替え、終了後に元の入力ソースへ戻します。";
+
+/* 2026-09-29: 일본어 탭 재구성 */
+"japanese.page.settings" = "設定";
+"japanese.page.dictionary" = "ユーザー辞書";
+"punctuation.preview" = "入力例";
+"punctuation.previewNote" = ". , [ ] ~ ! ? キーで入力される文字です。その他の記号（@ # % & * ( ) など）は、日本語・全角欧文では全角、半角欧文ではそのまま入力されます。";
+"convShortcut.selectByNumber" = "番号で候補を確定";
+"convShortcut.toggleGrid" = "候補の展開 / 折りたたみ";
+
+/* 2026-09-29: 입력기 권한 */
+"section.permissions" = "入力メソッドの権限";
+"permissions.postEvents" = "キーイベントの送信";
+"permissions.accessibility" = "アクセシビリティ";
+"permissions.granted" = "許可済み";
+"permissions.denied" = "オフ";
+"permissions.unknown" = "未確認";
+"permissions.description" = "確定後に⌘+キーやCodexのShift+Enterをアプリへ送り直すために必要です。「オフ」の場合は、システム設定 > プライバシーとセキュリティ > アクセシビリティでNRIMEを一覧から削除（−）し、/Library/Input Methods/NRIME.app を追加（+）し直してください。オンに見えても古いビルドへの許可なら適用されません。";
+"permissions.checkedAt" = "入力メソッドの最終確認: %@";
+"permissions.recheck" = "再確認 / 権限を要求";
+"permissions.openSettings" = "システム設定を開く";

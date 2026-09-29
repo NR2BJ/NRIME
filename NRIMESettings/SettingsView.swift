@@ -13,14 +13,6 @@ struct SettingsView: View {
                 .tabItem {
                     Label(L("tab.japanese"), systemImage: "character.ja")
                 }
-            DictionaryTab()
-                .tabItem {
-                    Label(L("tab.dictionary"), systemImage: "book")
-                }
-            PerAppTab()
-                .tabItem {
-                    Label(L("tab.perApp"), systemImage: "app.badge.checkmark")
-                }
             AboutTab()
                 .tabItem {
                     Label(L("tab.about"), systemImage: "info.circle")

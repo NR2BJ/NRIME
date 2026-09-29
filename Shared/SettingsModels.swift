@@ -59,18 +59,6 @@ struct ShortcutConfig: Codable, Equatable {
         keyCode: keyCodeRightShift, modifierKeyCode: keyCodeRightShift,
         modifiers: 0, isModifierOnlyTap: true, label: "Right Shift"
     )
-    /// Default: Right Shift + 1
-    static let defaultSwitchKorean = ShortcutConfig(
-        keyCode: 0x12, modifierKeyCode: keyCodeRightShift,
-        modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
-        isModifierOnlyTap: false, label: "Right Shift + 1"
-    )
-    /// Default: Right Shift + 2
-    static let defaultSwitchJapanese = ShortcutConfig(
-        keyCode: 0x13, modifierKeyCode: keyCodeRightShift,
-        modifiers: UInt(NSEvent.ModifierFlags.shift.rawValue),
-        isModifierOnlyTap: false, label: "Right Shift + 2"
-    )
     /// Default: Shift + Space
     static let defaultToggleNonEnglish = ShortcutConfig(
         keyCode: 0x31, modifierKeyCode: keyCodeLeftShift,
@@ -86,21 +74,22 @@ struct ShortcutConfig: Codable, Equatable {
 }
 
 /// Japanese IME key configuration.
+///
+/// Some fields are retired (see `withRetiredOptionsOff()`): they stay so
+/// stored settings and older exports still decode, but are always off.
 struct JapaneseKeyConfig: Codable, Equatable {
-    /// Convert to hiragana (default: F6 = 0x61)
-    var hiraganaKeyCode: UInt16? = 0x61
-    /// Convert to full-width katakana (default: F7 = 0x62)
-    var fullKatakanaKeyCode: UInt16? = 0x62
-    /// Convert to half-width katakana (default: F8 = 0x64)
-    var halfKatakanaKeyCode: UInt16? = 0x64
-    /// Convert to full-width romaji (default: F9 = 0x65)
-    var fullRomajiKeyCode: UInt16? = 0x65
-    /// Convert to half-width romaji (default: F10 = 0x6D)
-    var halfRomajiKeyCode: UInt16? = 0x6D
+    /// Retired: F6–F10 conversion keys while composing (hiragana, full/half
+    /// katakana, full/half romaji). Always nil.
+    var hiraganaKeyCode: UInt16? = nil
+    var fullKatakanaKeyCode: UInt16? = nil
+    var halfKatakanaKeyCode: UInt16? = nil
+    var fullRomajiKeyCode: UInt16? = nil
+    var halfRomajiKeyCode: UInt16? = nil
 
     /// Caps Lock action in Japanese mode
     var capsLockAction: CapsLockAction = .capsLock
-    /// Shift key action in Japanese mode
+    /// Retired: Shift+letter as katakana or romaji. Always .none — Shift
+    /// does nothing special; switching to English is the way to type romaji.
     var shiftKeyAction: ShiftKeyAction = .none
 
     /// Punctuation style: .japanese -> 。、  .fullWidthWestern -> ．，
@@ -112,10 +101,10 @@ struct JapaneseKeyConfig: Codable, Equatable {
     /// Whether Space inserts full-width space (U+3000) instead of half-width (U+0020)
     var fullWidthSpace: Bool = false
 
-    /// Live conversion: show conversion results in real-time as user types
+    /// Retired: live conversion. Always false.
     var liveConversion: Bool = false
-    /// Prediction: show predicted next words after committing text
-    var prediction: Bool = true
+    /// Retired: prediction candidates. Always false.
+    var prediction: Bool = false
 
     /// Candidate panel font size in points (default: 14)
     var candidateFontSize: CGFloat = 14
@@ -123,9 +112,31 @@ struct JapaneseKeyConfig: Codable, Equatable {
     /// Conversion trigger keys
     var conversionTriggerSpace: Bool = true
     var conversionTriggerTab: Bool = true
-    var conversionTriggerDownArrow: Bool = true
+    /// Retired: ↓ as a conversion trigger. Always false (↓ commits, like the
+    /// other arrows).
+    var conversionTriggerDownArrow: Bool = false
 
     static let `default` = JapaneseKeyConfig()
+
+    /// This configuration with the retired options forced off.
+    ///
+    /// Removed from the settings app on 2026-09-29 because the owner does not
+    /// use them. Applied wherever a configuration is read, so a stored value
+    /// or an imported file cannot quietly turn one back on with no switch
+    /// left to turn it off.
+    func withRetiredOptionsOff() -> JapaneseKeyConfig {
+        var config = self
+        config.hiraganaKeyCode = nil
+        config.fullKatakanaKeyCode = nil
+        config.halfKatakanaKeyCode = nil
+        config.fullRomajiKeyCode = nil
+        config.halfRomajiKeyCode = nil
+        config.shiftKeyAction = .none
+        config.liveConversion = false
+        config.prediction = false
+        config.conversionTriggerDownArrow = false
+        return config
+    }
 }
 
 /// Caps Lock behavior options for Japanese input

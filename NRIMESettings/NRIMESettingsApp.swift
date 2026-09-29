@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct NRIMESettingsApp: App {
+    @NSApplicationDelegateAdaptor(SettingsAppDelegate.self) private var appDelegate
+
     var body: some Scene {
         WindowGroup {
             SettingsView()

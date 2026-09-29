@@ -16,8 +16,6 @@ final class AuditRegressionTests: XCTestCase {
         StateManager.shared.resetForTesting()
         Settings.shared.setShortcut(.defaultToggleEnglish, for: "toggleEnglish")
         Settings.shared.setShortcut(.defaultToggleNonEnglish, for: "toggleNonEnglish")
-        Settings.shared.setShortcut(.defaultSwitchKorean, for: "switchKorean")
-        Settings.shared.setShortcut(.defaultSwitchJapanese, for: "switchJapanese")
         Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
         Settings.shared.tapHoldBufferingEnabled = false
         Settings.shared.tapThreshold = 0.2
@@ -106,17 +104,6 @@ final class AuditRegressionTests: XCTestCase {
         _ = handler.handleEvent(event(0x3C, flags: rightShift.union(.command), time: 10.01, type: .flagsChanged))
         _ = handler.handleEvent(event(0x3C, flags: .command, time: 10.08, type: .flagsChanged))
         XCTAssertEqual(actions, 0)
-    }
-    func testJapaneseForceCommitMustPreserveDisplayedKatakana() {
-        var config = Settings.shared.japaneseKeyConfig
-        config.shiftKeyAction = .katakana
-        Settings.shared.japaneseKeyConfig = config
-        let engine = JapaneseEngine()
-        _ = engine.handleEvent(event(0x28, flags: rightShift), client: client)
-        _ = engine.handleEvent(event(0x00, flags: rightShift), client: client)
-        XCTAssertEqual(client.markedString, "カ")
-        engine.forceCommit(client: client)
-        XCTAssertEqual(client.insertedTexts, ["カ"])
     }
     func testModeHotkeyMustNotCommitIntoAuthenticationClient() {
         composeGa()
