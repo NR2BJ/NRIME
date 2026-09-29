@@ -82,11 +82,7 @@ final class JapaneseEngine: InputEngine {
         guard let client = client else { return }
 
         if conversionState == .converting {
-            // Commit what is on screen now and tell Mozc afterwards. This runs
-            // inside a mode switch or a focus change, and a synchronous submit
-            // to a slow or restarting Mozc used to hold it — and every key
-            // behind it — for up to 1.5 s.
-            if let text = mozcConverter.commitLater() {
+            if let text = mozcConverter.commit() {
                 // Commit via insertText only — setMarkedText("") first deletes the
                 // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
                 client.insertText(text as NSString, replacementRange: replacementRange())
@@ -429,13 +425,12 @@ final class JapaneseEngine: InputEngine {
         // not an empty conversion — processing it as a normal answer silently
         // ends the composition the user is still editing.
         guard let output = mozcConverter.sendKeyEvent(mozcKey) else {
-            // No answer: Mozc is hung or gone, and asking it to submit would
-            // only wait again. Commit what is on screen and let it restart.
+            // No answer: the engine is not running. Commit what is on screen.
             if let text = mozcConverter.displayedText {
                 client.insertText(text as NSString, replacementRange: replacementRange())
             }
             mozcConverter.discardLocalState()
-            mozcConverter.serverStoppedAnswering()
+            mozcConverter.dropSession()
             leaveConversion()
             return false
         }
@@ -479,10 +474,8 @@ final class JapaneseEngine: InputEngine {
         return true
     }
 
-    /// Mozc could not convert — it is starting or restarting in the background,
-    /// and nothing waits for it here. Keep what was typed as the composition
-    /// rather than committing it, so Space converts once Mozc is back and Enter
-    /// still commits it as is.
+    /// Mozc could not convert (the engine is not running). Keep what was typed
+    /// as the composition rather than committing it: Enter still commits it as is.
     private func keepComposing(_ hiragana: String, client: any IMKTextInput) {
         mozcConverter.discardLocalState()
         composer.restore(kana: hiragana)

@@ -195,7 +195,7 @@ rm -rf ~/Library/Group\ Containers/group.com.nrime
 <details>
 <summary>소스 빌드 (개발자용)</summary>
 
-**요구 사항:** macOS 13.0+, Xcode 15+, [xcodegen](https://github.com/yonaskolb/XcodeGen)
+**요구 사항:** macOS 13.0+, Xcode 15+, [xcodegen](https://github.com/yonaskolb/XcodeGen), [bazelisk](https://github.com/bazelbuild/bazelisk) (`brew install bazelisk` — 일본어 변환 엔진 Mozc를 소스에서 빌드합니다. 처음 한 번은 몇 분 걸립니다)
 
 ```bash
 git clone https://github.com/NR2BJ/NRIME.git
@@ -238,11 +238,11 @@ Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스
 </details>
 
 <details>
-<summary>기술 노트: Mozc IPC (Swift Mach IPC → C shim)</summary>
+<summary>기술 노트: Mozc 임베드</summary>
 
-Swift로 Mach OOL IPC를 직접 구현했으나 빈 응답이 반환되는 문제가 발생했습니다.
-원인이 bitfield 패킹인지 포인터 수명 문제인지 확정되지 않아, upstream mozc `mach_ipc.cc`와 동일한 구조의 C shim (`nrime_mozc_ipc.c`)으로 해결했습니다.
-mozc_server는 LaunchAgent 없이 필요 시 자식 프로세스로 on-demand 실행됩니다.
+일본어 변환 엔진 Mozc는 입력기 프로세스 안에서 돕니다. Mozc를 정적 라이브러리로 빌드해 NRIME에 링크하고(`Tools/mozc`), 변환 명령은 Mozc 프로토콜(protobuf)을 함수 호출로 주고받습니다. 변환 한 번은 1ms 안팎입니다.
+예전에는 `mozc_server`를 별도 프로세스로 띄우고 Mach IPC로 통신했지만, 서버가 멈추거나 재시작되는 동안 입력이 기다리는 문제가 있어 2026-09에 바꿨습니다.
+Mozc 버전은 `Tools/mozc/MOZC_COMMIT`에 고정하고, 베타 릴리즈마다 최신 upstream 커밋으로 올립니다(`Tools/mozc/update.sh` — 빌드와 테스트를 통과해야 반영).
 
 </details>
 

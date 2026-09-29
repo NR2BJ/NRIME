@@ -8,7 +8,7 @@ DerivedData/
 # Generated files (recreate with: xcodegen generate)
 # Generated files (recreate with: python3 Tools/build_hanja_db.py)
 NRIME/Resources/hanja.db
-# mozc_server binary (build from source: see plan docs)
+# mozc_server binary used by versions before Mozc was linked into NRIME (2026-09)
 NRIME/Resources/mozc_server
 
 # Claude Code

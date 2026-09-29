@@ -16,6 +16,10 @@ MOZC_LAUNCH_AGENT_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.mozcserver.plis
 
 echo "=== NRIME Installer ==="
 
+# Mozc (the Japanese conversion engine, linked into NRIME) at the pinned commit
+echo "Building Mozc..."
+bash "$PROJECT_DIR/Tools/mozc/build.sh"
+
 # Always build fresh to avoid stale cache issues
 echo "Generating Xcode project..."
 cd "$PROJECT_DIR"
@@ -55,7 +59,6 @@ xattr -cr "$INSTALL_DIR/$RESTORE_HELPER_APP"
 chmod +x "$INSTALL_DIR/$APP_NAME/Contents/MacOS/NRIME"
 chmod +x "$INSTALL_DIR/$SETTINGS_APP/Contents/MacOS/NRIMESettings"
 chmod +x "$INSTALL_DIR/$RESTORE_HELPER_APP/Contents/MacOS/NRIMERestoreHelper"
-chmod +x "$INSTALL_DIR/$APP_NAME/Contents/Resources/mozc_server" 2>/dev/null || true
 
 # Deregister all existing NRIME input sources to prevent duplicates
 echo "Cleaning up existing input sources..."
@@ -75,6 +78,7 @@ echo "Restarting NRIME process..."
 killall NRIME 2>/dev/null || true
 killall NRIMESettings 2>/dev/null || true
 killall NRIMERestoreHelper 2>/dev/null || true
+killall mozc_server 2>/dev/null || true   # left by versions before Mozc moved inside NRIME
 sleep 1
 
 # Register with LaunchServices (ensures macOS knows about the new location)
@@ -92,42 +96,12 @@ if [ -f "$LOGINRESTORE_PATH" ]; then
     echo "  Removed old loginrestore LaunchAgent"
 fi
 
-echo "Installing Mozc server LaunchAgent..."
-# A fresh account has no ~/Library/LaunchAgents; without this the redirect
-# below fails and the script stops after having already disabled the input
-# source and killed the running processes.
-mkdir -p "$LAUNCH_AGENTS_DIR"
-cat > "$MOZC_LAUNCH_AGENT_PATH" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.nrime.inputmethod.mozcserver</string>
-    <key>LimitLoadToSessionType</key>
-    <array>
-        <string>Aqua</string>
-    </array>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$INSTALL_DIR/$APP_NAME/Contents/Resources/mozc_server</string>
-        <string>--nodetach</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/tmp/nrime-mozc-server.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/nrime-mozc-server.log</string>
-</dict>
-</plist>
-EOF
-mkdir -p "$HOME/Library/Application Support/Mozc"
-launchctl bootout "gui/$(id -u)" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
-launchctl kickstart -k "gui/$(id -u)/com.nrime.inputmethod.mozcserver" 2>/dev/null || true
+# Mozc runs inside NRIME now; remove the server LaunchAgent older versions installed.
+if [ -f "$MOZC_LAUNCH_AGENT_PATH" ]; then
+    launchctl bootout "gui/$(id -u)" "$MOZC_LAUNCH_AGENT_PATH" 2>/dev/null || true
+    rm -f "$MOZC_LAUNCH_AGENT_PATH"
+    echo "  Removed old Mozc server LaunchAgent"
+fi
 
 # Enable and select NRIME input source via TIS API
 echo "Activating NRIME input source..."

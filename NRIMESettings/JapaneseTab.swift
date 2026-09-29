@@ -184,20 +184,17 @@ struct JapaneseTab: View {
     }
 
     private func clearMozcHistory() {
+        // Mozc runs inside the input method and holds its learning in memory:
+        // ask it to clear (and save) that. The files go too, for when the
+        // input method is not running.
+        DistributedNotificationCenter.default().postNotificationName(
+            MozcNotifications.clearLearning, object: nil, userInfo: nil, deliverImmediately: true)
+
         let mozcDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Mozc")
-
-        let historyFiles = ["segment.db", "boundary.db", ".history.db"]
-        for file in historyFiles {
-            let url = mozcDir.appendingPathComponent(file)
-            try? FileManager.default.removeItem(at: url)
+        for file in ["segment.db", "boundary.db", ".history.db"] {
+            try? FileManager.default.removeItem(at: mozcDir.appendingPathComponent(file))
         }
-
-        // Kill mozc_server so it restarts with clean state
-        let task = Process()
-        task.launchPath = "/usr/bin/pkill"
-        task.arguments = ["mozc_server"]
-        try? task.run()
 
         historyCleared = true
     }

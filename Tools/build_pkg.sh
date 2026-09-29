@@ -14,6 +14,11 @@ VERSION=""
 
 echo "=== NRIME PKG Builder ==="
 
+# 0. Mozc (the Japanese conversion engine, linked into NRIME) at the pinned
+#    commit. Quick when it is already built; a fresh checkout takes minutes.
+echo "Building Mozc..."
+bash "$PROJECT_DIR/Tools/mozc/build.sh"
+
 # 1. Generate Xcode project
 echo "Generating Xcode project..."
 xcodegen generate --spec "$PROJECT_DIR/project.yml" --project "$PROJECT_DIR"
@@ -49,7 +54,7 @@ echo "Resolved app version: $VERSION"
 echo "Preparing PKG payload..."
 rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR/payload/Library/Input Methods"
-# No LaunchAgents — NRIME handles recovery and mozc on-demand
+# No LaunchAgents — NRIME handles recovery, and Mozc runs inside NRIME
 mkdir -p "$PKG_DIR/scripts"
 
 # Use ditto to avoid ._* resource fork files in payload
@@ -61,19 +66,14 @@ fi
 # unsigned subcomponents like Contents/.syncthing.Info.plist.tmp
 find "$PKG_DIR/payload" -name ".syncthing.*" -delete
 
-# mozc_server must ship executable. Losing the exec bit breaks Japanese
-# conversion in a way that looks like "the candidate window stopped working",
-# so fail the build rather than ship it.
-MOZC_PAYLOAD="$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Resources/mozc_server"
-if [ ! -f "$MOZC_PAYLOAD" ]; then
-    echo "ERROR: mozc_server missing from payload — Japanese conversion would not work"
+# Mozc's dictionary data must ship with the app: without it the engine does
+# not start and Japanese conversion quietly does nothing.
+MOZC_DATA="$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Resources/mozc.data"
+if [ ! -s "$MOZC_DATA" ]; then
+    echo "ERROR: mozc.data missing from payload — Japanese conversion would not work"
     exit 1
 fi
-chmod +x "$MOZC_PAYLOAD"
-if [ ! -x "$MOZC_PAYLOAD" ]; then
-    echo "ERROR: mozc_server is not executable in payload"
-    exit 1
-fi
+echo "Mozc: $(cat "$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Resources/MOZC_VERSION" 2>/dev/null || echo "version file missing")"
 # Code signing (inside-out to avoid broken nested signatures).
 #
 # Signed with the self-signed "NRIME Code Signing" certificate

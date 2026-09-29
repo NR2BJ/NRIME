@@ -19,7 +19,7 @@ final class SettingsSimplificationTests: XCTestCase {
         KeyEventReposter.captureForTesting = nil
         KeyEventReposter.postEventAccessForTesting = nil
         MozcClient.responderForTesting = nil
-        MozcServerManager.shared.reachableForTesting = nil
+        MozcEngine.availableForTesting = nil
         for key in ["shortcut_switchKorean", "shortcut_switchJapanese", "shiftDoubleTapEnabled"] {
             testing.removeObject(forKey: key)
         }
@@ -71,9 +71,8 @@ final class SettingsSimplificationTests: XCTestCase {
         XCTAssertFalse(engine.isInConversionState)
     }
 
-    func testConversionDoesNotWaitForAnUnreachableServer() {
-        MozcServerManager.shared.reachableForTesting = false
-        defer { MozcServerManager.shared.reachableForTesting = nil }
+    func testConversionKeepsTheReadingWhenMozcIsUnavailable() {
+        MozcEngine.availableForTesting = false
         Settings.shared.japaneseKeyConfig = .default
         let engine = JapaneseEngine()
         let client = MockTextInputClient()
@@ -83,9 +82,9 @@ final class SettingsSimplificationTests: XCTestCase {
         let start = Date()
         XCTAssertTrue(engine.handleEvent(key(0x31, characters: " "), client: client)) // Space
 
-        XCTAssertLessThan(Date().timeIntervalSince(start), 0.1, "Nothing waits for the server")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.1, "Nothing waits for Mozc")
         XCTAssertEqual(client.insertedTexts, [], "Nothing is committed…")
-        XCTAssertEqual(client.markedString, "か", "…the reading stays, so Space converts once Mozc is back")
+        XCTAssertEqual(client.markedString, "か", "…the reading stays, and Enter still commits it")
         XCTAssertFalse(engine.isInConversionState)
     }
 
@@ -106,18 +105,10 @@ final class SettingsSimplificationTests: XCTestCase {
         return engine
     }
 
-    private func drainMainQueue() {
-        let drained = expectation(description: "main queue")
-        DispatchQueue.main.async { drained.fulfill() }
-        wait(for: [drained], timeout: 1)
-    }
-
     func testModeSwitchDuringConversionCommitsWhatIsOnScreenAtOnce() {
         Settings.shared.japaneseKeyConfig = .default
         let engine = engineConvertingNihongo()
         let client = MockTextInputClient()
-        var deferredSubmits: [Bool] = []
-        engine.mozcConverter.deferredSubmitForTesting = { deferredSubmits.append($0) }
 
         let start = Date()
         engine.forceCommit(client: client)
@@ -126,25 +117,7 @@ final class SettingsSimplificationTests: XCTestCase {
         XCTAssertEqual(client.insertedTexts, ["日本語"])
         XCTAssertFalse(engine.isInConversionState)
         XCTAssertFalse(engine.mozcConverter.isConverting,
-                       "Nothing is left for a following reset to cancel — that would ask Mozc again")
-        XCTAssertEqual(deferredSubmits, [], "Mozc is told afterwards…")
-        drainMainQueue()
-        XCTAssertEqual(deferredSubmits, [true], "…so it still learns the choice")
-    }
-
-    func testDeferredSubmitLeavesTheNextConversionAlone() {
-        MozcServerManager.shared.reachableForTesting = false
-        let engine = engineConvertingNihongo()
-        var deferredSubmits: [Bool] = []
-        engine.mozcConverter.deferredSubmitForTesting = { deferredSubmits.append($0) }
-
-        engine.forceCommit(client: MockTextInputClient())
-        // A new reading reaches Mozc before the deferred submit runs; Mozc ends
-        // the old conversion itself, and submitting now would end the new one.
-        _ = engine.mozcConverter.feedHiragana("か")
-        drainMainQueue()
-
-        XCTAssertEqual(deferredSubmits, [false])
+                       "Nothing is left for a following reset to cancel")
     }
 
     func testConfirmedWordSurvivesAnAnswerWithoutResult() {

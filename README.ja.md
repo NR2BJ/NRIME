@@ -195,7 +195,7 @@ rm -rf ~/Library/Group\ Containers/group.com.nrime
 <details>
 <summary>ソースからビルド（開発者向け）</summary>
 
-**必要環境:** macOS 13.0+、Xcode 15+、[xcodegen](https://github.com/yonaskolb/XcodeGen)
+**必要環境:** macOS 13.0+、Xcode 15+、[xcodegen](https://github.com/yonaskolb/XcodeGen)、[bazelisk](https://github.com/bazelbuild/bazelisk)（`brew install bazelisk` — 変換エンジンMozcをソースからビルドします。初回は数分かかります）
 
 ```bash
 git clone https://github.com/NR2BJ/NRIME.git
@@ -238,11 +238,11 @@ Electron/Chromiumベースのアプリで、IME変換中にmodifier+key入力時
 </details>
 
 <details>
-<summary>技術ノート：Mozc IPC（Swift Mach IPC → C shim）</summary>
+<summary>技術ノート：Mozcの組み込み</summary>
 
-SwiftでMach OOL IPCを直接実装しましたが、空の応答が返る問題が発生しました。
-原因がbitfieldパッキングかポインタ寿命の問題か確定できず、upstream mozcの `mach_ipc.cc` と同じ構造のC shim（`nrime_mozc_ipc.c`）で解決しました。
-mozc_serverはLaunchAgentなしで必要に応じて子プロセスとしてオンデマンド実行されます。
+日本語変換エンジンMozcは入力メソッドのプロセス内で動作します。Mozcを静的ライブラリとしてビルドしてNRIMEにリンクし（`Tools/mozc`）、変換コマンドはMozcのプロトコル（protobuf）を関数呼び出しでやり取りします。変換1回はおよそ1ミリ秒です。
+以前は `mozc_server` を別プロセスとして起動しMach IPCで通信していましたが、サーバーが固まったり再起動したりする間に入力が待たされる問題があり、2026年9月に組み込みへ変更しました。
+Mozcのバージョンは `Tools/mozc/MOZC_COMMIT` で固定し、ベータリリースごとに最新のupstreamコミットへ更新します（`Tools/mozc/update.sh` — ビルドとテストに通った場合のみ反映）。
 
 </details>
 

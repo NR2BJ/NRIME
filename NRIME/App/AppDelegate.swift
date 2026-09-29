@@ -17,7 +17,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         candidatePanel = CandidatePanel()
-        MozcServerManager.shared.prewarmServer()
+        // Load Mozc now (7–20 ms) so the first conversion does not pay for it.
+        // Tests load it themselves, with a throwaway profile, when they need it.
+        if !AppGroupDefaults.isRunningTests {
+            MozcEngine.shared.start()
+        }
 
         InputSourceRecovery.shared.startMonitoring()
         DeveloperLogger.shared.startMainThreadStallMonitor()
@@ -29,6 +33,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             "bundleID": Bundle.main.bundleIdentifier ?? "unknown",
             "connection": connectionName
         ])
+    }
+
+    /// Updates and logout quit the input method with Mozc sessions still open;
+    /// save what it learned first.
+    func applicationWillTerminate(_ notification: Notification) {
+        if !AppGroupDefaults.isRunningTests {
+            MozcEngine.shared.sync()
+        }
     }
 
     // MARK: - Menu Bar Status Item

@@ -163,8 +163,8 @@ final class UserDictionaryManager: ObservableObject {
     /// Background queue for serialization and file I/O.
     private let saveQueue = DispatchQueue(label: "com.nrime.settings.dict-save", qos: .utility)
 
-    /// Debounced mozc_server restart (avoids restarting on every rapid edit).
-    private var mozcRestartWorkItem: DispatchWorkItem?
+    /// Debounced reload request (one for a burst of edits).
+    private var reloadWorkItem: DispatchWorkItem?
 
     // MARK: - Load
 
@@ -269,8 +269,7 @@ final class UserDictionaryManager: ObservableObject {
                 let data = try snapshotStorage.serializedData()
                 try data.write(to: path, options: .atomic)
 
-                // Debounced restart: cancel previous pending restart
-                self?.scheduleMozcRestart()
+                self?.scheduleReload()
             } catch {
                 DispatchQueue.main.async {
                     self?.lastError = "Failed to save dictionary: \(error.localizedDescription)"
@@ -331,22 +330,15 @@ final class UserDictionaryManager: ObservableObject {
 
     // MARK: - Helpers
 
-    /// Schedule a debounced mozc_server restart (0.4s delay).
-    /// Multiple rapid edits only trigger one restart.
-    private func scheduleMozcRestart() {
-        mozcRestartWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in
-            self?.restartMozcServer()
+    /// Tell the input method, where Mozc runs, to read the dictionary again —
+    /// once for a burst of edits (0.4 s after the last).
+    private func scheduleReload() {
+        reloadWorkItem?.cancel()
+        let item = DispatchWorkItem {
+            DistributedNotificationCenter.default().postNotificationName(
+                MozcNotifications.userDictionaryChanged, object: nil, userInfo: nil, deliverImmediately: true)
         }
-        mozcRestartWorkItem = item
+        reloadWorkItem = item
         saveQueue.asyncAfter(deadline: .now() + 0.4, execute: item)
-    }
-
-    private func restartMozcServer() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-        task.arguments = ["-f", "mozc_server"]
-        try? task.run()
-        // Fire-and-forget: don't block waiting for pkill to finish
     }
 }

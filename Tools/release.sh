@@ -6,10 +6,16 @@
 #   bash Tools/release.sh 1.0.9-beta.1     # test build      → v1.0.9-beta.1 (prerelease)
 #   bash Tools/release.sh 1.0.9 --notes-file NOTES.md
 #   bash Tools/release.sh 1.0.9 --yes      # skip the confirmation prompt
+#   bash Tools/release.sh 1.0.9-beta.2 --keep-mozc   # beta without updating Mozc
 #
 # The channel is derived from the version string: anything containing a "-"
 # suffix is published as a GitHub prerelease, which keeps it out of
 # /releases/latest and therefore out of the stable in-app update channel.
+#
+# Mozc, the Japanese conversion engine linked into NRIME, follows upstream:
+# every beta moves it to the latest google/mozc commit (Tools/mozc/update.sh
+# rebuilds it and runs the tests, and keeps the old commit if either fails).
+# A stable release ships the Mozc its betas were tested with.
 
 set -euo pipefail
 
@@ -20,6 +26,7 @@ REPO="NR2BJ/NRIME"
 VERSION=""
 NOTES_FILE=""
 ASSUME_YES=0
+KEEP_MOZC=0
 
 # ---- Parse arguments -------------------------------------------------------
 
@@ -32,6 +39,10 @@ while [ $# -gt 0 ]; do
             ;;
         --yes|-y)
             ASSUME_YES=1
+            shift
+            ;;
+        --keep-mozc)
+            KEEP_MOZC=1
             shift
             ;;
         -*)
@@ -121,6 +132,21 @@ if [ "$ASSUME_YES" -ne 1 ]; then
         [yY]|[yY][eE][sS]) ;;
         *) echo "Aborted."; exit 1 ;;
     esac
+fi
+
+# ---- Mozc ------------------------------------------------------------------
+
+if [ "$IS_PRERELEASE" -eq 1 ] && [ "$KEEP_MOZC" -ne 1 ]; then
+    echo
+    echo "Updating Mozc to the latest upstream commit..."
+    bash "$PROJECT_DIR/Tools/mozc/update.sh"
+    if [ -n "$(git status --porcelain --untracked-files=no -- Tools/mozc/MOZC_COMMIT)" ]; then
+        read -r MOZC_COMMIT MOZC_DATE MOZC_VERSION < "$BUILD_DIR/mozc-out/MOZC_VERSION"
+        git add Tools/mozc/MOZC_COMMIT
+        git commit -q -m "Update Mozc to $MOZC_VERSION (${MOZC_COMMIT:0:7}, $MOZC_DATE)"
+        git push -q origin "$BRANCH"
+        echo "Pushed Mozc update: $MOZC_VERSION ($MOZC_DATE)"
+    fi
 fi
 
 # ---- Set version and build -------------------------------------------------

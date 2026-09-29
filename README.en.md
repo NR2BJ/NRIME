@@ -195,7 +195,7 @@ rm -rf ~/Library/Group\ Containers/group.com.nrime
 <details>
 <summary>Build from source (developers)</summary>
 
-**Requirements:** macOS 13.0+, Xcode 15+, [xcodegen](https://github.com/yonaskolb/XcodeGen)
+**Requirements:** macOS 13.0+, Xcode 15+, [xcodegen](https://github.com/yonaskolb/XcodeGen), [bazelisk](https://github.com/bazelbuild/bazelisk) (`brew install bazelisk` — builds the Mozc conversion engine from source; the first build takes a few minutes)
 
 ```bash
 git clone https://github.com/NR2BJ/NRIME.git
@@ -238,11 +238,11 @@ Explains the root cause and fix for text loss when pressing modifier+key during 
 </details>
 
 <details>
-<summary>Technical note: Mozc IPC (Swift Mach IPC > C shim)</summary>
+<summary>Technical note: Mozc embedded</summary>
 
-Direct Swift Mach OOL IPC implementation returned empty responses. Root cause unconfirmed (bitfield packing vs. pointer lifetime).
-Resolved by using a C shim (`nrime_mozc_ipc.c`) matching the upstream mozc `mach_ipc.cc` structure.
-mozc_server runs as an on-demand child process without LaunchAgents.
+The Mozc conversion engine runs inside the input method: Mozc is built as a static library and linked into NRIME (`Tools/mozc`), and conversion commands pass Mozc's own protocol (protobuf) through function calls. A conversion takes about a millisecond.
+NRIME used to launch `mozc_server` as a separate process and talk to it over Mach IPC; typing waited whenever the server hung or restarted, so it was embedded in 2026-09.
+The Mozc commit is pinned in `Tools/mozc/MOZC_COMMIT` and moved to the latest upstream commit for every beta release (`Tools/mozc/update.sh`, which keeps the update only if it builds and the tests pass).
 
 </details>
 

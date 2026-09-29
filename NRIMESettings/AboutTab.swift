@@ -6,6 +6,17 @@ struct AboutTab: View {
     private let githubURL = "https://github.com/NR2BJ/NRIME"
     @StateObject private var updateManager = UpdateManager.shared
 
+    /// The Mozc the input method carries: "Mozc <version> (<commit date>)",
+    /// from the MOZC_VERSION file Tools/mozc/build.sh writes into NRIME.app.
+    private static var mozcVersion: String? {
+        let file = Bundle.main.bundleURL.deletingLastPathComponent()
+            .appendingPathComponent("NRIME.app/Contents/Resources/MOZC_VERSION")
+        guard let line = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let parts = line.split(separator: " ")
+        guard parts.count >= 3 else { return nil }
+        return "Mozc \(parts[2].trimmingCharacters(in: .whitespacesAndNewlines)) (\(parts[1]))"
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
@@ -20,6 +31,12 @@ struct AboutTab: View {
             Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
                 .font(.body.monospacedDigit())
                 .foregroundStyle(.tertiary)
+
+            if let mozc = Self.mozcVersion {
+                Text(verbatim: mozc)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
 
             Divider()
                 .frame(maxWidth: 200)

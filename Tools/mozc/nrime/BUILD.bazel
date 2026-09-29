@@ -1,0 +1,27 @@
+# NRIME's C API over Mozc. Tools/mozc/build.sh copies this folder into the
+# Mozc source tree as src/nrime and builds it there.
+load("@rules_cc//cc:cc_static_library.bzl", "cc_static_library")
+load("//:build_defs.bzl", "mozc_cc_library")
+
+mozc_cc_library(
+    name = "nrime_mozc",
+    srcs = ["nrime_mozc.cc"],
+    hdrs = ["nrime_mozc.h"],
+    deps = [
+        "//base:system_util",
+        "//base:version",
+        "//data_manager",
+        "//engine",
+        "//engine:engine_interface",
+        "//protocol:commands_cc_proto",
+        "//session:session_handler",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+# The one static library the input method links: Mozc and everything it needs.
+cc_static_library(
+    name = "nrime_mozc_static",
+    deps = [":nrime_mozc"],
+)
