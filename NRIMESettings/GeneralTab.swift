@@ -6,11 +6,6 @@ struct GeneralTab: View {
     @State private var transferStatusMessage: String = ""
     @State private var transferStatusIsError = false
 
-    private static func delayLabel(_ seconds: Double) -> String {
-        let ms = Int(round(seconds * 1000))
-        return ms == 0 ? L("shiftEnterDelay.none") : "\(ms)ms"
-    }
-
     /// What System Settings calls the list NRIME has to be on: macOS 27
     /// renamed "Accessibility" to "Device Control and Data Access".
     private static var permissionTitle: String {
@@ -78,35 +73,6 @@ struct GeneralTab: View {
                 }
             }
 
-            Section(L("section.shiftEnterDelay")) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(L("shiftEnterDelay.electron"))
-                            .frame(width: 80, alignment: .leading)
-                        Text(Self.delayLabel(store.shiftEnterDelay))
-                            .monospacedDigit()
-                            .frame(width: 70, alignment: .trailing)
-                        Slider(value: $store.shiftEnterDelay, in: 0...0.050, step: 0.005)
-                    }
-                    Text(L("shiftEnterDelay.description"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(L("shiftEnterDelay.codex"))
-                            .frame(width: 80, alignment: .leading)
-                        Text(Self.delayLabel(store.codexNewlineDelay))
-                            .monospacedDigit()
-                            .frame(width: 70, alignment: .trailing)
-                        Slider(value: $store.codexNewlineDelay, in: 0...0.200, step: 0.005)
-                    }
-                    Text(L("shiftEnterDelay.codexDescription"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             Section(L("section.display")) {
                 Toggle(L("display.inlineIndicator"), isOn: $store.inlineIndicatorEnabled)
 
@@ -119,11 +85,14 @@ struct GeneralTab: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(L("display.preventABC"), isOn: $store.preventABCSwitch)
-                    Toggle(L("secureInput.asciiFallback"), isOn: $store.secureInputASCIIFallback)
-                    Text(L("secureInput.asciiFallbackDescription"))
+                    Text(L("display.preventABC.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(L("display.preventABC.description"))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(L("secureInput.asciiFallback"), isOn: $store.secureInputASCIIFallback)
+                    Text(L("secureInput.asciiFallbackDescription"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

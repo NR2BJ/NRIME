@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct JapaneseTab: View {
@@ -6,6 +7,7 @@ struct JapaneseTab: View {
     @State private var page: Page
     @State private var showingClearConfirmation = false
     @State private var historyCleared = false
+    @State private var mozcStatus: MozcStatus?
 
     init(startOnDictionary: Bool = false) {
         _page = State(initialValue: startOnDictionary ? .dictionary : .settings)
@@ -128,6 +130,8 @@ struct JapaneseTab: View {
                 }
             }
 
+            mozcSection
+
             Section(L("section.conversionHistory")) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -171,6 +175,83 @@ struct JapaneseTab: View {
         } message: {
             Text(L("conversionHistory.clearedMessage"))
         }
+    }
+
+    /// Which Mozc the input method runs, a newer one waiting, and the update
+    /// check. Mozc updates on its own, without a new NRIME (MozcUpdater); the
+    /// input method publishes this in the App Group (MozcStatus).
+    private var mozcSection: some View {
+        Section(L("section.mozc")) {
+            LabeledContent(L("mozc.version")) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(verbatim: mozcVersionText)
+                        .monospacedDigit()
+                        .textSelection(.enabled)
+                    Text(mozcStatus?.activeSource == "downloaded"
+                         ? L("mozc.source.downloaded") : L("mozc.source.bundled"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let pending = mozcStatus?.pending {
+                HStack {
+                    Text(String(format: L("mozc.pending"), pending.version, pending.date))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button(L("mozc.applyNow")) {
+                        DistributedNotificationCenter.default().postNotificationName(
+                            MozcNotifications.applyUpdate, object: nil, userInfo: nil, deliverImmediately: true)
+                    }
+                    .help(L("mozc.applyNow.help"))
+                }
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("mozc.update"))
+                    if let checked = mozcStatus?.checkedAt {
+                        Text(String(format: L("mozc.checkedAt"),
+                                    checked.formatted(date: .abbreviated, time: .shortened)))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Button(L("mozc.checkNow")) {
+                    DistributedNotificationCenter.default().postNotificationName(
+                        MozcNotifications.checkForUpdate, object: nil, userInfo: nil, deliverImmediately: true)
+                }
+            }
+
+            Text(L("mozc.description"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear { mozcStatus = MozcStatus.load(from: AppGroupDefaults.make()) }
+        .onReceive(DistributedNotificationCenter.default()
+            .publisher(for: MozcNotifications.statusChanged)
+            .receive(on: RunLoop.main)) { _ in
+            mozcStatus = MozcStatus.load(from: AppGroupDefaults.make())
+        }
+    }
+
+    /// "3.34.6239.101 (2026-09-28)": what the input method reports it runs,
+    /// else the Mozc bundled in NRIME.app, before the input method has said.
+    private var mozcVersionText: String {
+        if let active = mozcStatus?.active {
+            return "\(active.version) (\(active.date))"
+        }
+        let file = Bundle.main.bundleURL.deletingLastPathComponent()
+            .appendingPathComponent("NRIME.app/Contents/Resources/MOZC_VERSION")
+        // "<commit> <date> <version>"
+        if let line = try? String(contentsOf: file, encoding: .utf8) {
+            let parts = line.split(separator: " ")
+            if parts.count >= 3 {
+                return "\(parts[2].trimmingCharacters(in: .whitespacesAndNewlines)) (\(parts[1]))"
+            }
+        }
+        return "—"
     }
 
     /// What the period, comma, brackets, tilde, ! and ? keys type in each

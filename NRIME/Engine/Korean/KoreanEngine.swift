@@ -43,7 +43,7 @@ final class KoreanEngine: InputEngine {
                 commitComposing(client: client)
                 // A repost that cannot be delivered would swallow the shortcut.
                 guard KeyEventReposter.canPostEvents else { return false }
-                KeyEventReposter.repost(event, after: Settings.shared.shiftEnterDelay)
+                KeyEventReposter.repost(event)
                 return true
             }
             // Not composing: the key falls through to the app as ASCII. If a
@@ -69,17 +69,15 @@ final class KoreanEngine: InputEngine {
         // Non-jamo key (space, enter, punctuation, numbers, etc.)
 
         // Shift+Enter while composing: commit text and insert newline.
-        // Chromium (Electron/CEF): perform the newline ourselves after a delay
-        // to avoid the oldHasMarkedText race (insertText("\n"), or a replayed
-        // key press for apps that submit on a programmatic "\n" — see
-        // KeyEventReposter.performChromiumNewline).
+        // Chromium (Electron/CEF): perform the newline ourselves on the next
+        // turn of the run loop, clear of the oldHasMarkedText race
+        // (insertText("\n"), or a replayed key press for apps that submit on
+        // a programmatic "\n" — see KeyEventReposter.performChromiumNewline).
         // All other apps: commit + return false — system handles the original Enter event.
         if automata.isComposing && isShifted && Self.isEnterKey(event.keyCode) {
             commitComposing(client: client)
             if ChromiumDetector.isFrontmostAppChromium {
-                KeyEventReposter.performChromiumNewline(keyCode: event.keyCode,
-                                                        client: client,
-                                                        delay: Settings.shared.shiftEnterDelay)
+                KeyEventReposter.performChromiumNewline(keyCode: event.keyCode, client: client)
                 return true
             }
             return false

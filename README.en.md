@@ -72,7 +72,6 @@ During conversion: `Up/Down` to navigate, `1-9` for direct selection, `Enter` to
 ### Additional Features
 
 - **Shift double-tap > CapsLock toggle**: interval adjustable via slider (0.15-0.6s)
-- **Shift+Enter delay**: adjustable delay for Electron app compatibility (default 15ms, 5-50ms)
 - **Per-app language memory**: remembers last-used language per app (whitelist/blacklist mode)
 - **Inline mode indicator**: shows current input mode near the cursor
 - **Auto-update**: check and install updates from GitHub Releases (About tab)
@@ -93,7 +92,6 @@ Click the NRIME icon in the menu bar to open the settings app.
 | Shortcuts | English toggle, non-English toggle, Korean switch, Japanese switch, Hanja conversion — each customizable/disableable |
 | Tap Threshold | Modifier-only tap recognition time slider (0.1-0.5s) |
 | Shift Double-Tap > CapsLock | Double-tap interval adjustment (0.15-0.6s) |
-| Shift+Enter Delay | Electron app compatibility delay (5-50ms) |
 | Display | Inline mode indicator, prevent ABC switching, candidate font size, conversion trigger keys (Space/Tab/Down) |
 | Developer Mode | Diagnostic log ON/OFF, open/reveal in Finder/clear log |
 | Backup & Restore | Export settings (JSON) / import settings |
@@ -107,6 +105,7 @@ Click the NRIME icon in the menu bar to open the settings app.
 | Space | Half-width/full-width space selection |
 | Punctuation | Japanese style (。、) / Western style (．，), `/` > `・` mapping, `¥` key > `¥` mapping |
 | Input Features | Live conversion, prediction |
+| Conversion Engine (Mozc) | Mozc version in use; check for a newer one and apply it at once |
 | Conversion History | Clear Mozc conversion history |
 | Conversion Shortcuts | In-conversion key reference guide |
 
@@ -221,8 +220,8 @@ Explains the root cause and fix for text loss when pressing modifier+key during 
 
 | Case | Method |
 |------|--------|
-| **Shift+Enter** | Commit text > configurable delay (default 15ms) > `client.insertText("\n")` + `return true` |
-| **Cmd+A/C/V/X/Z** | Commit text > tagged CGEvent repost via `.cghidEventTap` + `return true` |
+| **Shift+Enter** | Commit text > `client.insertText("\n")` on the next turn of the run loop + `return true` (apps that send the message when `\n` is inserted, like Codex, get the Shift+Enter key press again instead) |
+| **Cmd+A/C/V/X/Z** | Commit text > CGEvent repost via `.cghidEventTap` + `return true` |
 
 ### Approaches that failed
 
@@ -240,10 +239,10 @@ Explains the root cause and fix for text loss when pressing modifier+key during 
 <details>
 <summary>Technical note: Mozc embedded</summary>
 
-The Mozc conversion engine runs inside the input method: Mozc is built as a static library and linked into NRIME (`Tools/mozc`), and conversion commands pass Mozc's own protocol (protobuf) through function calls. A conversion takes about a millisecond.
+The Mozc conversion engine runs inside the input method: Mozc is built as a library (`libnrime_mozc.dylib`, `Tools/mozc`) that the input method loads at run time, and conversion commands pass Mozc's own protocol (protobuf) through function calls. A conversion takes about a millisecond.
 NRIME used to launch `mozc_server` as a separate process and talk to it over Mach IPC; typing waited whenever the server hung or restarted, so it was embedded in 2026-09.
 The Mozc commit is pinned in `Tools/mozc/MOZC_COMMIT` and moved to the latest upstream commit for every beta release (`Tools/mozc/update.sh`, which keeps the update only if it builds and the tests pass).
-Mozc also updates without a new NRIME. The engine is a library loaded at run time (`libnrime_mozc.dylib`); GitHub Actions (`.github/workflows/mozc-component.yml`) checks upstream every week for a new version or data, builds and tests it, and publishes it as a `mozc-<abi>-<date>-<commit>` prerelease. The input method checks daily, downloads it (verified by SHA-256) and uses it from its next start, falling back to the engine in the app if the new one fails.
+Mozc also updates without a new NRIME. GitHub Actions (`.github/workflows/mozc-component.yml`) checks upstream every week for a new version or data, builds and tests it, and publishes it as a `mozc-<abi>-<date>-<commit>` prerelease. The input method checks daily, downloads it (verified by SHA-256) and uses it from its next start (Settings > Japanese can apply it at once), falling back to the engine in the app if the new one fails.
 
 </details>
 

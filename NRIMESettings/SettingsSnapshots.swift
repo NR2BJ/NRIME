@@ -14,9 +14,9 @@ enum SettingsSnapshots {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let pages: [(String, AnyView, CGFloat)] = [
-            ("general", AnyView(GeneralTab()), 1500),
-            ("about", AnyView(AboutTab()), 760),
-            ("japanese", AnyView(JapaneseTab()), 1150),
+            ("general", AnyView(GeneralTab()), 1320),
+            ("about", AnyView(AboutTab()), 700),
+            ("japanese", AnyView(JapaneseTab()), 1420),
             ("japanese-dictionary", AnyView(JapaneseTab(startOnDictionary: true)), 520),
             ("dictionary-editor", AnyView(DictionaryEntryEditor(
                 mode: .edit(UserDictionaryManager.DictionaryEntry(key: "ﾁｬｯｷｭｰﾓﾂ", value: "茶っ究ー津")),

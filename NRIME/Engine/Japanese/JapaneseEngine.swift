@@ -56,7 +56,7 @@ final class JapaneseEngine: InputEngine {
             if wasActive {
                 // A repost that cannot be delivered would swallow the shortcut.
                 guard KeyEventReposter.canPostEvents else { return false }
-                KeyEventReposter.repost(event, after: Settings.shared.shiftEnterDelay)
+                KeyEventReposter.repost(event)
                 return true
             }
             return false
@@ -240,9 +240,7 @@ final class JapaneseEngine: InputEngine {
             if wasComposing && isShifted {
                 commitComposing(client: client)
                 if ChromiumDetector.isFrontmostAppChromium {
-                    KeyEventReposter.performChromiumNewline(keyCode: event.keyCode,
-                                                            client: client,
-                                                            delay: Settings.shared.shiftEnterDelay)
+                    KeyEventReposter.performChromiumNewline(keyCode: event.keyCode, client: client)
                     return true
                 }
                 return false
@@ -382,9 +380,7 @@ final class JapaneseEngine: InputEngine {
         if (keyCode == 0x24 || keyCode == 0x4C) && isShifted {
             commitConversion(client: client)
             if ChromiumDetector.isFrontmostAppChromium {
-                KeyEventReposter.performChromiumNewline(keyCode: keyCode,
-                                                        client: client,
-                                                        delay: Settings.shared.shiftEnterDelay)
+                KeyEventReposter.performChromiumNewline(keyCode: keyCode, client: client)
                 return true
             }
             return false

@@ -72,7 +72,6 @@ nihongo → にほんご → Space → 日本語
 ### 추가 기능
 
 - **Shift 더블 탭 → CapsLock 토글**: 간격 슬라이더로 조절 가능 (0.15~0.6초)
-- **Shift+Enter 딜레이**: Electron 앱 호환을 위한 딜레이 조정 (기본 15ms, 5~50ms)
 - **앱별 언어 기억**: 앱마다 마지막 사용 언어를 자동 기억 (화이트리스트/블랙리스트 모드)
 - **인라인 모드 표시**: 커서 근처에 현재 입력 모드 표시
 - **자동 업데이트**: About 탭에서 GitHub Releases 기반 업데이트 확인 및 설치
@@ -93,7 +92,6 @@ nihongo → にほんご → Space → 日本語
 | 단축키 | 영어 토글, 비영어 토글, 한국어 전환, 일본어 전환, 한자 변환 — 각각 커스텀 녹화/비활성화 가능 |
 | 탭 임계값 | Modifier-only 탭 인식 시간 슬라이더 (0.1~0.5초) |
 | Shift 더블 탭 → CapsLock | 더블 탭 인식 간격 조정 (0.15~0.6초) |
-| Shift+Enter 딜레이 | Electron 앱 호환 딜레이 (5~50ms) |
 | 표시 | 인라인 모드 표시, ABC 전환 방지, 후보창 폰트 크기, 변환 트리거 키 (Space/Tab/↓) |
 | 개발자 모드 | 진단 로그 ON/OFF, 로그 열기/파인더에서 보기/지우기 |
 | 백업 및 복원 | 설정 내보내기 (JSON) / 가져오기 |
@@ -107,6 +105,7 @@ nihongo → にほんご → Space → 日本語
 | 스페이스 | 반각/전각 스페이스 선택 |
 | 구두점 | 일본식 (。、) / 서양식 (．，), `/` → `・` 매핑, `¥` 키 → `¥` 매핑 |
 | 입력 기능 | 라이브 변환, 예측 변환 |
+| 변환 엔진 (Mozc) | 지금 쓰는 Mozc 버전, 새 Mozc 확인·바로 적용 |
 | 변환 이력 | Mozc 변환 이력 초기화 |
 | 변환 단축키 | 변환 중 키 조작 가이드 표시 |
 
@@ -221,8 +220,8 @@ Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스
 
 | 상황 | 방법 |
 |------|------|
-| **Shift+Enter** | 텍스트 확정 → 설정 가능한 딜레이(기본 15ms) → `client.insertText("\n")` + `return true` |
-| **Cmd+A/C/V/X/Z** | 텍스트 확정 → tagged CGEvent repost via `.cghidEventTap` + `return true` |
+| **Shift+Enter** | 텍스트 확정 → 다음 런루프 차례에 `client.insertText("\n")` + `return true` (Codex처럼 `\n`이 들어오면 메시지를 보내는 앱에는 Shift+Enter 키를 다시 보냄) |
+| **Cmd+A/C/V/X/Z** | 텍스트 확정 → CGEvent repost via `.cghidEventTap` + `return true` |
 
 ### 시도했지만 실패한 접근법
 
@@ -240,10 +239,10 @@ Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스
 <details>
 <summary>기술 노트: Mozc 임베드</summary>
 
-일본어 변환 엔진 Mozc는 입력기 프로세스 안에서 돕니다. Mozc를 정적 라이브러리로 빌드해 NRIME에 링크하고(`Tools/mozc`), 변환 명령은 Mozc 프로토콜(protobuf)을 함수 호출로 주고받습니다. 변환 한 번은 1ms 안팎입니다.
+일본어 변환 엔진 Mozc는 입력기 프로세스 안에서 돕니다. Mozc를 라이브러리(`libnrime_mozc.dylib`, `Tools/mozc`)로 빌드해 입력기가 실행 중에 불러오고, 변환 명령은 Mozc 프로토콜(protobuf)을 함수 호출로 주고받습니다. 변환 한 번은 1ms 안팎입니다.
 예전에는 `mozc_server`를 별도 프로세스로 띄우고 Mach IPC로 통신했지만, 서버가 멈추거나 재시작되는 동안 입력이 기다리는 문제가 있어 2026-09에 바꿨습니다.
 Mozc 버전은 `Tools/mozc/MOZC_COMMIT`에 고정하고, 베타 릴리즈마다 최신 upstream 커밋으로 올립니다(`Tools/mozc/update.sh` — 빌드와 테스트를 통과해야 반영).
-NRIME 새 버전 없이도 Mozc는 따로 업데이트됩니다. 엔진은 실행 중에 불러오는 라이브러리(`libnrime_mozc.dylib`)이고, GitHub Actions(`.github/workflows/mozc-component.yml`)가 매주 upstream의 버전·데이터 변경을 확인해 빌드·테스트한 뒤 `mozc-<abi>-<날짜>-<커밋>` 프리릴리즈로 올립니다. 입력기가 하루 한 번 확인해 내려받고(SHA-256 검증), 다음 시작 때 씁니다. 새 엔진이 실패하면 앱에 든 엔진으로 돌아갑니다.
+NRIME 새 버전 없이도 Mozc는 따로 업데이트됩니다. GitHub Actions(`.github/workflows/mozc-component.yml`)가 매주 upstream의 버전·데이터 변경을 확인해 빌드·테스트한 뒤 `mozc-<abi>-<날짜>-<커밋>` 프리릴리즈로 올립니다. 입력기가 하루 한 번 확인해 내려받고(SHA-256 검증), 다음 시작 때 씁니다(설정 > 일본어에서 바로 적용할 수도 있습니다). 새 엔진이 실패하면 앱에 든 엔진으로 돌아갑니다.
 
 </details>
 

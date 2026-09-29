@@ -22,14 +22,6 @@
 "section.shiftDoubleTap" = "Shift Double-Tap → Caps Lock";
 "shiftDoubleTap.description" = "Maximum interval between two Shift taps to toggle Caps Lock. Shift+CapsLock also toggles Caps Lock directly.";
 
-/* GeneralTab - Shift Enter Delay */
-"section.shiftEnterDelay" = "Shift+Enter Newline Delay";
-"shiftEnterDelay.description" = "How long to wait between committing the composition and inserting the newline. No wait inserts it right after the commit. Increase it if composing text disappears in Electron apps (VS Code, Discord, etc.). ⌘ shortcuts pressed while composing are re-sent after the same wait.";
-"shiftEnterDelay.codexDescription" = "Codex sends the message when a newline character is inserted, so NRIME commits and then re-sends Shift+Enter. No wait sends it right after the commit. If you only get the commit and no newline, increase it. Keys typed during the wait go in after the newline, in order.";
-"shiftEnterDelay.codex" = "Codex";
-"shiftEnterDelay.electron" = "Electron apps";
-"shiftEnterDelay.none" = "No wait";
-
 /* GeneralTab - Display */
 "section.display" = "Display";
 "display.inlineIndicator" = "Show inline indicator on mode switch";
@@ -232,9 +224,15 @@
 "permissions.recheck" = "Check again / Request";
 "permissions.openSettings" = "Open System Settings";
 
-/* Mozc updates */
+/* JapaneseTab - Conversion Engine (Mozc) */
 "mozc.pending" = "New Mozc %@ (%@) downloaded — used from the next input method start";
 "mozc.applyNow" = "Apply now";
 "mozc.applyNow.help" = "The input method quits for a moment and starts again with the new Mozc at the next key press.";
-"mozc.checkNow" = "Check for Mozc updates";
+"mozc.checkNow" = "Check now";
 "mozc.checkedAt" = "Last checked: %@";
+"section.mozc" = "Conversion Engine (Mozc)";
+"mozc.version" = "Version";
+"mozc.source.bundled" = "Engine inside the app";
+"mozc.source.downloaded" = "Downloaded engine";
+"mozc.update" = "Updates";
+"mozc.description" = "Mozc updates separately from NRIME. Once a day the input method checks GitHub for a newer one, downloads it, and uses it from its next start.";

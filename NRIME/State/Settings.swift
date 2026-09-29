@@ -80,37 +80,6 @@ final class Settings {
         set { defaults.set(newValue, forKey: "tapOverlapWindow") }
     }
 
-    // MARK: - Electron Shift+Enter Delay
-
-    /// How long the Electron Shift+Enter newline — and the re-sent ⌘ shortcut
-    /// after a commit — waits. 0 means the next turn of the run loop: after
-    /// the key being handled, which is what the wait is for.
-    var shiftEnterDelay: TimeInterval {
-        get { storedDelay("shiftEnterDelay") ?? Self.defaultShiftEnterDelay }
-        set { defaults.set(newValue, forKey: "shiftEnterDelay") }
-    }
-
-    /// How long the Codex Shift+Enter replay waits after the commit.
-    ///
-    /// Both defaults were long guesses: 120 ms went in while NRIME could not
-    /// post events at all, so no value could have worked. With the permission
-    /// back, 10 ms (Codex) and 5 ms (Electron) held up in use (2026-09-30);
-    /// the defaults are now no wait, still adjustable while that is tested.
-    var codexNewlineDelay: TimeInterval {
-        get { storedDelay("codexNewlineDelay") ?? Self.defaultCodexNewlineDelay }
-        set { defaults.set(newValue, forKey: "codexNewlineDelay") }
-    }
-
-    static let defaultShiftEnterDelay: TimeInterval = 0
-    static let defaultCodexNewlineDelay: TimeInterval = 0
-
-    /// A stored delay, including 0 — which used to read as "not set" and
-    /// bring back the default.
-    private func storedDelay(_ key: String) -> TimeInterval? {
-        guard defaults.object(forKey: key) != nil else { return nil }
-        return max(0, defaults.double(forKey: key))
-    }
-
     // MARK: - Input Source Recovery
 
     var preventABCSwitch: Bool {

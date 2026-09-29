@@ -24,8 +24,6 @@ final class SettingsStore: ObservableObject {
         _toggleEnglishShortcut = Published(initialValue: .defaultToggleEnglish)
         _toggleNonEnglishShortcut = Published(initialValue: .defaultToggleNonEnglish)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
-        _shiftEnterDelay = Published(initialValue: 0)
-        _codexNewlineDelay = Published(initialValue: 0)
         _tapHoldBufferingEnabled = Published(initialValue: false)
         _tapOverlapWindow = Published(initialValue: 0.05)
         _japaneseKeyConfig = Published(initialValue: .default)
@@ -78,15 +76,6 @@ final class SettingsStore: ObservableObject {
 
     @Published var tapOverlapWindow: Double {
         didSet { defaults.set(tapOverlapWindow, forKey: "tapOverlapWindow") }
-    }
-
-    @Published var shiftEnterDelay: Double {
-        didSet { defaults.set(shiftEnterDelay, forKey: "shiftEnterDelay") }
-    }
-
-    /// Codex's own wait before the Shift+Enter replay (see Settings.codexNewlineDelay).
-    @Published var codexNewlineDelay: Double {
-        didSet { defaults.set(codexNewlineDelay, forKey: "codexNewlineDelay") }
     }
 
     // MARK: - Input Method Permissions
@@ -152,11 +141,6 @@ final class SettingsStore: ObservableObject {
 
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2
-        // 0 is a real value (no wait), not "unset".
-        shiftEnterDelay = defaults.object(forKey: "shiftEnterDelay") == nil
-            ? 0 : max(0, defaults.double(forKey: "shiftEnterDelay"))
-        codexNewlineDelay = defaults.object(forKey: "codexNewlineDelay") == nil
-            ? 0 : max(0, defaults.double(forKey: "codexNewlineDelay"))
         tapHoldBufferingEnabled = defaults.bool(forKey: "tapHoldBufferingEnabled")
         let towVal = defaults.double(forKey: "tapOverlapWindow")
         tapOverlapWindow = towVal > 0 ? towVal : 0.05

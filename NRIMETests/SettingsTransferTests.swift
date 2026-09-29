@@ -107,7 +107,6 @@ final class SettingsTransferTests: XCTestCase {
     func testSnapshotCarriesTheKeyTimingSettings() throws {
         sourceDefaults.set(true, forKey: "tapHoldBufferingEnabled")
         sourceDefaults.set(0.07, forKey: "tapOverlapWindow")
-        sourceDefaults.set(0.035, forKey: "shiftEnterDelay")
         sourceDefaults.set("mouse", forKey: "indicatorPositionMode")
 
         let snapshot = SettingsTransfer.capture(from: sourceDefaults, appVersion: "1.0.11")
@@ -115,12 +114,12 @@ final class SettingsTransferTests: XCTestCase {
 
         XCTAssertTrue(targetDefaults.bool(forKey: "tapHoldBufferingEnabled"))
         XCTAssertEqual(targetDefaults.double(forKey: "tapOverlapWindow"), 0.07)
-        XCTAssertEqual(targetDefaults.double(forKey: "shiftEnterDelay"), 0.035)
         XCTAssertEqual(targetDefaults.string(forKey: "indicatorPositionMode"), "mouse")
     }
 
-    /// Exports written before the per-app, double-tap and direct-switch
-    /// settings were removed still import: their extra keys are ignored.
+    /// Exports written before the per-app, double-tap, direct-switch and
+    /// newline-wait settings were removed still import: their extra keys are
+    /// ignored.
     func testExportWithRemovedSettingsStillImports() throws {
         let legacy = """
         {
@@ -137,6 +136,8 @@ final class SettingsTransferTests: XCTestCase {
           "perAppSavedModes": {"com.apple.TextEdit": "com.nrime.inputmethod.app.ja"},
           "shiftDoubleTapEnabled": true,
           "doubleTapWindow": 0.3,
+          "shiftEnterDelay": 0.035,
+          "codexNewlineDelay": 0.12,
           "shortcutData": {},
           "capturedShortcutNames": ["toggleEnglish", "toggleNonEnglish", "switchKorean", "switchJapanese", "hanjaConvert"]
         }
@@ -147,5 +148,7 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertEqual(targetDefaults.double(forKey: SettingsTransfer.tapThresholdKey), 0.25, accuracy: 0.0001)
         XCTAssertNil(targetDefaults.object(forKey: "perAppModeEnabled"), "Removed settings are not written back")
         XCTAssertNil(targetDefaults.object(forKey: "shiftDoubleTapEnabled"))
+        XCTAssertNil(targetDefaults.object(forKey: "shiftEnterDelay"), "The newline no longer waits")
+        XCTAssertNil(targetDefaults.object(forKey: "codexNewlineDelay"))
     }
 }

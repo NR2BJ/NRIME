@@ -10,8 +10,9 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     var tapThreshold: Double
     var preventABCSwitch: Bool
     var developerModeEnabled: Bool
-    // Per-app mode memory (perAppMode*) was removed on 2026-09-29. Older
-    // exports still carry those keys; decoding ignores them.
+    // Per-app mode memory (perAppMode*) was removed on 2026-09-29, and the
+    // Shift+Enter newline waits (shiftEnterDelay, codexNewlineDelay) on
+    // 2026-09-30. Older exports still carry those keys; decoding ignores them.
     var lastNonEnglishMode: String?
     var shortcutData: [String: Data]
     var japaneseKeyConfigData: Data?
@@ -21,8 +22,6 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     // existed still decode; `nil` means "this export knew nothing about it",
     // which is different from "the user turned it off".
     var indicatorPositionMode: String?
-    var shiftEnterDelay: Double?
-    var codexNewlineDelay: Double?
     var tapHoldBufferingEnabled: Bool?
     var tapOverlapWindow: Double?
     var secureInputASCIIFallback: Bool?
@@ -40,8 +39,6 @@ enum SettingsTransfer {
     static let japaneseKeyConfigKey = "japaneseKeyConfig"
 
     static let indicatorPositionModeKey = "indicatorPositionMode"
-    static let shiftEnterDelayKey = "shiftEnterDelay"
-    static let codexNewlineDelayKey = "codexNewlineDelay"
     static let tapHoldBufferingEnabledKey = "tapHoldBufferingEnabled"
     static let tapOverlapWindowKey = "tapOverlapWindow"
     static let secureInputASCIIFallbackKey = "secureInputASCIIFallback"
@@ -87,11 +84,6 @@ enum SettingsTransfer {
             japaneseKeyConfigData: defaults.data(forKey: japaneseKeyConfigKey),
             hanjaSelectionMemoryData: defaults.data(forKey: HanjaSelectionStore.defaultsKey),
             indicatorPositionMode: defaults.string(forKey: indicatorPositionModeKey) ?? "caret",
-            // 0 is a real value (no wait), not "unset".
-            shiftEnterDelay: defaults.object(forKey: shiftEnterDelayKey) == nil
-                ? 0 : defaults.double(forKey: shiftEnterDelayKey),
-            codexNewlineDelay: defaults.object(forKey: codexNewlineDelayKey) == nil
-                ? 0 : defaults.double(forKey: codexNewlineDelayKey),
             tapHoldBufferingEnabled: defaults.bool(forKey: tapHoldBufferingEnabledKey),
             tapOverlapWindow: defaults.double(forKey: tapOverlapWindowKey) > 0
                 ? defaults.double(forKey: tapOverlapWindowKey)
@@ -135,12 +127,6 @@ enum SettingsTransfer {
         // A value the export never carried must not overwrite this Mac's.
         if let value = snapshot.indicatorPositionMode {
             defaults.set(value, forKey: indicatorPositionModeKey)
-        }
-        if let value = snapshot.shiftEnterDelay {
-            defaults.set(value, forKey: shiftEnterDelayKey)
-        }
-        if let value = snapshot.codexNewlineDelay {
-            defaults.set(value, forKey: codexNewlineDelayKey)
         }
         if let value = snapshot.tapHoldBufferingEnabled {
             defaults.set(value, forKey: tapHoldBufferingEnabledKey)

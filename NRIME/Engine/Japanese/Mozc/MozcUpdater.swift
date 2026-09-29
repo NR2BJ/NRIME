@@ -12,7 +12,7 @@ import Foundation
 /// Checked a few minutes after the input method starts, then daily. Nothing
 /// is sent but the request for the release list. A download must match the
 /// SHA-256 GitHub records for the file and the manifest's per-file hashes;
-/// it is used from the next start of the input method (Settings > About can
+/// it is used from the next start of the input method (Settings > Japanese can
 /// apply it at once).
 final class MozcUpdater {
     static let shared = MozcUpdater()

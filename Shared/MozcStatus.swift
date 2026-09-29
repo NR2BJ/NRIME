@@ -1,7 +1,7 @@
 import Foundation
 
 /// The Mozc engine the input method runs, and a newer one waiting for the
-/// next restart — published in the App Group for Settings > About.
+/// next restart — published in the App Group for Settings > Japanese.
 struct MozcStatus: Codable, Equatable {
     struct Build: Codable, Equatable {
         let version: String
