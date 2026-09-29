@@ -140,16 +140,18 @@ final class SecureInputDetector {
         return status.isActive && status.holderIsLive && status.holderIsAuthenticationUI
     }
 
-    /// The live authentication UI process holding secure input, if that is
-    /// who holds it. Identifies the claim itself, so a caller can tell "the
-    /// same stuck claim as before" from "a new prompt".
-    func authenticationUIHolderPID() -> pid_t? {
-        guard isSecureInputActive(),
-              let pid = secureInputHolderPID(),
+    /// One reading for the step-aside latch: whether the flag is on, and the
+    /// live authentication UI process holding it, if that is who holds it.
+    /// Taken together so the two cannot describe different moments. A nil PID
+    /// with the flag on means "not the authentication UI, or unknown" — it is
+    /// not evidence that a claim ended.
+    func authenticationClaimReading() -> (isActive: Bool, authPID: pid_t?) {
+        guard isSecureInputActive() else { return (false, nil) }
+        guard let pid = secureInputHolderPID(),
               Self.processIsAlive(pid),
               let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
-              Self.authenticationBundleIDs.contains(bundleID) else { return nil }
-        return pid
+              Self.authenticationBundleIDs.contains(bundleID) else { return (true, nil) }
+        return (true, pid)
     }
 
     /// Bundle IDs of the system authentication UI.

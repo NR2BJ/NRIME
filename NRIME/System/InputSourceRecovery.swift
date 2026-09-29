@@ -34,6 +34,8 @@ final class InputSourceRecovery {
     private var steppedAsideAt: Date?
     /// Authentication-UI claim the cap already gave up on (see checkSecureInput).
     private var abandonedClaimPID: pid_t?
+    /// The authentication process the current step-aside is for.
+    private var steppedAsideForPID: pid_t?
     private var _userInitiatedSwitch = false
     private var _userInitiatedSwitchExpiresAt: Date?
     private var _consecutiveRecoveries = 0
@@ -262,10 +264,18 @@ final class InputSourceRecovery {
     }
 
     private func checkSecureInput() {
-        let holder = secureInputDetector.authenticationUIHolderPID()
-        if abandonedClaimPID != holder {
-            abandonedClaimPID = nil
+        let reading = secureInputDetector.authenticationClaimReading()
+        let holder = reading.authPID
+        let latch = Self.nextAbandonedClaim(previous: abandonedClaimPID,
+                                            flagActive: reading.isActive,
+                                            authHolder: holder)
+        if let released = abandonedClaimPID, latch == nil {
+            DeveloperLogger.shared.log("InputSourceRecovery", "Step-aside latch released", metadata: [
+                "pid": "\(released)",
+                "reason": reading.isActive ? "otherAuthHolder" : "secureInputOff",
+            ])
         }
+        abandonedClaimPID = latch
         let action = Self.secureInputAction(
             fallbackEnabled: Settings.shared.secureInputASCIIFallback,
             heldByAuthenticationUI: holder != nil,
@@ -279,6 +289,7 @@ final class InputSourceRecovery {
         case .switchToASCII(let remembering):
             sourceBeforeSecureInput = remembering
             steppedAsideAt = Date()
+            steppedAsideForPID = holder
             // Our own switch — don't let recovery treat it as a stray change.
             userInitiatedSwitch = true
             let result = InputSourceSelector.selectASCIIFallback()
@@ -294,7 +305,14 @@ final class InputSourceRecovery {
             // the next tick would park the user on ASCII indefinitely — 20s
             // away, a quarter second back, repeat — so leave this claim alone
             // until it ends or a different process takes over.
-            abandonedClaimPID = holder
+            abandonedClaimPID = Self.latchAfterRestore(flagActive: reading.isActive, holder: holder,
+                                                       steppedAsideFor: steppedAsideForPID)
+            steppedAsideForPID = nil
+            if let latched = abandonedClaimPID {
+                DeveloperLogger.shared.log("InputSourceRecovery", "Step-aside claim abandoned", metadata: [
+                    "pid": "\(latched)",
+                ])
+            }
             userInitiatedSwitch = false
             let result = InputSourceSelector.select(sourceID: sourceID)
             DeveloperLogger.shared.log("InputSourceRecovery", "Restored input source", metadata: [
@@ -304,6 +322,33 @@ final class InputSourceRecovery {
         case .none:
             break
         }
+    }
+
+    /// The claim the step-aside cap gave up on, carried to the next reading.
+    ///
+    /// Released only when secure input is fully off, or when a different
+    /// authentication process holds it. A reading that shows no authentication
+    /// holder while the flag is still on — another app's password field, a
+    /// failed registry read — says nothing about whether the stuck claim ended,
+    /// and releasing on it restarted the 20-second step-aside.
+    static func nextAbandonedClaim(previous: pid_t?, flagActive: Bool, authHolder: pid_t?) -> pid_t? {
+        guard let previous, flagActive else { return nil }
+        if let authHolder, authHolder != previous { return nil }
+        return previous
+    }
+
+    /// The claim to leave alone after coming back from a step-aside.
+    ///
+    /// Coming back while the flag is still on means the cap ran out, the
+    /// setting was switched off, or the reading lost sight of the holder. In
+    /// the last case the reading says nothing about whether the claim ended,
+    /// so keep the process this step-aside was for; otherwise one unknown
+    /// reading would let the next one start a fresh 20 seconds. If a real new
+    /// prompt from the same process then goes without a step-aside, typing in
+    /// it is still safe: keys to authentication clients always pass through raw.
+    static func latchAfterRestore(flagActive: Bool, holder: pid_t?, steppedAsideFor: pid_t?) -> pid_t? {
+        guard flagActive else { return nil }
+        return holder ?? steppedAsideFor
     }
 
     /// How long we are willing to stay stepped aside. A password is typed in

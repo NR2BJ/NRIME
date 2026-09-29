@@ -60,14 +60,20 @@ final class MozcServerManager {
     /// Kill any existing mozc_server (including stale ones from previous NRIME instances),
     /// then relaunch. Returns true if the fresh server is available.
     func restartServer() -> Bool {
+        let start = ProcessInfo.processInfo.systemUptime
         let launched = withLaunchQueue { () -> Bool in
             killStaleServers()
             return launchServer()
         }
-        guard launched else {
-            return false
-        }
-        return waitUntilReachable(timeout: restartWaitBudget)
+        let reachable = launched && waitUntilReachable(timeout: restartWaitBudget)
+        // Restarting sleeps and polls; on the main thread every key waits it out.
+        DeveloperLogger.shared.log("MozcServer", "Restart", metadata: [
+            "ms": String(format: "%.0f", (ProcessInfo.processInfo.systemUptime - start) * 1000),
+            "launched": launched ? "Y" : "N",
+            "reachable": reachable ? "Y" : "N",
+            "mainThread": Thread.isMainThread ? "Y" : "N",
+        ])
+        return reachable
     }
 
     /// Shuts down the managed mozc_server process.

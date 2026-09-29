@@ -230,8 +230,21 @@ final class MozcClient {
 
         let resolvedTimeout = overrideTimeout ?? timeout(for: input.type)
 
-        // Send via Mach IPC
-        guard let responseData = machCall(request: requestData, timeout: resolvedTimeout) else {
+        // Send via Mach IPC. The call is synchronous and usually on the main
+        // thread, where every key waits behind it: log the slow ones by type
+        // (never content) so lag reports can be traced to Mozc or cleared of it.
+        let callStart = ProcessInfo.processInfo.systemUptime
+        let response = machCall(request: requestData, timeout: resolvedTimeout)
+        let callDuration = ProcessInfo.processInfo.systemUptime - callStart
+        if callDuration >= 0.05 {
+            DeveloperLogger.shared.log("Mozc", "Slow IPC", metadata: [
+                "type": "\(input.type)",
+                "ms": String(format: "%.0f", callDuration * 1000),
+                "ok": response != nil ? "Y" : "N",
+                "mainThread": Thread.isMainThread ? "Y" : "N",
+            ])
+        }
+        guard let responseData = response else {
             return nil
         }
 

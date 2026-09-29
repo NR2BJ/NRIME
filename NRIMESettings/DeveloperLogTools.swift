@@ -26,8 +26,7 @@ enum DeveloperLogTools {
 
     static func clearLog() {
         do {
-            let url = try ensureLogFile()
-            try headerText().write(to: url, atomically: true, encoding: .utf8)
+            try DeveloperLogLocation.clear(header: headerText())
         } catch {
             NSSound.beep()
         }

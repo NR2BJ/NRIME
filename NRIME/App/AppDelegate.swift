@@ -20,6 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MozcServerManager.shared.prewarmServer()
 
         InputSourceRecovery.shared.startMonitoring()
+        DeveloperLogger.shared.startMainThreadStallMonitor()
         setupStatusItem()
 
         NSLog("NRIME: Server started with connection name: \(connectionName)")

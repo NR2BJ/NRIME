@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 import InputMethodKit
 
@@ -20,6 +21,13 @@ class NRIMEInputController: IMKInputController {
     private var cachedClient: AnyObject?
     /// Last observed secure-input state, so only transitions are logged.
     private var lastSecureInputState = false
+    /// Bundle ID of this controller's client, read once at activation so the
+    /// developer log never has to ask the host app again mid-keystroke.
+    private var activeBundleID: String?
+    /// Global monitor recording mouse-button presses for the shortcut handler
+    /// (Shift+click is not a Shift tap). Separate from `mouseMonitor` so that
+    /// one's commit-on-click behavior is unchanged.
+    private static var pointerMonitor: Any?
 
 #if DEBUG
     /// Test seam for controller-level unit tests that run without a real IMK client proxy.
@@ -59,6 +67,17 @@ class NRIMEInputController: IMKInputController {
             ])
         }
 
+        // Developer log: how late this event reached us and how long we held
+        // the thread with it (see logHandleTiming).
+        let handleStart = ProcessInfo.processInfo.systemUptime
+        var consumedByShortcut = false
+        var suppressedForSecureInput = false
+        defer {
+            logHandleTiming(event, start: handleStart,
+                            consumedByShortcut: consumedByShortcut,
+                            suppressed: suppressedForSecureInput)
+        }
+
         // Cache client for the global mouse monitor callback.
         cachedClient = client as AnyObject
 
@@ -83,6 +102,7 @@ class NRIMEInputController: IMKInputController {
                 wireUpShortcutHandler()
             }
             if shortcutHandler.handleEvent(event) {
+                consumedByShortcut = true
                 return true
             }
         }
@@ -105,6 +125,7 @@ class NRIMEInputController: IMKInputController {
             // reads as a solo Shift tap and switches the language mid-password
             // (logged in 1Password: two toggles within two seconds of typing).
             shortcutHandler.observeConsumedKeyDown(event)
+            suppressedForSecureInput = true
             return false
         }
 
@@ -486,6 +507,13 @@ class NRIMEInputController: IMKInputController {
         // Global mouse monitor: commit composing text on click.
         // Electron apps (Claude Desktop, KakaoTalk) don't reliably call
         // commitComposition/deactivateServer on focus change, so we commit proactively.
+        if NRIMEInputController.pointerMonitor == nil {
+            NRIMEInputController.pointerMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+            ) { event in
+                ShortcutHandler.notePointerDown(timestamp: event.timestamp, flags: event.modifierFlags)
+            }
+        }
         if NRIMEInputController.mouseMonitor == nil {
             NRIMEInputController.mouseMonitor = NSEvent.addGlobalMonitorForEvents(
                 matching: [.leftMouseDown, .rightMouseDown]
@@ -514,10 +542,13 @@ class NRIMEInputController: IMKInputController {
 
         // Restore per-app mode if enabled
         if let client = sender as? (any IMKTextInput) {
-            let bundleId = client.bundleIdentifier() ?? "unknown"
-            StateManager.shared.activateApp(bundleId)
+            // Cache only a real answer: a controller's client never changes,
+            // and a placeholder would stick and mislabel every later log line.
+            let bundleId = client.bundleIdentifier()
+            if let bundleId { activeBundleID = bundleId }
+            StateManager.shared.activateApp(bundleId ?? "unknown")
             logControllerEvent("activateServer", client: client, extra: [
-                "bundleID": bundleId
+                "bundleID": bundleId ?? "unknown"
             ])
         } else {
             logControllerEvent("activateServer", client: nil)
@@ -703,6 +734,10 @@ class NRIMEInputController: IMKInputController {
     // MARK: - Shortcut Handler Wiring
 
     private func wireUpShortcutHandler() {
+        shortcutHandler.isSensitiveContext = { [weak self] in
+            self?.isInSensitiveField() ?? false
+        }
+
         // Tap-hold buffering replay: a letter the handler consumed while the
         // tap modifier was held is now settled — route it to the current mode.
         shortcutHandler.onReplay = { [weak self] original, keepShift in
@@ -749,6 +784,7 @@ class NRIMEInputController: IMKInputController {
                 // and committing there types the previous field's characters
                 // into a password box. Leave it pending instead — it still
                 // commits when a normal field is focused again.
+                let commitStart = ProcessInfo.processInfo.systemUptime
                 if let client, self.canCommitText(to: client) {
                     self.endKoreanCandidateSession(client: client)
                     if previousMode == .korean {
@@ -757,6 +793,7 @@ class NRIMEInputController: IMKInputController {
                         self.japaneseEngine.forceCommit(client: client)
                     }
                 }
+                let switchStart = ProcessInfo.processInfo.systemUptime
                 switch action {
                 case .toggleEnglish:    StateManager.shared.toggleEnglish()
                 case .toggleNonEnglish: StateManager.shared.toggleNonEnglish()
@@ -764,10 +801,16 @@ class NRIMEInputController: IMKInputController {
                 case .switchJapanese:   StateManager.shared.switchTo(.japanese)
                 default: break
                 }
+                let switchEnd = ProcessInfo.processInfo.systemUptime
+                // commitMs: settling the old mode's text (Mozc submit for
+                // Japanese). switchMs: the mode change, including the inline
+                // indicator asking the host app where the caret is.
                 self.logControllerEvent("shortcutAction", client: client, extra: [
                     "action": String(describing: action),
                     "previousMode": previousMode.label,
-                    "currentMode": StateManager.shared.currentMode.label
+                    "currentMode": StateManager.shared.currentMode.label,
+                    "commitMs": String(format: "%.1f", (switchStart - commitStart) * 1000),
+                    "switchMs": String(format: "%.1f", (switchEnd - switchStart) * 1000),
                 ])
                 return true
 
@@ -811,10 +854,67 @@ class NRIMEInputController: IMKInputController {
         client: (any IMKTextInput)?,
         extra: [String: String] = [:]
     ) {
+        // Checked first: the bundle ID below is a call into the host app, and
+        // this runs inside key handling (mode switches, secure-input changes).
+        guard DeveloperLogger.shared.isEnabled else { return }
+        if activeBundleID == nil, let asked = client?.bundleIdentifier() {
+            activeBundleID = asked
+        }
         var metadata = extra
-        metadata["bundleID"] = metadata["bundleID"] ?? client?.bundleIdentifier() ?? "unknown"
+        metadata["bundleID"] = metadata["bundleID"] ?? activeBundleID ?? "unknown"
         metadata["mode"] = StateManager.shared.currentMode.label
+        metadata["ctl"] = String(shortcutHandler.diagID)
         DeveloperLogger.shared.log("Controller", event, metadata: metadata)
+    }
+
+    /// Developer log only. `lag`: how long after the key physically moved this
+    /// handler started — host app and IMKit delivery plus anything queued ahead
+    /// of it on this thread. `cost`: how long this handler then held the thread.
+    /// Both on the NSEvent.timestamp clock. Logged for every event a shortcut
+    /// consumed, and for any event slow either way. Only the kind of key is
+    /// recorded, and nothing at all while secure input suppresses composition.
+    private func logHandleTiming(_ event: NSEvent, start: TimeInterval,
+                                 consumedByShortcut: Bool, suppressed: Bool) {
+        guard !suppressed, DeveloperLogger.shared.isEnabled else { return }
+        // Inside a password or authentication field, only a consumed shortcut
+        // is logged: a slow Shift press there would record when a capital was typed.
+        if !consumedByShortcut, isInSensitiveField() { return }
+        let lag = start - event.timestamp
+        let cost = ProcessInfo.processInfo.systemUptime - start
+        guard event.timestamp > 0, lag >= 0, lag < 10 else { return }
+        guard consumedByShortcut || lag >= Self.slowEventThreshold || cost >= Self.slowEventThreshold else {
+            return
+        }
+        DeveloperLogger.shared.log("Timing", "handle", metadata: [
+            "event": Self.eventKind(event),
+            "lagMs": String(format: "%.1f", lag * 1000),
+            "costMs": String(format: "%.1f", cost * 1000),
+            "shortcut": consumedByShortcut ? "Y" : "N",
+            "mode": StateManager.shared.currentMode.label,
+            "bundleID": activeBundleID ?? "unknown",
+            "ctl": String(shortcutHandler.diagID),
+        ])
+    }
+
+    /// For log redaction only: secure input is on, or this controller's client
+    /// is authentication UI. Cheap — a flag read and the cached bundle ID, no
+    /// registry lookup and no call into the host app.
+    private func isInSensitiveField() -> Bool {
+        IsSecureEventInputEnabled() || secureInputDetector.isAuthenticationClient(activeBundleID)
+    }
+
+    private static let slowEventThreshold: TimeInterval = 0.03
+
+    private static func eventKind(_ event: NSEvent) -> String {
+        if event.type == .flagsChanged { return "modifier" }
+        switch event.keyCode {
+        case 0x31: return "space"
+        case 0x24, 0x4C: return "return"
+        case 0x33, 0x75: return "delete"
+        case 0x7B, 0x7C, 0x7D, 0x7E: return "arrow"
+        default:
+            return JamoTable.jamo(forKeyCode: event.keyCode, shifted: false) != nil ? "letter" : "other"
+        }
     }
 
     private func resolvedClient() -> (any IMKTextInput)? {

@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 
 /// Handles all shortcut detection: modifier-only taps, modifier+key combos, and plain keys.
@@ -62,7 +63,87 @@ final class ShortcutHandler {
     /// tracked one was pressed. Cleared if it lets go quickly enough to be
     /// rollover rather than a chord.
     private var twinHeldAtPress = false
+    /// Command, Control or Option was already down when the tracked key was
+    /// pressed. Cleared if it comes up within `modifierRolloverWindow` — a
+    /// shortcut like Cmd+V finishing just as the tap starts.
+    private var chordHeldAtPress = false
+    /// A clean tap of one Shift that the other Shift interrupted before it came
+    /// up: tap to switch, then a capital or ㅆ typed with the other hand. The
+    /// second press takes over tracking; this remembers the first so its
+    /// release can still count.
+    private var twinTapCandidate: (keyCode: UInt16, downTimestamp: TimeInterval)?
     private var previousModifierFlags: NSEvent.ModifierFlags = []
+
+    /// Why the tracked gesture stopped being a solo tap, and when the last key
+    /// went down during it. Developer log only — never used to decide.
+    private var comboReason: String?
+    private var lastKeyDownTimestamp: TimeInterval?
+
+    /// How long one modifier may keep going up after the next one went down
+    /// and still be rollover rather than a chord. A fixed constant: the
+    /// buffering feature's tapOverlapWindow is a user setting for a different
+    /// decision and must not silently retune this one.
+    static let modifierRolloverWindow: TimeInterval = 0.05
+
+    /// Hardware key presses the window server has seen, as of the tracked
+    /// key's press being handled. A shortcut's third key (Cmd+Shift+Z, and
+    /// system hotkeys like Cmd+Shift+4) goes to menus or the system and never
+    /// reaches the input method; this count is the only trace it leaves.
+    /// A count, not a clock or a live key state.
+    private var keyDownCountAtPress: UInt32?
+
+    /// Reads the window server's hardware keyDown count. Replaceable in tests.
+    static var hardwareKeyDownCount: () -> UInt32 = {
+        CGEventSource.counterForEventType(.hidSystemState, eventType: .keyDown)
+    }
+
+    /// Distinct per handler (one per controller), so log lines from different
+    /// controllers can be told apart. Diagnostics only.
+    let diagID: Int = {
+        ShortcutHandler.nextDiagID += 1
+        return ShortcutHandler.nextDiagID
+    }()
+    private static var nextDiagID = 0
+
+    /// Consulted only when logging: whether input is going to a password or
+    /// authentication field right now, so timing inside it is never recorded.
+    var isSensitiveContext: (() -> Bool)?
+
+    /// The latest press of a registered tap key in any controller, and the last
+    /// tap that fired. Diagnostics only, written only while logging is on —
+    /// never read by a decision.
+    private static var lastTapKeyPress: (keyCode: UInt16, timestamp: TimeInterval, ctl: Int)?
+    private static var lastFiredTap: (keyCode: UInt16, down: TimeInterval, release: TimeInterval)?
+
+    /// Most recent mouse-button press anywhere, from a global monitor. Kept
+    /// process-wide because the monitor is not tied to whichever controller is
+    /// tracking a Shift press. Main thread only.
+    private static var lastPointerDown: (timestamp: TimeInterval, flags: NSEvent.ModifierFlags)?
+
+    /// Record a mouse-button press. Shift+click is a use of Shift, not a tap:
+    /// IMKit never shows the click to the input method, so without this a
+    /// quick Shift+click switches the language.
+    static func notePointerDown(timestamp: TimeInterval, flags: NSEvent.ModifierFlags) {
+        lastPointerDown = (timestamp, flags)
+        // A click that belonged to a tap which already fired (its callback ran
+        // after the release was handled). Logged so the case can be counted.
+        if let tap = lastFiredTap, timestamp >= tap.down, timestamp <= tap.release,
+           DeveloperLogger.shared.isEnabled,
+           modifierFlags(flags, show: tap.keyCode, flag: .shift) {
+            DeveloperLogger.shared.log("Tap", "Late pointer", metadata: [
+                "key": keyName(tap.keyCode),
+                "beforeReleaseMs": ms(tap.release - timestamp),
+            ])
+        }
+    }
+
+#if DEBUG
+    static func resetPointerForTesting() {
+        lastPointerDown = nil
+        lastFiredTap = nil
+        lastTapKeyPress = nil
+    }
+#endif
 
     // Double-Shift tracking for Caps Lock toggle
     private var lastShiftTapTimestamp: TimeInterval?
@@ -96,6 +177,10 @@ final class ShortcutHandler {
         activeModifierKeyCode = nil
         modifierWasUsedAsCombo = false
         twinHeldAtPress = false
+        chordHeldAtPress = false
+        twinTapCandidate = nil
+        keyDownCountAtPress = nil
+        comboReason = nil
         previousModifierFlags = []
     }
 
@@ -182,11 +267,68 @@ final class ShortcutHandler {
             let twinAlreadyDown = sides.map {
                 (newFlags.rawValue & ($0.eitherSide & ~$0.requiredSide)) != 0
             } ?? false
+
+            // This press takes over tracking. If it interrupts a clean tap of
+            // the other Shift, keep that tap so its release still counts.
+            // Shift↔Shift only, and only with side bits: across families the
+            // overlap is a chord (Cmd+Shift+…), and without side bits the two
+            // keys cannot be told apart.
+            twinTapCandidate = nil
+            if let previous = activeModifierKeyCode, previous != keyCode,
+               sideInfoAvailable, let sides,
+               Self.deviceModifierMasks(for: previous)?.eitherSide == sides.eitherSide,
+               !modifierWasUsedAsCombo, !twinHeldAtPress, !chordHeldAtPress,
+               let previousDown = modifierDownEventTimestamp,
+               event.timestamp - previousDown < Settings.shared.tapThreshold,
+               isKeyRegisteredAsShortcut(previous) {
+                twinTapCandidate = (previous, previousDown)
+            }
+            if DeveloperLogger.shared.isEnabled, !isLoggingRedacted {
+                if let previous = activeModifierKeyCode, previous != keyCode,
+                   isKeyRegisteredAsShortcut(previous) {
+                    logTap("pressOverwrote", key: previous, extra: [
+                        "by": Self.keyName(keyCode),
+                        "keptAsCandidate": "\(twinTapCandidate != nil)",
+                        "prevAgeMs": modifierDownEventTimestamp.map { Self.ms(event.timestamp - $0) } ?? "?",
+                    ])
+                }
+                if isKeyRegisteredAsShortcut(keyCode) {
+                    Self.lastTapKeyPress = (keyCode, event.timestamp, diagID)
+                }
+            }
+
             activeModifierKeyCode = keyCode
             modifierDownEventTimestamp = event.timestamp
-            modifierWasUsedAsCombo = Self.otherModifiersPresent(newFlags, excluding: flag)
+            modifierWasUsedAsCombo = false
+            comboReason = nil
+            lastKeyDownTimestamp = nil
+            chordHeldAtPress = Self.otherModifiersPresent(newFlags, excluding: flag)
+            keyDownCountAtPress = chordHeldAtPress ? Self.hardwareKeyDownCount() : nil
             twinHeldAtPress = twinAlreadyDown
             return false // Don't consume yet
+        }
+
+        // The Shift whose clean tap the other Shift interrupted, coming up.
+        // Settle that tap now; the Shift still down belongs to what is typed
+        // next and must not switch again when it comes up.
+        if !isNowDown, let candidate = twinTapCandidate, candidate.keyCode == keyCode {
+            twinTapCandidate = nil
+            let elapsed = event.timestamp - candidate.downTimestamp
+            if elapsed >= 0, elapsed < Settings.shared.tapThreshold,
+               !Self.otherModifiersPresent(newFlags, excluding: flag),
+               !Self.pointerPressed(between: candidate.downTimestamp, and: event.timestamp,
+                                    keyCode: keyCode, flag: flag) {
+                modifierWasUsedAsCombo = true
+                comboReason = "afterTwinTap"
+                twinHeldAtPress = false
+                if DeveloperLogger.shared.isEnabled {
+                    Self.lastFiredTap = (keyCode, candidate.downTimestamp, event.timestamp)
+                    logTap("fired", key: keyCode, extra: isLoggingRedacted
+                           ? ["via": "twinCandidate", "secure": "Y"]
+                           : ["via": "twinCandidate", "elapsedMs": Self.ms(elapsed)])
+                }
+                return checkModifierOnlyTap(keyCode)
+            }
         }
 
         // The twin of the tracked key coming up. Typing ㅆ or a capital with one
@@ -198,10 +340,39 @@ final class ShortcutHandler {
            let active = activeModifierKeyCode, active != keyCode,
            let sides, Self.deviceModifierMasks(for: active)?.eitherSide == sides.eitherSide,
            let downTimestamp = modifierDownEventTimestamp {
-            if event.timestamp - downTimestamp < Settings.shared.tapOverlapWindow {
+            if event.timestamp - downTimestamp < Self.modifierRolloverWindow {
                 twinHeldAtPress = false
             } else {
                 modifierWasUsedAsCombo = true
+                comboReason = "twinHeld"
+            }
+            return false
+        }
+
+        // Command, Control or Option — already down when the tracked key was
+        // pressed — coming up. Right after Cmd+V the thumb often leaves Command
+        // a moment after Shift goes down; within the rollover window that is
+        // not a chord and the tap still counts. Held longer, it was meant as
+        // one (Cmd+Shift+…).
+        if !isNowDown, chordHeldAtPress,
+           let active = activeModifierKeyCode, active != keyCode,
+           let activeFlag = ShortcutConfig.modifierFlag(for: active), activeFlag != flag,
+           let downTimestamp = modifierDownEventTimestamp {
+            if event.timestamp - downTimestamp >= Self.modifierRolloverWindow {
+                modifierWasUsedAsCombo = true
+                comboReason = "chordHeld"
+            } else if !Self.otherModifiersPresent(newFlags, excluding: activeFlag) {
+                // A key pressed since the Shift went down that never reached us
+                // was the chord's third key (Cmd+Shift+Z went to the menu). The
+                // count can only refuse forgiveness, never grant it; under lag
+                // it may also count a key typed just after, which errs toward
+                // treating the gesture as a chord — the conservative side.
+                if let before = keyDownCountAtPress, Self.hardwareKeyDownCount() != before {
+                    modifierWasUsedAsCombo = true
+                    comboReason = "hiddenKey"
+                } else {
+                    chordHeldAtPress = false
+                }
             }
             return false
         }
@@ -236,13 +407,24 @@ final class ShortcutHandler {
             let elapsed = max(0, event.timestamp - downTimestamp)
             activeModifierKeyCode = nil
             modifierDownEventTimestamp = nil
+            // Released before the Shift it interrupted: both were held together.
+            twinTapCandidate = nil
 
             // Still holding another modifier means this release ends a chord,
             // not a solo tap.
             let otherStillHeld = Self.otherModifiersPresent(newFlags, excluding: flag)
+            let clicked = Self.pointerPressed(between: downTimestamp, and: event.timestamp,
+                                              keyCode: keyCode, flag: flag)
+            let isTap = !modifierWasUsedAsCombo && !twinHeldAtPress && !chordHeldAtPress
+                && !otherStillHeld && !clicked && elapsed < Settings.shared.tapThreshold
 
-            if !modifierWasUsedAsCombo && !twinHeldAtPress && !otherStillHeld
-                && elapsed < Settings.shared.tapThreshold {
+            if DeveloperLogger.shared.isEnabled, isKeyRegisteredAsShortcut(keyCode) {
+                if isTap { Self.lastFiredTap = (keyCode, downTimestamp, event.timestamp) }
+                logTapRelease(key: keyCode, isTap: isTap, elapsed: elapsed, release: event.timestamp,
+                              otherStillHeld: otherStillHeld, clicked: clicked)
+            }
+
+            if isTap {
                 // Double-Shift tap → toggle Caps Lock (only for shift keys NOT registered as shortcuts)
                 let isShiftKey = (keyCode == ShortcutConfig.keyCodeLeftShift ||
                                   keyCode == ShortcutConfig.keyCodeRightShift)
@@ -264,8 +446,27 @@ final class ShortcutHandler {
                 // Solo tap — check modifier-only shortcuts
                 return checkModifierOnlyTap(keyCode)
             }
+            return false
         }
 
+        // A release this handler was not tracking: the press went to another
+        // controller, or another press took over. Logged to tell the cases apart.
+        if !isNowDown, wasDown, DeveloperLogger.shared.isEnabled, !isLoggingRedacted,
+           isKeyRegisteredAsShortcut(keyCode) {
+            var extra = [
+                "tracking": activeModifierKeyCode.map(Self.keyName) ?? "none",
+                "sideInfo": sideInfoAvailable ? "Y" : "N",
+            ]
+            // Where this key's press went: another controller (a mismatched
+            // pair) or nowhere recent (the press was never delivered).
+            if let press = Self.lastTapKeyPress, press.keyCode == keyCode {
+                extra["lastPressCtl"] = String(press.ctl)
+                extra["lastPressAgeMs"] = Self.ms(event.timestamp - press.timestamp)
+            } else {
+                extra["lastPressCtl"] = "none"
+            }
+            logTap("untrackedRelease", key: keyCode, extra: extra)
+        }
         return false
     }
 
@@ -281,8 +482,11 @@ final class ShortcutHandler {
         if pendingLetter != nil {
             flushPendingAsHold()
         }
+        twinTapCandidate = nil
         if activeModifierKeyCode != nil {
             modifierWasUsedAsCombo = true
+            comboReason = comboReason ?? "consumedKey"
+            lastKeyDownTimestamp = event.timestamp
         }
     }
 
@@ -297,11 +501,15 @@ final class ShortcutHandler {
         if pendingLetter != nil {
             flushPendingAsHold()
         }
+        // A key while both Shifts are down cannot be attributed to either one,
+        // so an interrupted tap does not survive it.
+        twinTapCandidate = nil
 
         // 1. Check modifier+key combo shortcuts (any modifier held)
         if let result = checkModifierKeyCombo(event) {
             // Mark modifier as used so tap doesn't fire on release
             modifierWasUsedAsCombo = true
+            comboReason = "comboShortcut"
             activeModifierKeyCode = nil
             modifierDownEventTimestamp = nil
             return result
@@ -319,6 +527,8 @@ final class ShortcutHandler {
         // 2. If a modifier is held for tap tracking, mark it as used
         if activeModifierKeyCode != nil {
             modifierWasUsedAsCombo = true
+            comboReason = comboReason ?? "keyDown"
+            lastKeyDownTimestamp = event.timestamp
         }
 
         // 3. Check plain-key shortcuts (no modifier required, e.g. F13)
@@ -336,6 +546,7 @@ final class ShortcutHandler {
               !event.isARepeat,
               pendingLetter == nil,
               !modifierWasUsedAsCombo,
+              !chordHeldAtPress,
               let held = activeModifierKeyCode,
               let heldFlag = ShortcutConfig.modifierFlag(for: held),
               event.modifierFlags.contains(heldFlag),
@@ -375,6 +586,7 @@ final class ShortcutHandler {
         pending.flushWork.cancel()
         pendingLetter = nil
         modifierWasUsedAsCombo = true
+        comboReason = "bufferedHold"
         onReplay?(pending.event, true)
     }
 
@@ -533,6 +745,94 @@ final class ShortcutHandler {
     }
 
     // MARK: - Helpers
+
+    /// Whether a mouse button went down, with this key held, between the key's
+    /// press and release. The window is bounded by event timestamps, so a click
+    /// whose monitor callback runs late never blocks a later tap. But only
+    /// clicks already recorded when this release is handled can match: if the
+    /// main thread stalled and the release is handled before the click's
+    /// callback, the tap has already fired, and it is not undone (a commit
+    /// cannot be taken back). The "Late pointer" log records that case.
+    /// The click's own flags must show this key, so an unrelated click near a
+    /// tap does not swallow it. A button already held before the press (a
+    /// drag) is not detected — a known limit.
+    private static func pointerPressed(between down: TimeInterval, and release: TimeInterval,
+                                       keyCode: UInt16, flag: NSEvent.ModifierFlags) -> Bool {
+        guard let pointer = lastPointerDown,
+              pointer.timestamp >= down, pointer.timestamp <= release else { return false }
+        return modifierFlags(pointer.flags, show: keyCode, flag: flag)
+    }
+
+    /// Whether these flags show this particular key down: by its side bit when
+    /// the flags carry side information, otherwise by the aggregate flag.
+    private static func modifierFlags(_ flags: NSEvent.ModifierFlags, show keyCode: UInt16,
+                              flag: NSEvent.ModifierFlags) -> Bool {
+        if let sides = deviceModifierMasks(for: keyCode),
+           (flags.rawValue & sides.eitherSide) != 0 {
+            return (flags.rawValue & sides.requiredSide) != 0
+        }
+        return flags.contains(flag)
+    }
+
+    // MARK: - Tap diagnostics (developer log only)
+
+    private static func keyName(_ keyCode: UInt16) -> String {
+        switch keyCode {
+        case ShortcutConfig.keyCodeLeftShift: return "LShift"
+        case ShortcutConfig.keyCodeRightShift: return "RShift"
+        default: return String(format: "0x%02X", keyCode)
+        }
+    }
+
+    private static func ms(_ seconds: TimeInterval) -> String {
+        String(format: "%.0f", seconds * 1000)
+    }
+
+    private func logTap(_ outcome: String, key: UInt16, extra: [String: String] = [:]) {
+        var metadata = extra
+        metadata["outcome"] = outcome
+        metadata["key"] = Self.keyName(key)
+        metadata["mode"] = StateManager.shared.currentMode.label
+        metadata["ctl"] = String(diagID)
+        DeveloperLogger.shared.log("Tap", "Tap decision", metadata: metadata)
+    }
+
+    /// Whether log lines must leave out timing: secure input is on, or input
+    /// goes to an authentication field (whose flag can lag the panel).
+    private var isLoggingRedacted: Bool {
+        IsSecureEventInputEnabled() || (isSensitiveContext?() ?? false)
+    }
+
+    /// One line per release of a registered tap key, naming what decided it.
+    /// Typed characters are never recorded. Inside a password or authentication
+    /// field only a switch that fired is logged, with no timing at all — every
+    /// line carries its own time, so even a non-firing Shift release would
+    /// record when a capital was typed.
+    private func logTapRelease(key: UInt16, isTap: Bool, elapsed: TimeInterval, release: TimeInterval,
+                               otherStillHeld: Bool, clicked: Bool) {
+        if isLoggingRedacted {
+            if isTap { logTap("fired", key: key, extra: ["secure": "Y"]) }
+            return
+        }
+        let outcome: String
+        if isTap { outcome = "fired" }
+        else if modifierWasUsedAsCombo { outcome = "combo" }
+        else if twinHeldAtPress { outcome = "twinHeld" }
+        else if chordHeldAtPress { outcome = "chordHeld" }
+        else if otherStillHeld { outcome = "otherHeld" }
+        else if clicked { outcome = "pointer" }
+        else { outcome = "tooLong" }
+
+        var extra = ["elapsedMs": Self.ms(elapsed),
+                     "thresholdMs": Self.ms(Settings.shared.tapThreshold)]
+        if outcome == "combo" {
+            extra["reason"] = comboReason ?? "unknown"
+            if let keyDown = lastKeyDownTimestamp {
+                extra["overlapMs"] = Self.ms(release - keyDown)
+            }
+        }
+        logTap(outcome, key: key, extra: extra)
+    }
 
     /// Whether any significant modifier other than `flag` is present.
     private static func otherModifiersPresent(_ flags: NSEvent.ModifierFlags,
