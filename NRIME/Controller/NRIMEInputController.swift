@@ -208,6 +208,26 @@ class NRIMEInputController: IMKInputController {
             return true
         }
 
+        // List mode, single segment: Left/Right page the candidate list, the
+        // same as the hanja list. With several segments they keep Mozc's
+        // meaning (move between segments), which multi-segment editing needs.
+        if let panel = NSApp.candidatePanel, panel.isVisible(),
+           let direction = Self.listModePageDirection(
+               keyCode: event.keyCode,
+               modifiers: event.modifierFlags,
+               segmentCount: japaneseEngine.mozcConverter.currentPreedit?.segment.count ?? 0,
+               gridMode: panel.isGridMode
+           ) {
+            switch direction {
+            case .previous: panel.pageUp()
+            case .next: panel.pageDown()
+            }
+            // Keep Mozc on the candidate the panel now shows as selected, so a
+            // following Enter commits what the user sees.
+            syncPanelSelectionToMozc(panel: panel, client: client)
+            return true
+        }
+
         // Grid mode: intercept arrow keys, Enter, and Escape before Mozc
         if let panel = NSApp.candidatePanel, panel.isGridMode {
             switch event.keyCode {
@@ -547,6 +567,29 @@ class NRIMEInputController: IMKInputController {
     /// Sync the panel's selected candidate index to Mozc using HIGHLIGHT_CANDIDATE.
     /// Called when transitioning from grid mode (panel-only selection) back to Mozc-driven mode.
     /// Uses highlight (not select) to avoid committing the segment.
+    enum CandidatePageDirection: Equatable { case previous, next }
+
+    /// Whether Left/Right should page the Japanese candidate list rather than
+    /// be forwarded to Mozc as segment-focus movement.
+    ///
+    /// Only for a single segment: there, segment movement has nowhere to go and
+    /// the key visibly did nothing. Shift+Left/Right resizes segments in Mozc
+    /// and other modifiers belong to the app, so any modifier opts out; grid
+    /// mode has its own two-dimensional navigation.
+    static func listModePageDirection(keyCode: UInt16,
+                                      modifiers: NSEvent.ModifierFlags,
+                                      segmentCount: Int,
+                                      gridMode: Bool) -> CandidatePageDirection? {
+        guard !gridMode, segmentCount == 1 else { return nil }
+        let significant: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+        guard modifiers.intersection(significant).isEmpty else { return nil }
+        switch keyCode {
+        case 0x7B: return .previous
+        case 0x7C: return .next
+        default: return nil
+        }
+    }
+
     private func syncPanelSelectionToMozc(panel: CandidatePanel, client: any IMKTextInput) {
         let candidateIndex = panel.selectedIndex
         guard candidateIndex < japaneseEngine.mozcConverter.currentCandidates.count else { return }

@@ -51,25 +51,7 @@ enum DeveloperLogTools {
     }
 
     private static func logDirectoryURL() -> URL {
-        let fileManager = FileManager.default
-
-        if let containerURL = fileManager.containerURL(
-            forSecurityApplicationGroupIdentifier: suiteName
-        ) {
-            return containerURL
-                .appendingPathComponent("Library", isDirectory: true)
-                .appendingPathComponent("Logs", isDirectory: true)
-                .appendingPathComponent("NRIME", isDirectory: true)
-        }
-
-        let appSupportURL = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-
-        return appSupportURL
-            .appendingPathComponent("NRIME", isDirectory: true)
-            .appendingPathComponent("Logs", isDirectory: true)
+        DeveloperLogLocation.directoryURL()
     }
 
     private static func headerText() -> String {
