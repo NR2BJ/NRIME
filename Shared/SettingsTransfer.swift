@@ -87,12 +87,11 @@ enum SettingsTransfer {
             japaneseKeyConfigData: defaults.data(forKey: japaneseKeyConfigKey),
             hanjaSelectionMemoryData: defaults.data(forKey: HanjaSelectionStore.defaultsKey),
             indicatorPositionMode: defaults.string(forKey: indicatorPositionModeKey) ?? "caret",
-            shiftEnterDelay: defaults.double(forKey: shiftEnterDelayKey) > 0
-                ? defaults.double(forKey: shiftEnterDelayKey)
-                : 0.015,
-            codexNewlineDelay: defaults.double(forKey: codexNewlineDelayKey) > 0
-                ? defaults.double(forKey: codexNewlineDelayKey)
-                : 0.12,
+            // 0 is a real value (no wait), not "unset".
+            shiftEnterDelay: defaults.object(forKey: shiftEnterDelayKey) == nil
+                ? 0 : defaults.double(forKey: shiftEnterDelayKey),
+            codexNewlineDelay: defaults.object(forKey: codexNewlineDelayKey) == nil
+                ? 0 : defaults.double(forKey: codexNewlineDelayKey),
             tapHoldBufferingEnabled: defaults.bool(forKey: tapHoldBufferingEnabledKey),
             tapOverlapWindow: defaults.double(forKey: tapOverlapWindowKey) > 0
                 ? defaults.double(forKey: tapOverlapWindowKey)

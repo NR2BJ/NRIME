@@ -24,10 +24,11 @@
 
 /* GeneralTab - Shift Enter Delay */
 "section.shiftEnterDelay" = "Shift+Enter Newline Delay";
-"shiftEnterDelay.description" = "How long to wait between committing the composition and inserting the newline. Increase it if composing text disappears in Electron apps (VS Code, Discord, etc.). ⌘ shortcuts pressed while composing are re-sent after the same wait.";
-"shiftEnterDelay.codexDescription" = "Codex sends the message when a newline character is inserted, so NRIME commits, waits this long, and re-sends Shift+Enter. If you only get the commit and no newline, increase it; if it works, lower it to find the smallest value that still works. Keys typed during the wait go in after the newline, in order.";
+"shiftEnterDelay.description" = "How long to wait between committing the composition and inserting the newline. No wait inserts it right after the commit. Increase it if composing text disappears in Electron apps (VS Code, Discord, etc.). ⌘ shortcuts pressed while composing are re-sent after the same wait.";
+"shiftEnterDelay.codexDescription" = "Codex sends the message when a newline character is inserted, so NRIME commits and then re-sends Shift+Enter. No wait sends it right after the commit. If you only get the commit and no newline, increase it. Keys typed during the wait go in after the newline, in order.";
 "shiftEnterDelay.codex" = "Codex";
 "shiftEnterDelay.electron" = "Electron apps";
+"shiftEnterDelay.none" = "No wait";
 
 /* GeneralTab - Display */
 "section.display" = "Display";

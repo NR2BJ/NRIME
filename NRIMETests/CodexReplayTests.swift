@@ -85,6 +85,32 @@ final class CodexReplayTests: XCTestCase {
         XCTAssertEqual(sent.first?.first?.flags, .maskShift, "A plain Enter would send the message")
     }
 
+    func testNoWaitIsStoredAsZeroAndIsTheDefault() {
+        let originalElectron = testing.object(forKey: "shiftEnterDelay")
+        defer { testing.set(originalElectron, forKey: "shiftEnterDelay") }
+        testing.removeObject(forKey: "shiftEnterDelay")
+        testing.removeObject(forKey: "codexNewlineDelay")
+        XCTAssertEqual(Settings.shared.shiftEnterDelay, 0, "Default: no wait")
+        XCTAssertEqual(Settings.shared.codexNewlineDelay, 0)
+
+        Settings.shared.shiftEnterDelay = 0.005
+        Settings.shared.codexNewlineDelay = 0.01
+        XCTAssertEqual(Settings.shared.shiftEnterDelay, 0.005)
+        Settings.shared.shiftEnterDelay = 0
+        Settings.shared.codexNewlineDelay = 0
+        XCTAssertEqual(Settings.shared.shiftEnterDelay, 0, "A stored 0 used to read as unset and bring back 15 ms")
+        XCTAssertEqual(Settings.shared.codexNewlineDelay, 0)
+    }
+
+    func testNoWaitSendsTheNewlineRightAfterTheKeyBeingHandled() {
+        Settings.shared.codexNewlineDelay = 0
+        commitWithShiftEnter()
+
+        XCTAssertEqual(sent.count, 0, "Not from inside the Shift+Enter being handled…")
+        settle(0.03)
+        XCTAssertEqual(sent.first?.map(\.keyCode), [0x24], "…but on the next turn")
+    }
+
     func testKeysTypedDuringTheWaitReachTheAppAfterTheNewline() {
         Settings.shared.codexNewlineDelay = 0.1
         commitWithShiftEnter()

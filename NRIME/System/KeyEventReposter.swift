@@ -247,7 +247,7 @@ enum KeyEventReposter {
         postKeySequence(keys)
 #endif
 
-        var metadata = [
+        let metadata = [
             "delayMs": String(format: "%.0f", replay.delay * 1000),
             "waitedMs": String(format: "%.0f", (ProcessInfo.processInfo.systemUptime - replay.scheduledAt) * 1000),
             "reason": reason,
@@ -258,21 +258,33 @@ enum KeyEventReposter {
             DeveloperLogger.shared.log("Reposter", "Codex newline", metadata: metadata)
             return
         }
+        logNewlineOutcome("Codex newline", client: replay.client, caretBefore: caretBefore,
+                          keysBefore: keysBefore, metadata: metadata)
+    }
+
+    /// Log whether a newline went in, judged by the caret a moment later: it
+    /// moves one character for a line break, two for a new paragraph (Codex:
+    /// Chromium counts a paragraph boundary as two), and not at all when the
+    /// app ignored the key. A keystroke in between makes it unknowable ("?").
+    private static func logNewlineOutcome(_ message: String, client: any IMKTextInput,
+                                          caretBefore: Int, keysBefore: Int,
+                                          metadata: [String: String]) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            let caretAfter = caretLocation(of: replay.client)
+            let caretAfter = caretLocation(of: client)
             let verdict: String
             if keyDownCount != keysBefore {
-                verdict = "?" // the user typed on; the caret moved for that too
-            } else if caretAfter == caretBefore + 1 {
+                verdict = "?"
+            } else if let caretAfter, caretAfter == caretBefore + 1 || caretAfter == caretBefore + 2 {
                 verdict = "Y"
             } else if caretAfter == caretBefore {
                 verdict = "N"
             } else {
                 verdict = "?"
             }
+            var metadata = metadata
             metadata["caret"] = "\(caretBefore)→\(caretAfter.map(String.init) ?? "-")"
             metadata["newline"] = verdict
-            DeveloperLogger.shared.log("Reposter", "Codex newline", metadata: metadata)
+            DeveloperLogger.shared.log("Reposter", message, metadata: metadata)
         }
     }
 
@@ -331,6 +343,8 @@ enum KeyEventReposter {
     private struct PendingNewline {
         let client: any IMKTextInput
         let work: DispatchWorkItem
+        let delay: TimeInterval
+        let scheduledAt: TimeInterval
     }
 
     /// Main-thread only: scheduled from handle() and fired on the main queue.
@@ -342,11 +356,12 @@ enum KeyEventReposter {
         flushPendingNewline()
 
         let work = DispatchWorkItem {
-            guard pendingNewline != nil else { return }
+            guard let pending = pendingNewline else { return }
             pendingNewline = nil
-            insertNewline(into: client)
+            insertNewline(pending, reason: "timer")
         }
-        pendingNewline = PendingNewline(client: client, work: work)
+        pendingNewline = PendingNewline(client: client, work: work, delay: delay,
+                                        scheduledAt: ProcessInfo.processInfo.systemUptime)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
@@ -356,11 +371,24 @@ enum KeyEventReposter {
         guard let pending = pendingNewline else { return }
         pendingNewline = nil
         pending.work.cancel()
-        insertNewline(into: pending.client)
+        insertNewline(pending, reason: "nextKey")
     }
 
-    private static func insertNewline(into client: any IMKTextInput) {
-        client.insertText("\n" as NSString,
-                          replacementRange: NSRange(location: NSNotFound, length: 0))
+    private static func insertNewline(_ pending: PendingNewline, reason: String) {
+        let caretBefore = caretLocation(of: pending.client)
+        let keysBefore = keyDownCount
+        pending.client.insertText("\n" as NSString,
+                                  replacementRange: NSRange(location: NSNotFound, length: 0))
+        let metadata = [
+            "delayMs": String(format: "%.0f", pending.delay * 1000),
+            "waitedMs": String(format: "%.0f", (ProcessInfo.processInfo.systemUptime - pending.scheduledAt) * 1000),
+            "reason": reason,
+        ]
+        guard let caretBefore else {
+            DeveloperLogger.shared.log("Reposter", "Electron newline", metadata: metadata)
+            return
+        }
+        logNewlineOutcome("Electron newline", client: pending.client, caretBefore: caretBefore,
+                          keysBefore: keysBefore, metadata: metadata)
     }
 }

@@ -82,27 +82,34 @@ final class Settings {
 
     // MARK: - Electron Shift+Enter Delay
 
+    /// How long the Electron Shift+Enter newline — and the re-sent ⌘ shortcut
+    /// after a commit — waits. 0 means the next turn of the run loop: after
+    /// the key being handled, which is what the wait is for.
     var shiftEnterDelay: TimeInterval {
-        get {
-            let val = defaults.double(forKey: "shiftEnterDelay")
-            return val > 0 ? val : 0.015
-        }
+        get { storedDelay("shiftEnterDelay") ?? Self.defaultShiftEnterDelay }
         set { defaults.set(newValue, forKey: "shiftEnterDelay") }
     }
 
-    /// How long the Codex Shift+Enter replay waits after the commit. 120 ms
-    /// was never measured (it went in while NRIME could not post events at
-    /// all), so it is adjustable: the developer log records whether each
-    /// replay produced a newline, which finds the smallest value that works.
+    /// How long the Codex Shift+Enter replay waits after the commit.
+    ///
+    /// Both defaults were long guesses: 120 ms went in while NRIME could not
+    /// post events at all, so no value could have worked. With the permission
+    /// back, 10 ms (Codex) and 5 ms (Electron) held up in use (2026-09-30);
+    /// the defaults are now no wait, still adjustable while that is tested.
     var codexNewlineDelay: TimeInterval {
-        get {
-            let val = defaults.double(forKey: "codexNewlineDelay")
-            return val > 0 ? val : Self.defaultCodexNewlineDelay
-        }
+        get { storedDelay("codexNewlineDelay") ?? Self.defaultCodexNewlineDelay }
         set { defaults.set(newValue, forKey: "codexNewlineDelay") }
     }
 
-    static let defaultCodexNewlineDelay: TimeInterval = 0.12
+    static let defaultShiftEnterDelay: TimeInterval = 0
+    static let defaultCodexNewlineDelay: TimeInterval = 0
+
+    /// A stored delay, including 0 — which used to read as "not set" and
+    /// bring back the default.
+    private func storedDelay(_ key: String) -> TimeInterval? {
+        guard defaults.object(forKey: key) != nil else { return nil }
+        return max(0, defaults.double(forKey: key))
+    }
 
     // MARK: - Input Source Recovery
 

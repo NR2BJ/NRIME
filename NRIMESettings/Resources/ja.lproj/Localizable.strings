@@ -24,10 +24,11 @@
 
 /* GeneralTab - Shift Enter Delay */
 "section.shiftEnterDelay" = "Shift+Enter 改行の待ち時間";
-"shiftEnterDelay.description" = "入力中の文字を確定してから改行を入れるまでの待ち時間です。Electronアプリ（VS Code、Discordなど）で入力中の文字が消える場合は値を上げてください。入力中に押した⌘ショートカットも、同じだけ待ってからアプリへ送り直します。";
-"shiftEnterDelay.codexDescription" = "Codexは改行文字を入れるとメッセージを送信してしまうため、確定後この時間だけ待ってからShift+Enterを送り直します。確定だけで改行されない場合は値を上げ、うまくいく場合は下げて、動作する最小の値を見つけてください。待っている間に打った文字は、改行のあとに順番どおり入ります。";
+"shiftEnterDelay.description" = "入力中の文字を確定してから改行を入れるまでの待ち時間です。「待ちなし」では確定の直後に入れます。Electronアプリ（VS Code、Discordなど）で入力中の文字が消える場合は値を上げてください。入力中に押した⌘ショートカットも、同じだけ待ってからアプリへ送り直します。";
+"shiftEnterDelay.codexDescription" = "Codexは改行文字を入れるとメッセージを送信してしまうため、確定後にShift+Enterを送り直します。「待ちなし」では確定の直後に送ります。確定だけで改行されない場合は値を上げてください。待っている間に打った文字は、改行のあとに順番どおり入ります。";
 "shiftEnterDelay.codex" = "Codex";
 "shiftEnterDelay.electron" = "Electronアプリ";
+"shiftEnterDelay.none" = "待ちなし";
 
 /* GeneralTab - Display */
 "section.display" = "表示";
