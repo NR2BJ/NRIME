@@ -231,3 +231,10 @@
 "permissions.checkedAt" = "입력기가 마지막으로 확인한 시각: %@";
 "permissions.recheck" = "다시 확인 / 권한 요청";
 "permissions.openSettings" = "시스템 설정 열기";
+
+/* Mozc updates */
+"mozc.pending" = "새 Mozc %@ (%@)를 받아 두었습니다 — 다음 입력기 재시작 때 적용";
+"mozc.applyNow" = "지금 적용";
+"mozc.applyNow.help" = "입력기가 잠깐 종료되고, 다음 키를 누를 때 새 Mozc로 다시 시작합니다.";
+"mozc.checkNow" = "Mozc 업데이트 확인";
+"mozc.checkedAt" = "마지막 확인: %@";

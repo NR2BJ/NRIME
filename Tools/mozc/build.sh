@@ -1,9 +1,12 @@
 #!/bin/bash
 # Build Mozc (Google's Japanese conversion engine) for NRIME → build/mozc-out/
-#   lib/libnrime_mozc.a   the static library NRIME links: Mozc, its dependencies, NRIME's C API
-#   include/nrime_mozc.h  that C API
-#   data/mozc.data        the dictionary data NRIME ships
-#   MOZC_VERSION          "<commit> <commit date> <Mozc version>"
+#   lib/libnrime_mozc.dylib  the engine NRIME loads: Mozc, its dependencies, NRIME's C API
+#   include/nrime_mozc.h     that C API
+#   data/mozc.data           the dictionary data that goes with it
+#   MOZC_VERSION             "<commit> <commit date> <Mozc version>"
+#
+# MOZC_COMMIT in the environment overrides the pin (the component workflow
+# builds upstream's latest commit this way).
 #
 # - The commit is pinned in Tools/mozc/MOZC_COMMIT. Tools/mozc/update.sh moves
 #   it to the latest upstream commit (release.sh does that for every beta).
@@ -14,7 +17,7 @@
 #   only what changed is rebuilt, and an up-to-date tree takes seconds.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-COMMIT="$(tr -d '[:space:]' < "$ROOT/Tools/mozc/MOZC_COMMIT")"
+COMMIT="${MOZC_COMMIT:-$(tr -d '[:space:]' < "$ROOT/Tools/mozc/MOZC_COMMIT")}"
 SRC="$ROOT/build/mozc"
 OUT="$ROOT/build/mozc-out"
 
@@ -33,11 +36,17 @@ cd "$SRC/src"
 # Mozc limits who may use the session handler; check nothing rather than patch
 # its source. Same minimum macOS as the app (otherwise this Mac's version).
 FLAGS=(--config oss_macos --config release_build --nocheck_visibility --macos_minimum_os=13.0)
-bazelisk build "${FLAGS[@]}" //nrime:nrime_mozc_static //data_manager/oss:mozc.data
+# Extra Bazel flags, e.g. --disk_cache for the component workflow.
+if [ -n "${MOZC_BAZEL_FLAGS:-}" ]; then
+    read -r -a EXTRA <<< "$MOZC_BAZEL_FLAGS"
+    FLAGS+=("${EXTRA[@]}")
+fi
+bazelisk build "${FLAGS[@]}" //nrime:libnrime_mozc.dylib //data_manager/oss:mozc.data
 BIN="$(bazelisk info "${FLAGS[@]}" bazel-bin 2>/dev/null)"
 
+rm -rf "$OUT/lib"
 mkdir -p "$OUT/lib" "$OUT/include" "$OUT/data"
-cp -f "$BIN/nrime/libnrime_mozc_static.a" "$OUT/lib/libnrime_mozc.a"
+cp -f "$BIN/nrime/libnrime_mozc.dylib" "$OUT/lib/libnrime_mozc.dylib"
 cp -f "$ROOT/Tools/mozc/nrime/nrime_mozc.h" "$OUT/include/"
 cp -f "$BIN/data_manager/oss/mozc.data" "$OUT/data/"
 chmod u+w "$OUT"/lib/* "$OUT"/include/* "$OUT"/data/*

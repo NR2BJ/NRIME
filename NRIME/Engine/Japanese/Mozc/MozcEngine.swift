@@ -1,8 +1,13 @@
+import AppKit
 import Foundation
 
-/// Mozc, running inside the input method (built by Tools/mozc/build.sh).
+/// Mozc, running inside the input method.
 ///
-/// It replaces mozc_server: there is no process to launch, restart or wait
+/// The engine is libnrime_mozc.dylib (Tools/mozc) with its mozc.data, loaded
+/// at run time: the newest good one downloaded by MozcUpdater, else the one
+/// bundled in the app. A newer Mozc therefore needs no new NRIME.
+///
+/// It replaced mozc_server: there is no process to launch, restart or wait
 /// for, and no IPC to time out — a command is a function call of about a
 /// millisecond. Everything that went wrong with the server (hung or missing
 /// server, stale lock files, the lost exec bit, Gatekeeper, the macOS 26.4
@@ -13,8 +18,48 @@ import Foundation
 final class MozcEngine {
     static let shared = MozcEngine()
 
+    /// The C API (nrime_mozc.h), resolved from the loaded library.
+    private struct API {
+        typealias ABIVersion = @convention(c) () -> Int32
+        typealias New = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> OpaquePointer?
+        typealias Free = @convention(c) (OpaquePointer?) -> Void
+        typealias Eval = @convention(c) (OpaquePointer?, UnsafePointer<UInt8>?, Int,
+                                         UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?,
+                                         UnsafeMutablePointer<Int>?) -> Int32
+        typealias FreeBuffer = @convention(c) (UnsafeMutablePointer<UInt8>?) -> Void
+        typealias Version = @convention(c) () -> UnsafePointer<CChar>?
+
+        let abiVersion: ABIVersion
+        let new: New
+        let free: Free
+        let eval: Eval
+        let freeBuffer: FreeBuffer
+        let version: Version
+
+        init?(library: UnsafeMutableRawPointer) {
+            func symbol<T>(_ name: String, _ type: T.Type) -> T? {
+                dlsym(library, name).map { unsafeBitCast($0, to: type) }
+            }
+            guard let abiVersion = symbol("nrime_mozc_abi_version", ABIVersion.self),
+                  let new = symbol("nrime_mozc_new", New.self),
+                  let free = symbol("nrime_mozc_free", Free.self),
+                  let eval = symbol("nrime_mozc_eval", Eval.self),
+                  let freeBuffer = symbol("nrime_mozc_free_buffer", FreeBuffer.self),
+                  let version = symbol("nrime_mozc_version", Version.self) else { return nil }
+            self.abiVersion = abiVersion
+            self.new = new
+            self.free = free
+            self.eval = eval
+            self.freeBuffer = freeBuffer
+            self.version = version
+        }
+    }
+
+    private var api: API?
     private var handle: OpaquePointer?
     private var startAttempted = false
+    /// The engine in use.
+    private(set) var active: MozcComponent?
 
     /// Where learning and the user dictionary live — the folder mozc_server
     /// used, so both carry over.
@@ -36,35 +81,95 @@ final class MozcEngine {
     static var availableForTesting: Bool?
 #endif
 
-    private static var dataPath: String? {
-        Bundle.main.path(forResource: "mozc", ofType: "data")
-    }
-
     private init() {}
 
-    /// Load the engine: 7–20 ms. Called at launch; later calls return at once.
-    /// A failure (dictionary data missing) is logged once and not retried.
+#if DEBUG
+    /// Test seam: a separate engine, to exercise loading and fallback.
+    static func makeForTesting() -> MozcEngine { MozcEngine() }
+#endif
+
+    /// Load the engine: the best candidate that loads and answers
+    /// (MozcComponents.candidates). Called at launch; later calls return at
+    /// once. Nothing loading at all is logged once and not retried.
     @discardableResult
     func start() -> Bool {
         if handle != nil { return true }
         guard !startAttempted else { return false }
         startAttempted = true
 
-        guard let dataPath = Self.dataPath else {
-            DeveloperLogger.shared.log("Mozc", "Engine not started: mozc.data missing from the app")
-            return false
-        }
         let profile = Self.profileDirectory
         try? FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        for component in MozcComponents.candidates() where load(component, profile: profile) {
+            MozcComponents.prune(keeping: component)
+            Self.updateStatus { status in
+                status.active = component.info
+                status.activeSource = component.source.rawValue
+                if let pending = status.pending, pending.commit == component.commit || pending.date <= component.date {
+                    status.pending = nil
+                }
+            }
+            observeSettingsApp()
+            return true
+        }
+        DeveloperLogger.shared.log("Mozc", "Engine not started: nothing could be loaded")
+        return false
+    }
+
+    /// Load one component and check that it answers. A downloaded one that
+    /// fails is marked bad (MozcComponents), and the next candidate is tried.
+    private func load(_ component: MozcComponent, profile: URL) -> Bool {
+        guard MozcComponents.beginLoad(component) else { return false }
         let startedAt = ProcessInfo.processInfo.systemUptime
-        handle = nrime_mozc_new(dataPath, profile.path)
-        let version = String(cString: nrime_mozc_version())
-        DeveloperLogger.shared.log("Mozc", handle != nil ? "Engine started" : "Engine failed to start", metadata: [
+        func failed(_ reason: String) -> Bool {
+            if component.source == .downloaded {
+                MozcComponents.markBad(component, reason: reason)
+            } else {
+                DeveloperLogger.shared.log("Mozc", "Bundled engine failed", metadata: ["reason": reason])
+            }
+            return false
+        }
+
+        // A library that failed stays loaded: unloading C++ code is not safe,
+        // and it is simply never called.
+        guard let library = dlopen(component.libraryURL.path, RTLD_NOW | RTLD_LOCAL) else {
+            return failed("dlopen: " + (dlerror().map { String(cString: $0) } ?? "?"))
+        }
+        guard let api = API(library: library) else { return failed("C API missing") }
+        let abi = api.abiVersion()
+        guard abi == Int32(MozcComponents.supportedABI) else { return failed("C API version \(abi)") }
+        guard let handle = api.new(component.dataURL.path, profile.path) else {
+            return failed("engine did not start")
+        }
+        self.api = api
+        self.handle = handle
+        guard answers() else {
+            api.free(handle)
+            self.api = nil
+            self.handle = nil
+            return failed("engine did not answer")
+        }
+        MozcComponents.endLoad(component)
+        active = component
+
+        DeveloperLogger.shared.log("Mozc", "Engine started", metadata: [
             "ms": String(format: "%.0f", (ProcessInfo.processInfo.systemUptime - startedAt) * 1000),
-            "version": version,
+            "version": api.version().map { String(cString: $0) } ?? component.version,
+            "date": component.date,
+            "commit": String(component.commit.prefix(7)),
+            "source": component.source.rawValue,
         ])
-        guard handle != nil else { return false }
-        observeSettingsApp()
+        return true
+    }
+
+    /// A session opens and closes.
+    private func answers() -> Bool {
+        var create = Mozc_Commands_Input()
+        create.type = .createSession
+        guard let output = evaluate(create), output.hasID, output.id != 0 else { return false }
+        var delete = Mozc_Commands_Input()
+        delete.type = .deleteSession
+        delete.id = output.id
+        _ = evaluate(delete)
         return true
     }
 
@@ -80,15 +185,19 @@ final class MozcEngine {
 
     /// One Mozc command. nil when the engine is not running.
     func eval(_ input: Mozc_Commands_Input) -> Mozc_Commands_Output? {
-        guard isAvailable, let handle, let request = try? input.serializedData() else { return nil }
+        guard isAvailable else { return nil }
+        return evaluate(input)
+    }
+
+    private func evaluate(_ input: Mozc_Commands_Input) -> Mozc_Commands_Output? {
+        guard let api, let handle, let request = try? input.serializedData() else { return nil }
         var response: UnsafeMutablePointer<UInt8>?
         var responseSize = 0
         let ok = request.withUnsafeBytes { raw -> Int32 in
-            nrime_mozc_eval(handle, raw.bindMemory(to: UInt8.self).baseAddress, raw.count,
-                            &response, &responseSize)
+            api.eval(handle, raw.bindMemory(to: UInt8.self).baseAddress, raw.count, &response, &responseSize)
         }
         guard ok != 0, let response else { return nil }
-        defer { nrime_mozc_free_buffer(response) }
+        defer { api.freeBuffer(response) }
         return try? Mozc_Commands_Output(serializedBytes: Data(bytes: response, count: responseSize))
     }
 
@@ -143,8 +252,20 @@ final class MozcEngine {
         _ = eval(input)
     }
 
-    /// The settings app edits the dictionary file and asks for history to be
-    /// cleared; the engine lives here, so it is told by notification.
+    // MARK: - Status and the settings app
+
+    /// Change the MozcStatus the settings app shows, and tell it.
+    static func updateStatus(_ change: (inout MozcStatus) -> Void) {
+        let defaults = AppGroupDefaults.make()
+        var status = MozcStatus.load(from: defaults) ?? MozcStatus()
+        change(&status)
+        status.save(to: defaults)
+        DistributedNotificationCenter.default().postNotificationName(
+            MozcNotifications.statusChanged, object: nil, userInfo: nil, deliverImmediately: true)
+    }
+
+    /// The settings app edits the dictionary file, clears history and asks
+    /// about updates; the engine lives here, so it is told by notification.
     private func observeSettingsApp() {
         let center = DistributedNotificationCenter.default()
         center.addObserver(forName: MozcNotifications.userDictionaryChanged, object: nil, queue: .main) { _ in
@@ -155,9 +276,11 @@ final class MozcEngine {
             MozcEngine.shared.clearLearning()
             DeveloperLogger.shared.log("Mozc", "Learning cleared")
         }
-    }
-
-    deinit {
-        if let handle { nrime_mozc_free(handle) }
+        center.addObserver(forName: MozcNotifications.applyUpdate, object: nil, queue: .main) { _ in
+            // Quit; macOS starts the input method again at the next key
+            // press, and that start loads the newer engine.
+            DeveloperLogger.shared.log("Mozc", "Quitting to switch engines")
+            NSApp.terminate(nil)
+        }
     }
 }

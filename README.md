@@ -243,6 +243,7 @@ Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스
 일본어 변환 엔진 Mozc는 입력기 프로세스 안에서 돕니다. Mozc를 정적 라이브러리로 빌드해 NRIME에 링크하고(`Tools/mozc`), 변환 명령은 Mozc 프로토콜(protobuf)을 함수 호출로 주고받습니다. 변환 한 번은 1ms 안팎입니다.
 예전에는 `mozc_server`를 별도 프로세스로 띄우고 Mach IPC로 통신했지만, 서버가 멈추거나 재시작되는 동안 입력이 기다리는 문제가 있어 2026-09에 바꿨습니다.
 Mozc 버전은 `Tools/mozc/MOZC_COMMIT`에 고정하고, 베타 릴리즈마다 최신 upstream 커밋으로 올립니다(`Tools/mozc/update.sh` — 빌드와 테스트를 통과해야 반영).
+NRIME 새 버전 없이도 Mozc는 따로 업데이트됩니다. 엔진은 실행 중에 불러오는 라이브러리(`libnrime_mozc.dylib`)이고, GitHub Actions(`.github/workflows/mozc-component.yml`)가 매주 upstream의 버전·데이터 변경을 확인해 빌드·테스트한 뒤 `mozc-<abi>-<날짜>-<커밋>` 프리릴리즈로 올립니다. 입력기가 하루 한 번 확인해 내려받고(SHA-256 검증), 다음 시작 때 씁니다. 새 엔진이 실패하면 앱에 든 엔진으로 돌아갑니다.
 
 </details>
 

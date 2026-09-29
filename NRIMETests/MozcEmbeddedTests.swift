@@ -87,9 +87,11 @@ final class MozcEmbeddedTests: XCTestCase {
         XCTAssertEqual(MozcEngine.shared.syncCountForTesting, savesBefore + 1, "One save for the commit")
     }
 
-    func testReportsItsVersion() {
-        let version = String(cString: nrime_mozc_version())
-        XCTAssertEqual(version.split(separator: ".").count, 4, version)
+    func testRunsTheBundledEngineLoadedAtRunTime() {
+        let active = MozcEngine.shared.active
+        XCTAssertEqual(active?.source, .bundled)
+        XCTAssertEqual(active?.version.split(separator: ".").count, 4, active?.version ?? "-")
+        XCTAssertEqual(active?.libraryURL.lastPathComponent, "libnrime_mozc.dylib")
     }
 
     private static func userDictionary(_ words: [(String, String)]) -> Mozc_UserDictionary_UserDictionaryStorage {

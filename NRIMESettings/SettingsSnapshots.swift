@@ -15,6 +15,7 @@ enum SettingsSnapshots {
 
         let pages: [(String, AnyView, CGFloat)] = [
             ("general", AnyView(GeneralTab()), 1500),
+            ("about", AnyView(AboutTab()), 760),
             ("japanese", AnyView(JapaneseTab()), 1150),
             ("japanese-dictionary", AnyView(JapaneseTab(startOnDictionary: true)), 520),
             ("dictionary-editor", AnyView(DictionaryEntryEditor(

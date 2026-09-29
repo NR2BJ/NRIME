@@ -1,0 +1,82 @@
+# Builds the Mozc engine NRIME downloads by itself (MozcUpdater), so Mozc stays
+# current without a new NRIME and without anyone's Mac: every Monday, and on demand.
+#
+# A component is built when upstream Mozc changed its version or data since the
+# newest published one (Tools/mozc/component-needed.sh), tested with NRIME, and
+# published as a prerelease tagged mozc-<abi>-<yyyymmdd>-<commit7> carrying
+# nrime-mozc.zip. App updates ignore these releases: they have no .pkg.
+name: Mozc component
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if Mozc's version and data did not change
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mozc-component
+  cancel-in-progress: false
+
+jobs:
+  component:
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide
+        id: decide
+        run: bash Tools/mozc/component-needed.sh "${{ inputs.force || false }}" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore Bazel caches
+        if: steps.decide.outputs.build == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/nrime-bazel-disk
+            ~/Library/Caches/bazel/_bazel_runner/cache/repos
+          key: mozc-bazel-${{ steps.decide.outputs.commit }}
+          restore-keys: mozc-bazel-
+
+      - name: Build
+        if: steps.decide.outputs.build == 'true'
+        env:
+          MOZC_COMMIT: ${{ steps.decide.outputs.commit }}
+        run: |
+          command -v bazelisk >/dev/null || brew install bazelisk
+          # Compiled objects survive between runs, so a new Mozc rebuilds only what changed.
+          export MOZC_BAZEL_FLAGS="--disk_cache=$HOME/.cache/nrime-bazel-disk"
+          bash Tools/mozc/build.sh
+          bash Tools/mozc/package-component.sh
+
+      - name: Test with NRIME
+        if: steps.decide.outputs.build == 'true'
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+          xcodebuild -project NRIME.xcodeproj -scheme NRIME -configuration Debug test \
+            -only-testing:NRIMETests/MozcEmbeddedTests \
+            -only-testing:NRIMETests/MozcDownloadedEngineTests \
+            SYMROOT="$PWD/build/ci" CODE_SIGNING_ALLOWED=NO
+
+      - name: Publish
+        if: steps.decide.outputs.build == 'true'
+        run: |
+          TAG="$(cat build/mozc-component/TAG)"
+          TITLE="$(cat build/mozc-component/TITLE)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG is already published"
+            exit 0
+          fi
+          gh release create "$TAG" build/mozc-component/nrime-mozc.zip \
+            --prerelease --target "$GITHUB_SHA" --title "$TITLE" \
+            --notes "Mozc engine for NRIME, built from google/mozc@${{ steps.decide.outputs.commit }} (${{ steps.decide.outputs.reason }}). NRIME downloads it by itself and uses it from the next start of the input method; this is not an app release."

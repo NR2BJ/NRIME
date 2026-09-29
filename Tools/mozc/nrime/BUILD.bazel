@@ -1,12 +1,13 @@
 # NRIME's C API over Mozc. Tools/mozc/build.sh copies this folder into the
 # Mozc source tree as src/nrime and builds it there.
-load("@rules_cc//cc:cc_static_library.bzl", "cc_static_library")
-load("//:build_defs.bzl", "mozc_cc_library")
+load("//:build_defs.bzl", "mozc_cc_binary", "mozc_cc_library")
 
 mozc_cc_library(
     name = "nrime_mozc",
     srcs = ["nrime_mozc.cc"],
     hdrs = ["nrime_mozc.h"],
+    # Nothing in the library calls the API; keep it in the shared library.
+    alwayslink = True,
     deps = [
         "//base:system_util",
         "//base:version",
@@ -20,8 +21,22 @@ mozc_cc_library(
     ],
 )
 
-# The one static library the input method links: Mozc and everything it needs.
-cc_static_library(
-    name = "nrime_mozc_static",
+# The engine NRIME loads at run time — bundled in the app, or a newer one the
+# input method downloaded (built by .github/workflows/mozc-component.yml).
+# Only the C API is exported, so Mozc and its dependencies cannot clash with
+# anything else in the process.
+mozc_cc_binary(
+    name = "libnrime_mozc.dylib",
+    linkopts = [
+        "-Wl,-install_name,@rpath/libnrime_mozc.dylib",
+        "-Wl,-dead_strip",
+        "-Wl,-exported_symbol,_nrime_mozc_abi_version",
+        "-Wl,-exported_symbol,_nrime_mozc_new",
+        "-Wl,-exported_symbol,_nrime_mozc_free",
+        "-Wl,-exported_symbol,_nrime_mozc_eval",
+        "-Wl,-exported_symbol,_nrime_mozc_free_buffer",
+        "-Wl,-exported_symbol,_nrime_mozc_version",
+    ],
+    linkshared = True,
     deps = [":nrime_mozc"],
 )

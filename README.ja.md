@@ -243,6 +243,7 @@ Electron/Chromiumベースのアプリで、IME変換中にmodifier+key入力時
 日本語変換エンジンMozcは入力メソッドのプロセス内で動作します。Mozcを静的ライブラリとしてビルドしてNRIMEにリンクし（`Tools/mozc`）、変換コマンドはMozcのプロトコル（protobuf）を関数呼び出しでやり取りします。変換1回はおよそ1ミリ秒です。
 以前は `mozc_server` を別プロセスとして起動しMach IPCで通信していましたが、サーバーが固まったり再起動したりする間に入力が待たされる問題があり、2026年9月に組み込みへ変更しました。
 Mozcのバージョンは `Tools/mozc/MOZC_COMMIT` で固定し、ベータリリースごとに最新のupstreamコミットへ更新します（`Tools/mozc/update.sh` — ビルドとテストに通った場合のみ反映）。
+NRIMEの新バージョンがなくてもMozcは単独で更新されます。エンジンは実行時に読み込むライブラリ（`libnrime_mozc.dylib`）で、GitHub Actions（`.github/workflows/mozc-component.yml`）が毎週upstreamのバージョン・データの変更を確認してビルド・テストし、`mozc-<abi>-<日付>-<コミット>` のプレリリースとして公開します。入力メソッドが1日1回確認してダウンロードし（SHA-256で検証）、次回の起動時から使います。新しいエンジンが失敗した場合はアプリ内のエンジンに戻ります。
 
 </details>
 

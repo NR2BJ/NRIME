@@ -231,3 +231,10 @@
 "permissions.checkedAt" = "Last checked by the input method: %@";
 "permissions.recheck" = "Check again / Request";
 "permissions.openSettings" = "Open System Settings";
+
+/* Mozc updates */
+"mozc.pending" = "New Mozc %@ (%@) downloaded — used from the next input method start";
+"mozc.applyNow" = "Apply now";
+"mozc.applyNow.help" = "The input method quits for a moment and starts again with the new Mozc at the next key press.";
+"mozc.checkNow" = "Check for Mozc updates";
+"mozc.checkedAt" = "Last checked: %@";

@@ -24,6 +24,8 @@ struct NrimeMozc {
 
 extern "C" {
 
+int32_t nrime_mozc_abi_version(void) { return NRIME_MOZC_ABI_VERSION; }
+
 NrimeMozc* nrime_mozc_new(const char* data_path, const char* profile_dir) {
   if (data_path == nullptr || data_path[0] == '\0') return nullptr;
   if (profile_dir != nullptr && profile_dir[0] != '\0') {

@@ -70,11 +70,12 @@ fi
 # unsigned subcomponents like Contents/.syncthing.Info.plist.tmp
 find "$PKG_DIR/payload" -name ".syncthing.*" -delete
 
-# Mozc's dictionary data must ship with the app: without it the engine does
-# not start and Japanese conversion quietly does nothing.
+# The Mozc engine and its dictionary data must ship with the app: without them
+# Japanese conversion quietly does nothing.
 MOZC_DATA="$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Resources/mozc.data"
-if [ ! -s "$MOZC_DATA" ]; then
-    echo "ERROR: mozc.data missing from payload — Japanese conversion would not work"
+MOZC_LIB="$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Frameworks/libnrime_mozc.dylib"
+if [ ! -s "$MOZC_DATA" ] || [ ! -s "$MOZC_LIB" ]; then
+    echo "ERROR: Mozc (libnrime_mozc.dylib / mozc.data) missing from payload — Japanese conversion would not work"
     exit 1
 fi
 echo "Mozc: $(cat "$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Resources/MOZC_VERSION" 2>/dev/null || echo "version file missing")"
@@ -102,6 +103,9 @@ if [ -z "$SIGN_ID" ]; then
 fi
 echo "Signing apps with: $IDENTITY_NAME ($SIGN_ID)"
 find "$PKG_DIR/payload" -name "*.bundle" -exec codesign --force --sign "$SIGN_ID" --timestamp=none {} \;
+# Nested code first: the Mozc engine NRIME loads at run time.
+codesign --force --sign "$SIGN_ID" --timestamp=none \
+    "$PKG_DIR/payload/Library/Input Methods/NRIME.app/Contents/Frameworks/libnrime_mozc.dylib"
 codesign --force --sign "$SIGN_ID" --timestamp=none "$PKG_DIR/payload/Library/Input Methods/NRIME.app"
 codesign --force --sign "$SIGN_ID" --timestamp=none "$PKG_DIR/payload/Library/Input Methods/NRIMESettings.app"
 echo "Verifying signatures..."

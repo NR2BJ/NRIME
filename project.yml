@@ -55,8 +55,16 @@ targets:
         type: file
       - path: Shared/MozcNotifications.swift
         type: file
-      # Mozc's dictionary data. Built with the library by Tools/mozc/build.sh
-      # (build/ is git-ignored: run it once after cloning).
+      - path: Shared/MozcStatus.swift
+        type: file
+      # The Mozc engine, loaded at run time, and its dictionary data. Built by
+      # Tools/mozc/build.sh (build/ is git-ignored: run it once after cloning).
+      - path: build/mozc-out/lib/libnrime_mozc.dylib
+        buildPhase:
+          copyFiles:
+            destination: frameworks
+        type: file
+        optional: true
       - path: build/mozc-out/data/mozc.data
         buildPhase: resources
         type: file
@@ -75,11 +83,6 @@ targets:
         # LSUIElement is set in Info.plist (allows NSStatusItem + windows)
         PRODUCT_NAME: NRIME
         COMBINE_HIDPI_IMAGES: true
-        SWIFT_OBJC_BRIDGING_HEADER: NRIME/NRIME-Bridging-Header.h
-        # Mozc runs inside the input method: one static library with Mozc,
-        # its dependencies and NRIME's C API (Tools/mozc/build.sh).
-        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Tools/mozc/nrime
-        OTHER_LDFLAGS: $(PROJECT_DIR)/build/mozc-out/lib/libnrime_mozc.a -lc++
         # No @main — we use main.swift
         # Disable automatic code signing for input methods
         CODE_SIGN_IDENTITY: "-"
@@ -87,17 +90,15 @@ targets:
     postBuildScripts:
       - script: |
           chmod +x "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
-          if [ ! -f "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/mozc.data" ]; then
-            echo "warning: mozc.data missing — run Tools/mozc/build.sh; Japanese conversion will not work"
+          if [ ! -f "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/mozc.data" ] \
+             || [ ! -f "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libnrime_mozc.dylib" ]; then
+            echo "warning: Mozc missing — run Tools/mozc/build.sh; Japanese conversion will not work"
           fi
         name: "Fix executable permissions"
     dependencies:
       - framework: InputMethodKit.framework
         embed: false
       - sdk: Carbon.framework
-      # Mozc's macOS code uses these.
-      - sdk: IOKit.framework
-      - sdk: Security.framework
       - sdk: libsqlite3.tbd
       - package: SwiftProtobuf
 
@@ -125,6 +126,8 @@ targets:
       - path: Shared/UserDictionaryReading.swift
         type: file
       - path: Shared/MozcNotifications.swift
+        type: file
+      - path: Shared/MozcStatus.swift
         type: file
       - path: NRIME/Engine/Japanese/Proto/user_dictionary_storage.pb.swift
         type: file
@@ -188,8 +191,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nrime.inputmethod.app.tests
         GENERATE_INFOPLIST_FILE: true
-        # @testable import NRIME reads the app's bridging header again.
-        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Tools/mozc/nrime
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_ALLOWED: false
     dependencies:

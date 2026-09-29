@@ -17,10 +17,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         candidatePanel = CandidatePanel()
-        // Load Mozc now (7–20 ms) so the first conversion does not pay for it.
-        // Tests load it themselves, with a throwaway profile, when they need it.
+        // Load Mozc now (7–20 ms) so the first conversion does not pay for it,
+        // and look for a newer one from time to time. Tests load it
+        // themselves, with a throwaway profile, when they need it.
         if !AppGroupDefaults.isRunningTests {
             MozcEngine.shared.start()
+            MozcUpdater.shared.start()
         }
 
         InputSourceRecovery.shared.startMonitoring()

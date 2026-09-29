@@ -1,5 +1,6 @@
 /* NRIME's C API over Mozc: the conversion engine runs inside the input method
- * (no mozc_server, no IPC).
+ * (no mozc_server, no IPC), built as libnrime_mozc.dylib and loaded at run
+ * time, so a newer Mozc can replace it without a new NRIME.
  *
  * Commands are Mozc's own protocol — a serialized mozc.commands.Input in, a
  * serialized mozc.commands.Output back — so the Swift side builds and reads
@@ -17,6 +18,11 @@ extern "C" {
 #endif
 
 typedef struct NrimeMozc NrimeMozc;
+
+/* Version of this API. NRIME loads only a library whose version it knows;
+ * bump it whenever a function below changes. */
+#define NRIME_MOZC_ABI_VERSION 1
+int32_t nrime_mozc_abi_version(void);
 
 /* data_path: mozc.data. profile_dir: where learning and the user dictionary
  * live (NULL or "" for Mozc's default). Set once per process: Mozc keeps the

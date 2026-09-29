@@ -7,4 +7,11 @@ enum MozcNotifications {
     static let userDictionaryChanged = Notification.Name("com.nrime.inputmethod.mozc.userDictionaryChanged")
     /// Forget learned conversions and predictions.
     static let clearLearning = Notification.Name("com.nrime.inputmethod.mozc.clearLearning")
+    /// Look for a newer Mozc now instead of at the daily check.
+    static let checkForUpdate = Notification.Name("com.nrime.inputmethod.mozc.checkForUpdate")
+    /// Switch to the downloaded Mozc now: the input method saves and quits,
+    /// and macOS starts it again at the next key press.
+    static let applyUpdate = Notification.Name("com.nrime.inputmethod.mozc.applyUpdate")
+    /// MozcStatus changed in the App Group.
+    static let statusChanged = Notification.Name("com.nrime.inputmethod.mozc.statusChanged")
 }

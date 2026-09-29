@@ -231,3 +231,10 @@
 "permissions.checkedAt" = "入力メソッドの最終確認: %@";
 "permissions.recheck" = "再確認 / 権限を要求";
 "permissions.openSettings" = "システム設定を開く";
+
+/* Mozc updates */
+"mozc.pending" = "新しいMozc %@（%@）をダウンロード済み — 次に入力メソッドが起動したときに適用";
+"mozc.applyNow" = "今すぐ適用";
+"mozc.applyNow.help" = "入力メソッドが一度終了し、次にキーを押したときに新しいMozcで起動し直します。";
+"mozc.checkNow" = "Mozcのアップデートを確認";
+"mozc.checkedAt" = "最終確認: %@";

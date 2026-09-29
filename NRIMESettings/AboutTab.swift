@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct AboutTab: View {
@@ -5,16 +6,64 @@ struct AboutTab: View {
     @AppStorage("appLanguage") private var appLanguage: String = "ko"
     private let githubURL = "https://github.com/NR2BJ/NRIME"
     @StateObject private var updateManager = UpdateManager.shared
+    @State private var mozcStatus: MozcStatus?
 
-    /// The Mozc the input method carries: "Mozc <version> (<commit date>)",
-    /// from the MOZC_VERSION file Tools/mozc/build.sh writes into NRIME.app.
-    private static var mozcVersion: String? {
+    /// The Mozc bundled in NRIME.app ("Mozc <version> (<commit date>)"), for
+    /// when the input method has not published which one it runs.
+    private static var bundledMozcVersion: String? {
         let file = Bundle.main.bundleURL.deletingLastPathComponent()
             .appendingPathComponent("NRIME.app/Contents/Resources/MOZC_VERSION")
         guard let line = try? String(contentsOf: file, encoding: .utf8) else { return nil }
         let parts = line.split(separator: " ")
         guard parts.count >= 3 else { return nil }
         return "Mozc \(parts[2].trimmingCharacters(in: .whitespacesAndNewlines)) (\(parts[1]))"
+    }
+
+    /// Which Mozc the input method runs, a newer one waiting, and the check —
+    /// Mozc updates on its own, without a new NRIME (MozcUpdater).
+    private var mozcSection: some View {
+        VStack(spacing: 6) {
+            if let active = mozcStatus?.active {
+                Text(verbatim: "Mozc \(active.version) (\(active.date))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            } else if let bundled = Self.bundledMozcVersion {
+                Text(verbatim: bundled)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            if let pending = mozcStatus?.pending {
+                HStack(spacing: 8) {
+                    Text(String(format: L("mozc.pending"), pending.version, pending.date))
+                        .font(.caption)
+                    Button(L("mozc.applyNow")) {
+                        DistributedNotificationCenter.default().postNotificationName(
+                            MozcNotifications.applyUpdate, object: nil, userInfo: nil, deliverImmediately: true)
+                    }
+                    .controlSize(.small)
+                    .help(L("mozc.applyNow.help"))
+                }
+            }
+            HStack(spacing: 8) {
+                Button(L("mozc.checkNow")) {
+                    DistributedNotificationCenter.default().postNotificationName(
+                        MozcNotifications.checkForUpdate, object: nil, userInfo: nil, deliverImmediately: true)
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+                if let checked = mozcStatus?.checkedAt {
+                    Text(String(format: L("mozc.checkedAt"), checked.formatted(date: .abbreviated, time: .shortened)))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .onAppear { mozcStatus = MozcStatus.load(from: AppGroupDefaults.make()) }
+        .onReceive(DistributedNotificationCenter.default()
+            .publisher(for: MozcNotifications.statusChanged)
+            .receive(on: RunLoop.main)) { _ in
+            mozcStatus = MozcStatus.load(from: AppGroupDefaults.make())
+        }
     }
 
     var body: some View {
@@ -32,11 +81,7 @@ struct AboutTab: View {
                 .font(.body.monospacedDigit())
                 .foregroundStyle(.tertiary)
 
-            if let mozc = Self.mozcVersion {
-                Text(verbatim: mozc)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
+            mozcSection
 
             Divider()
                 .frame(maxWidth: 200)

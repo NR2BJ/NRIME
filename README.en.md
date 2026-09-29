@@ -243,6 +243,7 @@ Explains the root cause and fix for text loss when pressing modifier+key during 
 The Mozc conversion engine runs inside the input method: Mozc is built as a static library and linked into NRIME (`Tools/mozc`), and conversion commands pass Mozc's own protocol (protobuf) through function calls. A conversion takes about a millisecond.
 NRIME used to launch `mozc_server` as a separate process and talk to it over Mach IPC; typing waited whenever the server hung or restarted, so it was embedded in 2026-09.
 The Mozc commit is pinned in `Tools/mozc/MOZC_COMMIT` and moved to the latest upstream commit for every beta release (`Tools/mozc/update.sh`, which keeps the update only if it builds and the tests pass).
+Mozc also updates without a new NRIME. The engine is a library loaded at run time (`libnrime_mozc.dylib`); GitHub Actions (`.github/workflows/mozc-component.yml`) checks upstream every week for a new version or data, builds and tests it, and publishes it as a `mozc-<abi>-<date>-<commit>` prerelease. The input method checks daily, downloads it (verified by SHA-256) and uses it from its next start, falling back to the engine in the app if the new one fails.
 
 </details>
 
