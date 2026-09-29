@@ -730,7 +730,15 @@ class NRIMEInputController: IMKInputController {
             // client. self.client() can be nil around activation changes, and
             // treating that as "no switch" silently dropped the user's tap —
             // the mode is global and never needed a client to change.
-            let client = self.resolvedClient() ?? (self.cachedClient as? (any IMKTextInput))
+            let proxy = self.resolvedClient()
+            let client = proxy ?? (self.cachedClient as? (any IMKTextInput))
+            if proxy == nil {
+                // Nothing shows this happens during handle(); record it if it does.
+                self.logControllerEvent("shortcutAction.clientFallback", client: client, extra: [
+                    "action": String(describing: action),
+                    "hasEventClient": "\(client != nil)"
+                ])
+            }
             let previousMode = StateManager.shared.currentMode
 
             switch action {
