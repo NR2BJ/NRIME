@@ -32,6 +32,8 @@ final class InputSourceRecovery {
     private var secureInputTimer: Timer?
     private var sourceBeforeSecureInput: String?
     private var steppedAsideAt: Date?
+    /// Authentication-UI claim the cap already gave up on (see checkSecureInput).
+    private var abandonedClaimPID: pid_t?
     private var _userInitiatedSwitch = false
     private var _userInitiatedSwitchExpiresAt: Date?
     private var _consecutiveRecoveries = 0
@@ -260,9 +262,14 @@ final class InputSourceRecovery {
     }
 
     private func checkSecureInput() {
+        let holder = secureInputDetector.authenticationUIHolderPID()
+        if abandonedClaimPID != holder {
+            abandonedClaimPID = nil
+        }
         let action = Self.secureInputAction(
             fallbackEnabled: Settings.shared.secureInputASCIIFallback,
-            heldByAuthenticationUI: secureInputDetector.secureInputHeldByAuthenticationUI(),
+            heldByAuthenticationUI: holder != nil,
+            claimAbandoned: holder != nil && holder == abandonedClaimPID,
             currentSourceID: InputSourceSelector.currentInputSourceID(),
             rememberedSourceID: sourceBeforeSecureInput,
             secondsSinceSteppedAside: steppedAsideAt.map { Date().timeIntervalSince($0) }
@@ -282,6 +289,12 @@ final class InputSourceRecovery {
         case .restore(let sourceID):
             sourceBeforeSecureInput = nil
             steppedAsideAt = nil
+            // Coming back while the same claim is still up means the cap ran
+            // out (or the setting was switched off). Stepping aside again on
+            // the next tick would park the user on ASCII indefinitely — 20s
+            // away, a quarter second back, repeat — so leave this claim alone
+            // until it ends or a different process takes over.
+            abandonedClaimPID = holder
             userInitiatedSwitch = false
             let result = InputSourceSelector.select(sourceID: sourceID)
             DeveloperLogger.shared.log("InputSourceRecovery", "Restored input source", metadata: [
@@ -316,6 +329,7 @@ final class InputSourceRecovery {
     static func secureInputAction(
         fallbackEnabled: Bool,
         heldByAuthenticationUI: Bool,
+        claimAbandoned: Bool = false,
         currentSourceID: String?,
         rememberedSourceID: String?,
         secondsSinceSteppedAside: TimeInterval?,
@@ -329,7 +343,7 @@ final class InputSourceRecovery {
             return .none
         }
 
-        guard fallbackEnabled, heldByAuthenticationUI,
+        guard fallbackEnabled, heldByAuthenticationUI, !claimAbandoned,
               let currentSourceID,
               currentSourceID.hasPrefix(InputSourceSelector.bundleID) else { return .none }
         return .switchToASCII(remembering: currentSourceID)

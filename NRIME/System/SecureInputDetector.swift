@@ -140,6 +140,18 @@ final class SecureInputDetector {
         return status.isActive && status.holderIsLive && status.holderIsAuthenticationUI
     }
 
+    /// The live authentication UI process holding secure input, if that is
+    /// who holds it. Identifies the claim itself, so a caller can tell "the
+    /// same stuck claim as before" from "a new prompt".
+    func authenticationUIHolderPID() -> pid_t? {
+        guard isSecureInputActive(),
+              let pid = secureInputHolderPID(),
+              Self.processIsAlive(pid),
+              let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+              Self.authenticationBundleIDs.contains(bundleID) else { return nil }
+        return pid
+    }
+
     /// Bundle IDs of the system authentication UI.
     ///
     /// The secure-input flag can lag the panel actually appearing — measured at

@@ -7,13 +7,13 @@ struct HanjaSelectionEntry: Codable, Equatable {
 
 final class HanjaSelectionStore {
     static let defaultsKey = "hanjaSelectionMemory"
-    static let suiteName = "group.com.nrime.inputmethod"
+    static let suiteName = AppGroupDefaults.suiteName
 
     private let defaults: UserDefaults
     private let maxEntries: Int
 
     init(defaults: UserDefaults? = nil, maxEntries: Int = 200) {
-        self.defaults = defaults ?? (UserDefaults(suiteName: Self.suiteName) ?? UserDefaults.standard)
+        self.defaults = defaults ?? AppGroupDefaults.make()
         self.maxEntries = maxEntries
     }
 

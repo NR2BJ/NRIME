@@ -58,6 +58,10 @@ final class ShortcutHandler {
     // promoted to taps.
     private var activeModifierKeyCode: UInt16?   // which modifier key is currently held
     private var modifierWasUsedAsCombo = false
+    /// The other key of the same pair (the other Shift) was down when the
+    /// tracked one was pressed. Cleared if it lets go quickly enough to be
+    /// rollover rather than a chord.
+    private var twinHeldAtPress = false
     private var previousModifierFlags: NSEvent.ModifierFlags = []
 
     // Double-Shift tracking for Caps Lock toggle
@@ -91,6 +95,7 @@ final class ShortcutHandler {
         modifierDownEventTimestamp = nil
         activeModifierKeyCode = nil
         modifierWasUsedAsCombo = false
+        twinHeldAtPress = false
         previousModifierFlags = []
     }
 
@@ -145,7 +150,14 @@ final class ShortcutHandler {
         let wasDown: Bool
         if let sides, sideInfoAvailable {
             isNowDown = (newFlags.rawValue & sides.requiredSide) != 0
-            wasDown = (oldFlags.rawValue & sides.requiredSide) != 0
+            // A flagsChanged event names the key that changed, so with side
+            // bits the event alone says which way it went. Comparing with the
+            // last flags this controller saw instead breaks once a release is
+            // delivered elsewhere (focus moved mid-press — IMKit keeps one
+            // controller per client): the next press then looks like "still
+            // down", its release is timed from the stale press, reads as a
+            // hold, and the tap is lost.
+            wasDown = !isNowDown
         } else {
             isNowDown = newFlags.contains(flag)
             wasDown = oldFlags.contains(flag)
@@ -162,16 +174,36 @@ final class ShortcutHandler {
             // A gesture that starts with something else already held is a chord,
             // not a solo tap, and must not clear the flag that says so —
             // otherwise Command+Shift, released without a letter, switches the
-            // language. This includes the twin key of the same family: holding
-            // one Shift and tapping the other is not a solo tap either.
+            // language. The twin key of the same family counts too, unless it
+            // turns out to be a rollover (see the twin release below).
+            // Read the twin from this event, not from remembered flags, for the
+            // same reason as above: a release this controller never saw would
+            // otherwise mark every later tap of the other side as a chord.
             let twinAlreadyDown = sides.map {
-                (oldFlags.rawValue & ($0.eitherSide & ~$0.requiredSide)) != 0
+                (newFlags.rawValue & ($0.eitherSide & ~$0.requiredSide)) != 0
             } ?? false
             activeModifierKeyCode = keyCode
             modifierDownEventTimestamp = event.timestamp
             modifierWasUsedAsCombo = Self.otherModifiersPresent(newFlags, excluding: flag)
-                || twinAlreadyDown
+            twinHeldAtPress = twinAlreadyDown
             return false // Don't consume yet
+        }
+
+        // The twin of the tracked key coming up. Typing ㅆ or a capital with one
+        // Shift and tapping the other to switch overlaps the two briefly; if
+        // the first one lets go right after the second went down, that is
+        // rollover and the tap still counts. A twin held longer than that was
+        // deliberately held with it — a chord.
+        if !isNowDown, twinHeldAtPress,
+           let active = activeModifierKeyCode, active != keyCode,
+           let sides, Self.deviceModifierMasks(for: active)?.eitherSide == sides.eitherSide,
+           let downTimestamp = modifierDownEventTimestamp {
+            if event.timestamp - downTimestamp < Settings.shared.tapOverlapWindow {
+                twinHeldAtPress = false
+            } else {
+                modifierWasUsedAsCombo = true
+            }
+            return false
         }
 
         // Release while a letter is buffered: the overlap between letter-down and
@@ -209,7 +241,8 @@ final class ShortcutHandler {
             // not a solo tap.
             let otherStillHeld = Self.otherModifiersPresent(newFlags, excluding: flag)
 
-            if !modifierWasUsedAsCombo && !otherStillHeld && elapsed < Settings.shared.tapThreshold {
+            if !modifierWasUsedAsCombo && !twinHeldAtPress && !otherStillHeld
+                && elapsed < Settings.shared.tapThreshold {
                 // Double-Shift tap → toggle Caps Lock (only for shift keys NOT registered as shortcuts)
                 let isShiftKey = (keyCode == ShortcutConfig.keyCodeLeftShift ||
                                   keyCode == ShortcutConfig.keyCodeRightShift)

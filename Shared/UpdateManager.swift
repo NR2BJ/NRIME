@@ -102,7 +102,7 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
     static let shared = UpdateManager()
 
     private static let repoURL = "https://api.github.com/repos/NR2BJ/NRIME/releases"
-    private static let suiteName = "group.com.nrime.inputmethod"
+    private static let suiteName = AppGroupDefaults.suiteName
     private static let lastCheckKey = "UpdateLastCheckTime"
     private static let channelKey = "UpdateChannel"
     private static let checkInterval: TimeInterval = 24 * 60 * 60  // 24 hours
@@ -127,7 +127,7 @@ final class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegat
     }()
 
     private var defaults: UserDefaults? {
-        UserDefaults(suiteName: Self.suiteName) ?? UserDefaults.standard
+        AppGroupDefaults.make()
     }
 
     var currentVersion: String {

@@ -5,7 +5,7 @@ import Cocoa
 final class Settings {
     static let shared = Settings()
 
-    static let suiteName = "group.com.nrime.inputmethod"
+    static let suiteName = AppGroupDefaults.suiteName
 
     private let defaults: UserDefaults
 
@@ -17,7 +17,7 @@ final class Settings {
     private var defaultsObserver: NSObjectProtocol?
 
     private init() {
-        defaults = UserDefaults(suiteName: Settings.suiteName) ?? UserDefaults.standard
+        defaults = AppGroupDefaults.make()
 
         // Invalidate cache when UserDefaults change (e.g., companion app saved settings)
         defaultsObserver = NotificationCenter.default.addObserver(

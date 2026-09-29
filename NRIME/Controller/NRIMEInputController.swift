@@ -100,6 +100,11 @@ class NRIMEInputController: IMKInputController {
         }
         if suppress
             || secureInputDetector.isAuthenticationClient(client.bundleIdentifier()) {
+            // The key still goes to the field, and the shortcut handler must
+            // know a key was pressed: otherwise Shift+letter in a password
+            // reads as a solo Shift tap and switches the language mid-password
+            // (logged in 1Password: two toggles within two seconds of typing).
+            shortcutHandler.observeConsumedKeyDown(event)
             return false
         }
 
@@ -720,10 +725,12 @@ class NRIMEInputController: IMKInputController {
         }
 
         shortcutHandler.onAction = { [weak self] action in
-            guard let self = self,
-                  let client = self.resolvedClient() else {
-                return false
-            }
+            guard let self = self else { return false }
+            // Actions run inside handle(), which just recorded the event's own
+            // client. self.client() can be nil around activation changes, and
+            // treating that as "no switch" silently dropped the user's tap —
+            // the mode is global and never needed a client to change.
+            let client = self.resolvedClient() ?? (self.cachedClient as? (any IMKTextInput))
             let previousMode = StateManager.shared.currentMode
 
             switch action {
@@ -734,7 +741,7 @@ class NRIMEInputController: IMKInputController {
                 // and committing there types the previous field's characters
                 // into a password box. Leave it pending instead — it still
                 // commits when a normal field is focused again.
-                if self.canCommitText(to: client) {
+                if let client, self.canCommitText(to: client) {
                     self.endKoreanCandidateSession(client: client)
                     if previousMode == .korean {
                         self.koreanEngine.forceCommit(client: client)
@@ -759,7 +766,8 @@ class NRIMEInputController: IMKInputController {
             case .hanjaConvert:
                 // Unlike a mode switch, this reads the selection and inserts
                 // text, so it stays behind the suppression check.
-                guard !self.secureInputDetector.shouldSuppressComposition() else { return false }
+                guard let client,
+                      !self.secureInputDetector.shouldSuppressComposition() else { return false }
                 if StateManager.shared.currentMode == .korean {
                     return self.koreanEngine.triggerHanjaConversion(client: client)
                 }
