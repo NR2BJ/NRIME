@@ -125,9 +125,9 @@ final class SettingsStore: ObservableObject {
     private static func loadJapaneseKeyConfig(from defaults: UserDefaults) -> JapaneseKeyConfig {
         guard let data = defaults.data(forKey: "japaneseKeyConfig"),
               let config = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
-            return JapaneseKeyConfig.default.withRetiredOptionsOff()
+            return .default
         }
-        return config.withRetiredOptionsOff()
+        return config
     }
 
     private func saveJapaneseKeyConfig() {
@@ -205,5 +205,5 @@ final class SettingsStore: ObservableObject {
     }
 }
 
-// ShortcutConfig, JapaneseKeyConfig, CapsLockAction, ShiftKeyAction, PunctuationStyle
+// ShortcutConfig, JapaneseKeyConfig, CapsLockAction, PunctuationStyle
 // are defined in Shared/SettingsModels.swift (shared between NRIME and NRIMESettings targets)

@@ -18,6 +18,8 @@ final class SettingsSimplificationTests: XCTestCase {
         Settings.shared.japaneseKeyConfig = originalConfig
         KeyEventReposter.captureForTesting = nil
         KeyEventReposter.postEventAccessForTesting = nil
+        MozcClient.responderForTesting = nil
+        MozcServerManager.shared.reachableForTesting = nil
         for key in ["shortcut_switchKorean", "shortcut_switchJapanese", "shiftDoubleTapEnabled"] {
             testing.removeObject(forKey: key)
         }
@@ -33,42 +35,30 @@ final class SettingsSimplificationTests: XCTestCase {
 
     // MARK: - Japanese options
 
-    func testRetiredJapaneseOptionsStayOffWhateverIsStored() throws {
-        var stored = JapaneseKeyConfig.default
-        stored.prediction = true
-        stored.liveConversion = true
-        stored.shiftKeyAction = .katakana
-        stored.conversionTriggerDownArrow = true
-        stored.hiraganaKeyCode = 0x61
-        stored.fullKatakanaKeyCode = 0x62
-        stored.halfKatakanaKeyCode = 0x64
-        stored.fullRomajiKeyCode = 0x65
-        stored.halfRomajiKeyCode = 0x6D
-        stored.punctuationStyle = .fullWidthWestern
-        testing.set(try JSONEncoder().encode(stored), forKey: "japaneseKeyConfig")
+    func testSettingsStoredByOlderVersionsStillLoad() throws {
+        // A configuration written before the removal still carries the
+        // removed keys; they are ignored and the kept settings survive.
+        let legacy = """
+        {"hiraganaKeyCode":97,"fullKatakanaKeyCode":98,"halfKatakanaKeyCode":100,
+         "fullRomajiKeyCode":101,"halfRomajiKeyCode":109,"capsLockAction":"katakana",
+         "shiftKeyAction":"romaji","punctuationStyle":"fullWidthWestern","slashToNakaguro":true,
+         "yenKeyToYen":true,"fullWidthSpace":true,"liveConversion":true,"prediction":true,
+         "candidateFontSize":16,"conversionTriggerSpace":true,"conversionTriggerTab":false,
+         "conversionTriggerDownArrow":true}
+        """
+        testing.set(Data(legacy.utf8), forKey: "japaneseKeyConfig")
         Settings.shared.reloadJapaneseKeyConfig()
 
         let config = Settings.shared.japaneseKeyConfig
-        XCTAssertFalse(config.prediction)
-        XCTAssertFalse(config.liveConversion)
-        XCTAssertEqual(config.shiftKeyAction, .none)
-        XCTAssertFalse(config.conversionTriggerDownArrow)
-        XCTAssertNil(config.hiraganaKeyCode)
-        XCTAssertNil(config.fullKatakanaKeyCode)
-        XCTAssertNil(config.halfKatakanaKeyCode)
-        XCTAssertNil(config.fullRomajiKeyCode)
-        XCTAssertNil(config.halfRomajiKeyCode)
-        XCTAssertEqual(config.punctuationStyle, .fullWidthWestern, "Kept settings are untouched")
-    }
-
-    func testDefaultsAlreadyHaveTheRetiredOptionsOff() {
-        XCTAssertEqual(JapaneseKeyConfig.default, JapaneseKeyConfig.default.withRetiredOptionsOff())
+        XCTAssertEqual(config.capsLockAction, .katakana)
+        XCTAssertEqual(config.punctuationStyle, .fullWidthWestern)
+        XCTAssertTrue(config.fullWidthSpace)
+        XCTAssertEqual(config.candidateFontSize, 16)
+        XCTAssertFalse(config.conversionTriggerTab)
     }
 
     func testDownArrowCommitsInsteadOfConverting() {
-        var config = JapaneseKeyConfig.default
-        config.conversionTriggerDownArrow = true // stored by an older version
-        Settings.shared.japaneseKeyConfig = config
+        Settings.shared.japaneseKeyConfig = .default
         let engine = JapaneseEngine()
         let client = MockTextInputClient()
 
@@ -79,6 +69,115 @@ final class SettingsSimplificationTests: XCTestCase {
         XCTAssertFalse(handled, "↓ passes through to the app")
         XCTAssertEqual(client.insertedTexts, ["か"], "…after committing what was typed")
         XCTAssertFalse(engine.isInConversionState)
+    }
+
+    func testConversionDoesNotWaitForAnUnreachableServer() {
+        MozcServerManager.shared.reachableForTesting = false
+        defer { MozcServerManager.shared.reachableForTesting = nil }
+        Settings.shared.japaneseKeyConfig = .default
+        let engine = JapaneseEngine()
+        let client = MockTextInputClient()
+        XCTAssertTrue(engine.handleEvent(key(0x28), client: client)) // k
+        XCTAssertTrue(engine.handleEvent(key(0x00), client: client)) // a → か
+
+        let start = Date()
+        XCTAssertTrue(engine.handleEvent(key(0x31, characters: " "), client: client)) // Space
+
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.1, "Nothing waits for the server")
+        XCTAssertEqual(client.insertedTexts, [], "Nothing is committed…")
+        XCTAssertEqual(client.markedString, "か", "…the reading stays, so Space converts once Mozc is back")
+        XCTAssertFalse(engine.isInConversionState)
+    }
+
+    /// An engine showing 日本語 converted from にほんご.
+    private func engineConvertingNihongo() -> JapaneseEngine {
+        let engine = JapaneseEngine()
+        var output = Mozc_Commands_Output()
+        var preedit = Mozc_Commands_Preedit()
+        preedit.segment = ["日本", "語"].map { value in
+            var segment = Mozc_Commands_Preedit.Segment()
+            segment.value = value
+            return segment
+        }
+        output.preedit = preedit
+        engine.mozcConverter.prepareForConversion(hiragana: "にほんご")
+        _ = engine.mozcConverter.updateFromOutput(output)
+        engine.markConvertingForTesting()
+        return engine
+    }
+
+    private func drainMainQueue() {
+        let drained = expectation(description: "main queue")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 1)
+    }
+
+    func testModeSwitchDuringConversionCommitsWhatIsOnScreenAtOnce() {
+        Settings.shared.japaneseKeyConfig = .default
+        let engine = engineConvertingNihongo()
+        let client = MockTextInputClient()
+        var deferredSubmits: [Bool] = []
+        engine.mozcConverter.deferredSubmitForTesting = { deferredSubmits.append($0) }
+
+        let start = Date()
+        engine.forceCommit(client: client)
+
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.1)
+        XCTAssertEqual(client.insertedTexts, ["日本語"])
+        XCTAssertFalse(engine.isInConversionState)
+        XCTAssertFalse(engine.mozcConverter.isConverting,
+                       "Nothing is left for a following reset to cancel — that would ask Mozc again")
+        XCTAssertEqual(deferredSubmits, [], "Mozc is told afterwards…")
+        drainMainQueue()
+        XCTAssertEqual(deferredSubmits, [true], "…so it still learns the choice")
+    }
+
+    func testDeferredSubmitLeavesTheNextConversionAlone() {
+        MozcServerManager.shared.reachableForTesting = false
+        let engine = engineConvertingNihongo()
+        var deferredSubmits: [Bool] = []
+        engine.mozcConverter.deferredSubmitForTesting = { deferredSubmits.append($0) }
+
+        engine.forceCommit(client: MockTextInputClient())
+        // A new reading reaches Mozc before the deferred submit runs; Mozc ends
+        // the old conversion itself, and submitting now would end the new one.
+        _ = engine.mozcConverter.feedHiragana("か")
+        drainMainQueue()
+
+        XCTAssertEqual(deferredSubmits, [false])
+    }
+
+    func testConfirmedWordSurvivesAnAnswerWithoutResult() {
+        // After a server restart the session is stale: Mozc answers the submit
+        // with an error and no result. The word on screen is still committed,
+        // not the reading it was converted from.
+        MozcClient.responderForTesting = { input in
+            var output = Mozc_Commands_Output()
+            switch input.type {
+            case .createSession:
+                output.id = 1
+            case .sendCommand:
+                output.errorCode = .sessionFailure
+            default:
+                break
+            }
+            return output
+        }
+        let engine = engineConvertingNihongo()
+
+        XCTAssertEqual(engine.mozcConverter.commit(), "日本語")
+        XCTAssertFalse(engine.mozcConverter.isConverting)
+    }
+
+    func testConfirmedWordSurvivesNoAnswer() {
+        // Nothing answers under tests unless a responder is set.
+        XCTAssertEqual(engineConvertingNihongo().mozcConverter.commit(), "日本語")
+        XCTAssertEqual(engineConvertingNihongo().mozcConverter.commit(fallback: "二本後"), "二本後",
+                       "The candidate panel's selection, when given, is committed instead")
+    }
+
+    func testTheInputMethodStartsInKorean() {
+        XCTAssertEqual(StateManager.initialMode, .korean)
     }
 
     // MARK: - Shortcuts

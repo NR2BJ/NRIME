@@ -48,15 +48,27 @@ class NRIMEInputController: IMKInputController {
               let client = sender as? (any IMKTextInput) else {
             return false
         }
+        let start = ProcessInfo.processInfo.systemUptime
+        let modeBefore = StateManager.shared.currentMode
+        var trace = EventTrace()
+        let consumed = process(event, client: client, trace: &trace)
+        logEventTrace(event, start: start, modeBefore: modeBefore, consumed: consumed, trace: trace)
+        return consumed
+    }
 
+    /// Which path `process` took for an event — for the developer log only.
+    private struct EventTrace {
+        var path = "engine"
+        var sensitive = false
+    }
+
+    private func process(_ event: NSEvent, client: any IMKTextInput, trace: inout EventTrace) -> Bool {
         // 0. Re-posted events: immediately pass through to the host app.
         //    KeyEventReposter tags synthetic CGEvents so we don't re-intercept them.
         if let cgEvent = event.cgEvent {
             let userData = cgEvent.getIntegerValueField(.eventSourceUserData)
             if userData == KeyEventReposter.repostTag {
-                DeveloperLogger.shared.log("Controller", "repost tag DETECTED → returning false", metadata: [
-                    "keyCode": String(format: "0x%02X", event.keyCode)
-                ])
+                trace.path = "repost"
                 return false
             }
         } else if event.type == .keyDown {
@@ -65,17 +77,6 @@ class NRIMEInputController: IMKInputController {
                 "keyCode": String(format: "0x%02X", event.keyCode),
                 "type": "\(event.type.rawValue)"
             ])
-        }
-
-        // Developer log: how late this event reached us and how long we held
-        // the thread with it (see logHandleTiming).
-        let handleStart = ProcessInfo.processInfo.systemUptime
-        var consumedByShortcut = false
-        var suppressedForSecureInput = false
-        defer {
-            logHandleTiming(event, start: handleStart,
-                            consumedByShortcut: consumedByShortcut,
-                            suppressed: suppressedForSecureInput)
         }
 
         // Cache client for the global mouse monitor callback.
@@ -102,7 +103,7 @@ class NRIMEInputController: IMKInputController {
                 wireUpShortcutHandler()
             }
             if shortcutHandler.handleEvent(event) {
-                consumedByShortcut = true
+                trace.path = "shortcut"
                 return true
             }
         }
@@ -118,14 +119,17 @@ class NRIMEInputController: IMKInputController {
                 "holder": secureInputDetector.secureInputHolderBundleID() ?? "unknown"
             ])
         }
+        // The bundle ID was read when this client activated; asking the host
+        // app again here cost a round trip on every keystroke.
         if suppress
-            || secureInputDetector.isAuthenticationClient(client.bundleIdentifier()) {
+            || secureInputDetector.isAuthenticationClient(activeBundleID ?? client.bundleIdentifier()) {
             // The key still goes to the field, and the shortcut handler must
             // know a key was pressed: otherwise Shift+letter in a password
             // reads as a solo Shift tap and switches the language mid-password
             // (logged in 1Password: two toggles within two seconds of typing).
             shortcutHandler.observeConsumedKeyDown(event)
-            suppressedForSecureInput = true
+            trace.path = "secure"
+            trace.sensitive = true
             return false
         }
 
@@ -152,12 +156,14 @@ class NRIMEInputController: IMKInputController {
         // 2. Japanese conversion state: Mozc manages ALL key handling (including candidates)
         if mode == .japanese && japaneseEngine.isInConversionState {
             shortcutHandler.observeConsumedKeyDown(event)
+            trace.path = "conversion"
             return handleJapaneseConversion(event, client: client)
         }
 
         // 3. Candidate panel navigation (Korean hanja only at this point)
         if let panel = NSApp.candidatePanel, panel.isVisible() {
             shortcutHandler.observeConsumedKeyDown(event)
+            trace.path = "candidates"
             return handleCandidateNavigation(event, client: client, panel: panel)
         }
 
@@ -170,25 +176,6 @@ class NRIMEInputController: IMKInputController {
     private func handleJapaneseConversion(_ event: NSEvent, client: any IMKTextInput) -> Bool {
         guard event.type == .keyDown else {
             return japaneseEngine.handleEvent(event, client: client)
-        }
-
-        // Prediction state: let the engine handle all key events directly.
-        // The engine's handlePredictionEvent manages Tab (select), numbers, arrows, etc.
-        if japaneseEngine.showingPrediction {
-            let handled = japaneseEngine.handleEvent(event, client: client)
-            // Update candidate panel from engine's current state
-            if let panel = NSApp.candidatePanel {
-                let candidates = japaneseEngine.candidateDisplayStrings
-                if !candidates.isEmpty
-                    && japaneseEngine.isInConversionState {
-                    panel.show(candidates: candidates,
-                               selectedIndex: japaneseEngine.mozcConverter.currentFocusedIndex,
-                               client: client)
-                } else if panel.isVisible() {
-                    panel.hide()
-                }
-            }
-            return handled
         }
 
         // Number keys 1-9: select candidate and commit the segment
@@ -281,14 +268,9 @@ class NRIMEInputController: IMKInputController {
                     _ = japaneseEngine.mozcConverter.highlightCandidateByIndex(candidateIndex)
                 }
                 let replacementRange = NSRange(location: NSNotFound, length: NSNotFound)
-                // submit() is a single unretried IPC call — on failure fall back to
-                // the on-screen preedit (then the original hiragana) instead of
-                // silently dropping the word the user explicitly confirmed.
-                if let text = japaneseEngine.mozcConverter.submit()
-                    ?? JapaneseEngine.conversionFallbackText(
-                        preedit: japaneseEngine.mozcConverter.currentPreedit,
-                        originalHiragana: japaneseEngine.mozcConverter.originalHiragana
-                    ) {
+                // Falls back to what is on screen when Mozc gives no result,
+                // rather than dropping the word the user explicitly confirmed.
+                if let text = japaneseEngine.mozcConverter.commit() {
                     client.insertText(text as NSString, replacementRange: replacementRange)
                 }
                 japaneseEngine.exitConversionState()
@@ -460,7 +442,7 @@ class NRIMEInputController: IMKInputController {
     }
 
     /// Select the currently highlighted candidate and commit.
-    /// For Japanese: uses Mozc submit() to properly commit multi-segment conversion.
+    /// For Japanese: submits through Mozc to properly commit multi-segment conversion.
     /// For Korean: commits hanja text directly.
     private func selectCurrentCandidate(client: any IMKTextInput, panel: CandidatePanel) {
         guard let selectedText = panel.currentSelection() else {
@@ -472,14 +454,12 @@ class NRIMEInputController: IMKInputController {
 
         switch StateManager.shared.currentMode {
         case .japanese:
-            // Submit through Mozc to properly handle multi-segment state.
+            // Submit through Mozc to properly handle multi-segment state, or
+            // commit the panel's selection when Mozc gives no result.
             // This is a fallback path — normal Japanese candidate selection goes
             // through handleJapaneseConversion() using SELECT_CANDIDATE.
-            if let text = japaneseEngine.mozcConverter.submit() {
+            if let text = japaneseEngine.mozcConverter.commit(fallback: selectedText) {
                 client.insertText(text as NSString, replacementRange: replacementRange)
-            } else {
-                // Fallback: use panel's selected text if Mozc submit fails
-                client.insertText(selectedText as NSString, replacementRange: replacementRange)
             }
             japaneseEngine.exitConversionState()
 
@@ -858,33 +838,49 @@ class NRIMEInputController: IMKInputController {
         DeveloperLogger.shared.log("Controller", event, metadata: metadata)
     }
 
-    /// Developer log only. `lag`: how long after the key physically moved this
-    /// handler started — host app and IMKit delivery plus anything queued ahead
-    /// of it on this thread. `cost`: how long this handler then held the thread.
-    /// Both on the NSEvent.timestamp clock. Logged for every event a shortcut
-    /// consumed, and for any event slow either way. Only the kind of key is
-    /// recorded, and nothing at all while secure input suppresses composition.
-    private func logHandleTiming(_ event: NSEvent, start: TimeInterval,
-                                 consumedByShortcut: Bool, suppressed: Bool) {
-        guard !suppressed, DeveloperLogger.shared.isEnabled else { return }
-        // Inside a password or authentication field, only a consumed shortcut
-        // is logged: a slow Shift press there would record when a capital was typed.
-        if !consumedByShortcut, isInSensitiveField() { return }
-        let lag = start - event.timestamp
-        let cost = ProcessInfo.processInfo.systemUptime - start
-        guard event.timestamp > 0, lag >= 0, lag < 10 else { return }
-        guard consumedByShortcut || lag >= Self.slowEventThreshold || cost >= Self.slowEventThreshold else {
+    /// Developer log: one line per key event, so a lost or late switch can be
+    /// reconstructed afterwards from what actually arrived and what it did.
+    /// The owner allowed recording keys; inside a password or authentication
+    /// field only a mode change is recorded, without key timing.
+    /// `lagMs`: how long after the key physically moved this handler started —
+    /// host app and IMKit delivery plus anything queued ahead on this thread.
+    /// `costMs`: how long this handler then took. Both on the NSEvent.timestamp clock.
+    private func logEventTrace(_ event: NSEvent, start: TimeInterval, modeBefore: InputMode,
+                               consumed: Bool, trace: EventTrace) {
+        guard DeveloperLogger.shared.isEnabled else { return }
+        let modeAfter = StateManager.shared.currentMode
+        let mode = modeAfter == modeBefore ? modeAfter.label : "\(modeBefore.label)→\(modeAfter.label)"
+        let isFlags = event.type == .flagsChanged
+
+        if trace.sensitive || isInSensitiveField() {
+            guard modeAfter != modeBefore else { return }
+            DeveloperLogger.shared.log("Key", isFlags ? "flags" : "down", metadata: [
+                "path": trace.path, "mode": mode, "secure": "Y",
+                "ctl": String(shortcutHandler.diagID),
+            ])
             return
         }
-        DeveloperLogger.shared.log("Timing", "handle", metadata: [
-            "event": Self.eventKind(event),
-            "lagMs": String(format: "%.1f", lag * 1000),
-            "costMs": String(format: "%.1f", cost * 1000),
-            "shortcut": consumedByShortcut ? "Y" : "N",
-            "mode": StateManager.shared.currentMode.label,
-            "bundleID": activeBundleID ?? "unknown",
+
+        var metadata = [
+            "key": String(format: "0x%02X", event.keyCode),
+            "flags": String(format: "0x%X", event.modifierFlags.rawValue),
+            "ts": String(format: "%.3f", event.timestamp),
+            "consumed": consumed ? "Y" : "N",
+            "path": trace.path,
+            "mode": mode,
             "ctl": String(shortcutHandler.diagID),
-        ])
+            "bundleID": activeBundleID ?? "unknown",
+            "costMs": String(format: "%.1f", (ProcessInfo.processInfo.systemUptime - start) * 1000),
+        ]
+        let lag = start - event.timestamp
+        if event.timestamp > 0, lag >= 0, lag < 10 {
+            metadata["lagMs"] = String(format: "%.1f", lag * 1000)
+        }
+        // isARepeat is only valid for key events; flagsChanged would throw.
+        if !isFlags, event.isARepeat {
+            metadata["repeat"] = "Y"
+        }
+        DeveloperLogger.shared.log("Key", isFlags ? "flags" : "down", metadata: metadata)
     }
 
     /// For log redaction only: secure input is on, or this controller's client
@@ -892,20 +888,6 @@ class NRIMEInputController: IMKInputController {
     /// registry lookup and no call into the host app.
     private func isInSensitiveField() -> Bool {
         IsSecureEventInputEnabled() || secureInputDetector.isAuthenticationClient(activeBundleID)
-    }
-
-    private static let slowEventThreshold: TimeInterval = 0.03
-
-    private static func eventKind(_ event: NSEvent) -> String {
-        if event.type == .flagsChanged { return "modifier" }
-        switch event.keyCode {
-        case 0x31: return "space"
-        case 0x24, 0x4C: return "return"
-        case 0x33, 0x75: return "delete"
-        case 0x7B, 0x7C, 0x7D, 0x7E: return "arrow"
-        default:
-            return JamoTable.jamo(forKeyCode: event.keyCode, shifted: false) != nil ? "letter" : "other"
-        }
     }
 
     private func resolvedClient() -> (any IMKTextInput)? {

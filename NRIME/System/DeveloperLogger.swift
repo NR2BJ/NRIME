@@ -4,7 +4,19 @@ final class DeveloperLogger {
     static let shared = DeveloperLogger()
 
     private let queue = DispatchQueue(label: "com.nrime.inputmethod.developer-log", qos: .utility)
-    private let maxLogBytes = 512 * 1024
+    /// Every key event is logged in developer mode, so the file grows fast;
+    /// with the kept previous generation this holds a day or two of typing.
+    private var maxLogBytes: Int {
+#if DEBUG
+        if let limit = maxLogBytesForTesting { return limit }
+#endif
+        return 16 * 1024 * 1024
+    }
+
+#if DEBUG
+    /// Test seam: a small rotation size, so a test can trigger rotation quickly.
+    var maxLogBytesForTesting: Int?
+#endif
 
     private lazy var timestampFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

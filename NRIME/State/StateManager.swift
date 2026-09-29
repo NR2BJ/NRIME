@@ -3,7 +3,11 @@ import Cocoa
 final class StateManager {
     static let shared = StateManager()
 
-    private(set) var currentMode: InputMode = .english
+    /// Korean when the input method starts (login, update, restart) — the
+    /// language the owner starts typing in. The last mode is not restored.
+    static let initialMode: InputMode = .korean
+
+    private(set) var currentMode: InputMode = StateManager.initialMode
     private var previousNonEnglishMode: InputMode
     private var currentAppBundleId: String?
 

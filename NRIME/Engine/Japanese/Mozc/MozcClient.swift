@@ -7,32 +7,35 @@ final class MozcClient {
     private let portName = "org.mozc.inputmethod.Japanese.Converter.session"
     private let protocolVersion: mach_msg_id_t = 3  // IPC_PROTOCOL_VERSION
     private let rpcTimeout: mach_msg_timeout_t = 750
-    private let sessionTimeout: mach_msg_timeout_t = 5_000
+    /// Session setup waits longer than a keystroke, but still on the keystroke
+    /// thread — 5 s used to be the cap. A server that takes longer is treated
+    /// as hung and restarted in the background.
+    private let sessionTimeout: mach_msg_timeout_t = 2_000
 
     private var sessionId: UInt64 = 0
     private var hasSession = false
     private let sessionQueue = DispatchQueue(label: "com.nrime.mozc.session")
     private let sessionCreationLock = NSLock()
     private var sessionRetryNotBefore = Date.distantPast
-    private var lastServerRestartAt = Date.distantPast
     private let sessionFailureCooldown: TimeInterval = 2.0
-    private let serverRestartCooldown: TimeInterval = 5.0
 
     /// Mozc config attached to every Input message.
-    /// Enables realtime conversion, history/dictionary suggest, etc.
+    ///
+    /// Suggestions while typing are off: NRIME only converts on Space (no
+    /// prediction, no live conversion), and feeding a reading one character at
+    /// a time otherwise makes Mozc compute a suggestion list for every one.
     private let mozcConfig: Mozc_Config_Config = {
         var config = Mozc_Config_Config()
-        config.useRealtimeConversion = true
-        config.useHistorySuggest = true
-        config.useDictionarySuggest = true
-        config.suggestionsSize = 9
+        config.useRealtimeConversion = false
+        config.useHistorySuggest = false
+        config.useDictionarySuggest = false
         return config
     }()
 
-    /// Mozc request flags (zero_query_suggestion for NWP, etc.)
+    /// Mozc request flags. No zero-query (next-word) suggestions — prediction is gone.
     private let mozcRequest: Mozc_Commands_Request = {
         var request = Mozc_Commands_Request()
-        request.zeroQuerySuggestion = true
+        request.zeroQuerySuggestion = false
         return request
     }()
 
@@ -119,6 +122,20 @@ final class MozcClient {
         }
     }
 
+    /// Drop the session locally without contacting the server — for when it
+    /// did not answer, and asking it to delete the session would only wait again.
+    func forgetSession() {
+        sessionQueue.sync {
+            hasSession = false
+            sessionId = 0
+        }
+    }
+
+    /// Whether a session exists — sending to one that does not creates it first.
+    var hasActiveSession: Bool {
+        sessionQueue.sync { hasSession }
+    }
+
     /// Reset session state (e.g., after error).
     /// Best-effort: attempts to delete the server-side session before clearing local state.
     func resetSession() {
@@ -136,28 +153,6 @@ final class MozcClient {
             hasSession = false
             sessionId = 0
         }
-    }
-
-    /// Clear Mozc's learned user history (conversion preferences).
-    func clearUserHistory() {
-        guard ensureSession() else { return }
-
-        var input = Mozc_Commands_Input()
-        input.type = .clearUserHistory
-        input.id = sessionQueue.sync { sessionId }
-
-        _ = call(input, timeout: rpcTimeout)
-    }
-
-    /// Clear Mozc's user prediction data.
-    func clearUserPrediction() {
-        guard ensureSession() else { return }
-
-        var input = Mozc_Commands_Input()
-        input.type = .clearUserPrediction
-        input.id = sessionQueue.sync { sessionId }
-
-        _ = call(input, timeout: rpcTimeout)
     }
 
     // MARK: - Private
@@ -185,21 +180,12 @@ final class MozcClient {
             return true
         }
 
-        // IPC failed — server may have crashed leaving stale lock.
-        // Clean lock files, restart server, and retry.
-        DeveloperLogger.shared.log("Mozc", "Session creation failed — attempting server restart")
-        MozcClient.removeStaleLockFiles()
-        if now.timeIntervalSince(lastServerRestartAt) >= serverRestartCooldown {
-            lastServerRestartAt = now
-            _ = MozcServerManager.shared.restartServer()
-        }
-        if createSession() {
-            sessionRetryNotBefore = .distantPast
-            return true
-        }
-
-        DeveloperLogger.shared.log("Mozc", "Session creation failed after server restart — entering backoff",
+        // No session: the server crashed, hung or left a stale lock. Restart
+        // it in the background — this keystroke does not wait for that — and
+        // back off briefly so the following keys do not each try again.
+        DeveloperLogger.shared.log("Mozc", "Session creation failed — restarting server in the background",
                                    metadata: ["cooldown": "\(sessionFailureCooldown)s"])
+        MozcServerManager.shared.restartInBackground()
         sessionRetryNotBefore = Date().addingTimeInterval(sessionFailureCooldown)
         return false
     }
@@ -216,10 +202,20 @@ final class MozcClient {
         }
     }
 
+#if DEBUG
+    /// Test seam: answers requests in place of the server (none, by default).
+    static var responderForTesting: ((Mozc_Commands_Input) -> Mozc_Commands_Output?)?
+#endif
+
     /// Serialize Input protobuf, send via Mach port, receive and deserialize Output.
     /// Mozc server expects serialized Input (not Command) and returns serialized Output.
     private func call(_ input: Mozc_Commands_Input,
                       timeout overrideTimeout: mach_msg_timeout_t? = nil) -> Mozc_Commands_Output? {
+#if DEBUG
+        // Tests never talk to the Mozc server that is running for the user —
+        // it shares the port name, and conversions would train its history.
+        if AppGroupDefaults.isRunningTests { return Self.responderForTesting?(input) }
+#endif
         // Serialize Input directly — Mozc server parses request as Input
         let requestData: Data
         do {
@@ -286,8 +282,6 @@ final class MozcClient {
 
             let data = Data(bytes: ptr, count: responseSize)
             free(ptr)
-            DeveloperLogger.shared.log("Mozc", "Mach IPC success",
-                                       metadata: ["responseSize": "\(responseSize)"])
             return data
         }
     }

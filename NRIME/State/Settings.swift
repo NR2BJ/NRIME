@@ -157,7 +157,7 @@ final class Settings {
     }
 
     // MARK: - Japanese IME Keys
-    // JapaneseKeyConfig, CapsLockAction, ShiftKeyAction, PunctuationStyle
+    // JapaneseKeyConfig, CapsLockAction, PunctuationStyle
     // are defined in Shared/SettingsModels.swift
 
     var japaneseKeyConfig: JapaneseKeyConfig {
@@ -167,20 +167,18 @@ final class Settings {
                 return cached
             }
             guard let data = defaults.data(forKey: "japaneseKeyConfig"),
-                  let stored = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
-                let defaultConfig = JapaneseKeyConfig.default.withRetiredOptionsOff()
+                  let config = try? JSONDecoder().decode(JapaneseKeyConfig.self, from: data) else {
+                let defaultConfig = JapaneseKeyConfig.default
                 _cachedJapaneseKeyConfig = defaultConfig
                 return defaultConfig
             }
-            let config = stored.withRetiredOptionsOff()
             _cachedJapaneseKeyConfig = config
             _configCacheTime = Date()
             return config
         }
         set {
-            let config = newValue.withRetiredOptionsOff()
-            _cachedJapaneseKeyConfig = config
-            if let data = try? JSONEncoder().encode(config) {
+            _cachedJapaneseKeyConfig = newValue
+            if let data = try? JSONEncoder().encode(newValue) {
                 defaults.set(data, forKey: "japaneseKeyConfig")
             }
         }

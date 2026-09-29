@@ -16,26 +16,22 @@ final class JapaneseEngine: InputEngine {
 
     private var conversionState: ConversionState = .composing
 
-    /// Tracks whether the current composing text should be committed as katakana (Shift+katakana mode).
-    private var shiftKatakanaActive = false
     /// Tracks whether Caps Lock katakana mode is active (for commitComposing to use).
     private var capsLockKatakanaActive = false
 
-    /// Whether live conversion is currently active (Mozc has been fed characters during composing).
-    private var liveConversionActive = false
-
-    /// The last peeked conversion text from live conversion (for commitLiveConversion).
-    private var liveConvertedText: String? = nil
-
-    /// Whether prediction candidates are currently displayed after a commit.
-    private(set) var showingPrediction = false
-
     /// Whether the engine is in Mozc conversion state (for controller routing).
     var isInConversionState: Bool {
-        conversionState == .converting || showingPrediction
+        conversionState == .converting
     }
 
     var isCurrentlyComposing: Bool { composer.isComposing }
+
+#if DEBUG
+    /// Test seam: enter the converting state around whatever the converter holds.
+    func markConvertingForTesting() {
+        conversionState = .converting
+    }
+#endif
 
     // MARK: - InputEngine
 
@@ -51,9 +47,6 @@ final class JapaneseEngine: InputEngine {
         // Commit text, then repost via CGEvent so the app receives the shortcut.
         let mods = event.modifierFlags
         if mods.contains(.command) || mods.contains(.control) || mods.contains(.option) {
-            if showingPrediction {
-                dismissPrediction()
-            }
             let wasActive = conversionState == .converting || composer.isComposing
             if conversionState == .converting {
                 commitConversion(client: client)
@@ -78,9 +71,6 @@ final class JapaneseEngine: InputEngine {
     }
 
     func reset(client: any IMKTextInput) {
-        if showingPrediction {
-            dismissPrediction()
-        }
         if conversionState == .converting {
             commitConversion(client: client)
         } else {
@@ -91,32 +81,29 @@ final class JapaneseEngine: InputEngine {
     func forceCommit(client: (any IMKTextInput)?) {
         guard let client = client else { return }
 
-        if showingPrediction {
-            dismissPrediction()
-        }
-
         if conversionState == .converting {
-            if let text = mozcConverter.submit()
-                ?? Self.conversionFallbackText(
-                    preedit: mozcConverter.currentPreedit,
-                    originalHiragana: mozcConverter.originalHiragana
-                ) {
+            // Commit what is on screen now and tell Mozc afterwards. This runs
+            // inside a mode switch or a focus change, and a synchronous submit
+            // to a slow or restarting Mozc used to hold it — and every key
+            // behind it — for up to 1.5 s.
+            if let text = mozcConverter.commitLater() {
                 // Commit via insertText only — setMarkedText("") first deletes the
                 // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
                 client.insertText(text as NSString, replacementRange: replacementRange())
             }
             conversionState = .composing
             hideCandidateWindow()
+        } else {
+            mozcConverter.reset()
         }
 
-        mozcConverter.reset()
         guard composer.isComposing else {
             clearDisplayModeState()
             return
         }
         // Resolve what the user is actually looking at before clearing the
-        // flags that decide it — katakana mode and live conversion both change
-        // the committed string, and clearing first commits raw hiragana instead.
+        // flag that decides it — katakana mode changes the committed string,
+        // and clearing it first commits raw hiragana instead.
         let text = takeComposingCommitText()
         if !text.isEmpty {
             // Commit via insertText only — setMarkedText("") first deletes the
@@ -127,24 +114,14 @@ final class JapaneseEngine: InputEngine {
 
     /// Drop the display-mode flags without committing anything.
     private func clearDisplayModeState() {
-        liveConversionActive = false
-        liveConvertedText = nil
-        shiftKatakanaActive = false
         capsLockKatakanaActive = false
     }
 
     /// The string to commit for the current composing buffer, matching what is
     /// displayed, consuming the display-mode state it depends on.
     private func takeComposingCommitText() -> String {
-        let composedKana = composer.composedKana
         var text = composer.flush()
-        if liveConversionActive {
-            text = Self.liveConversionCommitText(
-                convertedText: liveConvertedText,
-                composedKana: composedKana,
-                flushedText: text
-            )
-        } else if shiftKatakanaActive || capsLockKatakanaActive {
+        if capsLockKatakanaActive {
             text = hiraganaToKatakana(text)
         }
         clearDisplayModeState()
@@ -154,15 +131,10 @@ final class JapaneseEngine: InputEngine {
     /// Clear all engine state without inserting text.
     /// Used when the previous client is gone (e.g., activateServer after Electron focus change).
     func clearState() {
-        if showingPrediction { dismissPrediction() }
         conversionState = .composing
         mozcConverter.reset()
         mozcConverter.currentCandidateStrings = []
-        liveConversionActive = false
-        liveConvertedText = nil
-        shiftKatakanaActive = false
         capsLockKatakanaActive = false
-        showingPrediction = false
         composer.clear()
         hideCandidateWindow()
     }
@@ -176,11 +148,7 @@ final class JapaneseEngine: InputEngine {
         mozcConverter.reset()
         mozcConverter.currentCandidateStrings = []
         composer.clear()
-        liveConversionActive = false
-        liveConvertedText = nil
-        shiftKatakanaActive = false
         capsLockKatakanaActive = false
-        showingPrediction = false
         hideCandidateWindow()
     }
 
@@ -193,7 +161,6 @@ final class JapaneseEngine: InputEngine {
             client.insertText(committed as NSString, replacementRange: replacementRange())
             conversionState = .composing
             composer.clear()
-            liveConversionActive = false
             hideCandidateWindow()
 
             // Check if Mozc started a new preedit after commit (next segment)
@@ -203,13 +170,9 @@ final class JapaneseEngine: InputEngine {
                 if result.hasCandidates {
                     showCandidateWindow(client: client)
                 }
-            } else {
-                // insertText above already ended the composition — do not call
-                // setMarkedText("") here (oldHasMarkedText trigger in Chromium).
-
-                // Trigger prediction after commit if enabled
-                triggerPredictionIfEnabled(client: client)
             }
+            // Otherwise insertText above already ended the composition — do not
+            // call setMarkedText("") here (oldHasMarkedText trigger in Chromium).
             return true
         }
 
@@ -263,13 +226,7 @@ final class JapaneseEngine: InputEngine {
         let keyCode = event.keyCode
         let isShifted = event.modifierFlags.contains(.shift)
         let isCapsLockOn = event.modifierFlags.contains(.capsLock)
-        let capsAction = Settings.shared.japaneseKeyConfig.capsLockAction
-
-        // --- Prediction state handling ---
-        // When showing prediction candidates, handle selection keys before normal composing.
-        if showingPrediction {
-            return handlePredictionEvent(event, client: client)
-        }
+        let config = Settings.shared.japaneseKeyConfig
 
         // Backspace
         if keyCode == backspaceKeyCode {
@@ -278,7 +235,7 @@ final class JapaneseEngine: InputEngine {
 
         // Enter — commit composing text.
         if keyCode == 0x24 || keyCode == 0x4C {
-            let wasComposing = composer.isComposing || liveConversionActive
+            let wasComposing = composer.isComposing
 
             // Shift+Enter while composing: commit text and insert newline.
             // Chromium: async newline (insertText("\n"), or a replayed key press
@@ -295,20 +252,15 @@ final class JapaneseEngine: InputEngine {
                 return false
             }
 
-            if liveConversionActive {
-                commitLiveConversion(client: client)
-            } else if composer.isComposing {
-                commitComposing(client: client)
-            }
+            commitComposing(client: client)
             return wasComposing
         }
 
         // Space — trigger Mozc conversion, or commit + space, or insert full-width space
-        let config = Settings.shared.japaneseKeyConfig
         if keyCode == 0x31 {
             if composer.isComposing {
                 // Katakana mode: commit directly, no Mozc conversion
-                if capsLockKatakanaActive || shiftKatakanaActive {
+                if capsLockKatakanaActive {
                     commitComposing(client: client)
                     let space = config.fullWidthSpace ? "\u{3000}" : " "
                     client.insertText(space as NSString, replacementRange: replacementRange())
@@ -333,7 +285,7 @@ final class JapaneseEngine: InputEngine {
 
         // Tab while composing — trigger conversion if enabled, otherwise pass through
         if keyCode == 0x30 && composer.isComposing {
-            if capsLockKatakanaActive || shiftKatakanaActive {
+            if capsLockKatakanaActive {
                 commitComposing(client: client)
                 return true
             }
@@ -344,23 +296,9 @@ final class JapaneseEngine: InputEngine {
             return false
         }
 
-        // Down arrow while composing — trigger conversion if enabled
-        if keyCode == 0x7D && composer.isComposing && config.conversionTriggerDownArrow {
-            if capsLockKatakanaActive || shiftKatakanaActive {
-                commitComposing(client: client)
-                return true
-            }
-            return triggerMozcConversion(client: client)
-        }
-
         // Escape — cancel composing
         if keyCode == 0x35 {
             if composer.isComposing {
-                if liveConversionActive {
-                    mozcConverter.cancel()
-                    liveConversionActive = false
-                    liveConvertedText = nil
-                }
                 composer.clear()
                 client.setMarkedText("" as NSString,
                                      selectionRange: NSRange(location: 0, length: 0),
@@ -370,70 +308,35 @@ final class JapaneseEngine: InputEngine {
             return false
         }
 
-        // Configurable Japanese IME keys (F6-F10 by default) — while composing
-        if composer.isComposing, let specialKey = japaneseIMEKeyToSpecialKey(keyCode) {
-            return sendFunctionKeyToMozc(specialKey, client: client)
-        }
-
-        // Arrow keys, Tab, etc. — commit and pass through
-        if keyCode == 0x7E || keyCode == 0x7B || keyCode == 0x7C || keyCode == 0x30 {
-            if liveConversionActive {
-                commitLiveConversion(client: client)
-            } else {
-                commitComposing(client: client)
-            }
+        // Arrow keys — commit and pass through
+        if keyCode == 0x7E || keyCode == 0x7D || keyCode == 0x7B || keyCode == 0x7C {
+            commitComposing(client: client)
             return false
         }
 
         // Symbol keys (punctuation, brackets, shifted symbols like ! ?) —
         // commit composing text, then insert the symbol styled per settings.
-        // Width comes from punctuationStyle alone; the Shift and Caps Lock romaji
-        // actions govern letters (kana vs romaji) and must not reach symbols,
-        // otherwise ! and ? ignore the punctuation setting entirely.
+        // Width comes from punctuationStyle alone; the Caps Lock romaji action
+        // governs letters and must not reach symbols, otherwise ! and ? ignore
+        // the punctuation setting entirely.
         if let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
-            if liveConversionActive {
-                commitLiveConversion(client: client)
-            } else {
-                commitComposing(client: client)
-            }
+            commitComposing(client: client)
             client.insertText(symbol as NSString, replacementRange: replacementRange())
             return true
         }
 
-        // Alphabetic input -> romaji composition
+        // Alphabetic input -> romaji composition. Shift has no special meaning:
+        // Shift+letter composes the same kana (romaji is typed in English mode).
         if let char = Self.charForKeyCode(keyCode, shifted: isShifted) {
-            let shiftAction = Settings.shared.japaneseKeyConfig.shiftKeyAction
-
             // Caps Lock romaji: insert the character directly (bypass romaji->kana)
-            if isCapsLockOn && capsAction == .romaji {
-                if liveConversionActive {
-                    commitLiveConversion(client: client)
-                } else {
-                    commitComposing(client: client)
-                }
-                client.insertText(String(char) as NSString, replacementRange: replacementRange())
-                return true
-            }
-
-            // Shift+key with romaji action: insert the character directly (bypass romaji->kana)
-            if isShifted && shiftAction == .romaji {
-                if liveConversionActive {
-                    commitLiveConversion(client: client)
-                } else {
-                    commitComposing(client: client)
-                }
+            if isCapsLockOn && config.capsLockAction == .romaji {
+                commitComposing(client: client)
                 client.insertText(String(char) as NSString, replacementRange: replacementRange())
                 return true
             }
 
             // Caps Lock katakana: direct output without composition
-            if isCapsLockOn && capsAction == .katakana {
-                // Same stale-live-conversion hazard as shift-katakana below
-                if liveConversionActive {
-                    mozcConverter.cancel()
-                    liveConversionActive = false
-                    liveConvertedText = nil
-                }
+            if isCapsLockOn && config.capsLockAction == .katakana {
                 let result = composer.input(char)
                 let kana = composer.composedKana
                 if !kana.isEmpty {
@@ -451,39 +354,8 @@ final class JapaneseEngine: InputEngine {
             }
             capsLockKatakanaActive = false
 
-            // Track shift-katakana state
-            if isShifted && shiftAction == .katakana {
-                // Katakana mode suspends live conversion — tear it down now, or
-                // a later commit would glue the stale peeked kanji (never shown
-                // after this point) onto the katakana suffix ("蚊t" for "カt").
-                if !shiftKatakanaActive && liveConversionActive {
-                    mozcConverter.cancel()
-                    liveConversionActive = false
-                    liveConvertedText = nil
-                }
-                shiftKatakanaActive = true
-            } else if !isShifted {
-                shiftKatakanaActive = false
-            }
-
             let result = composer.input(char)
-            var display = result.composing + result.pending
-
-            // Show katakana while shift-katakana or caps-lock-katakana is active
-            if shiftKatakanaActive || capsLockKatakanaActive {
-                display = hiraganaToKatakana(display)
-            }
-
-            // --- Live conversion ---
-            let liveEnabled = Settings.shared.japaneseKeyConfig.liveConversion
-            if liveEnabled
-                && !shiftKatakanaActive && !capsLockKatakanaActive
-                && !composer.composedKana.isEmpty {
-                updateLiveConversion(pending: composer.pendingRomaji, client: client)
-                return true
-            }
-
-            // Normal display (no live conversion)
+            let display = result.composing + result.pending
             if display.isEmpty {
                 client.setMarkedText("" as NSString,
                                      selectionRange: NSRange(location: 0, length: 0),
@@ -497,250 +369,8 @@ final class JapaneseEngine: InputEngine {
         }
 
         // Non-alpha key — commit composing and pass through
-        if liveConversionActive {
-            commitLiveConversion(client: client)
-        } else {
-            commitComposing(client: client)
-        }
+        commitComposing(client: client)
         return false
-    }
-
-    // MARK: - Prediction Handling
-
-    /// Handle key events while prediction candidates are visible.
-    private func handlePredictionEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
-        let keyCode = event.keyCode
-        let isShifted = event.modifierFlags.contains(.shift)
-
-        // Tab — select the current prediction candidate and commit
-        if keyCode == 0x30 {
-            let idx = currentPredictionSelectionIndex()
-            if idx < mozcConverter.currentCandidates.count {
-                if let output = mozcConverter.selectCandidateByIndex(idx) {
-                    let result = mozcConverter.updateFromOutput(output)
-                    if let committed = result.committedText {
-                        client.insertText(committed as NSString, replacementRange: replacementRange())
-                    }
-                }
-            }
-            dismissPrediction()
-            // After selecting a prediction, trigger next prediction
-            triggerPredictionIfEnabled(client: client)
-            return true
-        }
-
-        // Number keys 1-9 — direct selection (Shift+number is a symbol, not selection)
-        let numberMap: [UInt16: Int] = [
-            0x12: 0, 0x13: 1, 0x14: 2, 0x15: 3, 0x17: 4,
-            0x16: 5, 0x1A: 6, 0x1C: 7, 0x19: 8
-        ]
-        if !isShifted, let offset = numberMap[keyCode] {
-            let panel = NSApp.candidatePanel
-            let pageStart = (panel?.currentPage ?? 0) * (panel?.effectivePageSize ?? 9)
-            let candidateIndex = pageStart + offset
-            guard candidateIndex < mozcConverter.currentCandidates.count else {
-                // Not a valid selection — the user is typing a digit. Dismiss
-                // and pass it through instead of silently eating the keystroke.
-                dismissPrediction()
-                return false
-            }
-            if let output = mozcConverter.selectCandidateByIndex(candidateIndex) {
-                let result = mozcConverter.updateFromOutput(output)
-                if let committed = result.committedText {
-                    client.insertText(committed as NSString, replacementRange: replacementRange())
-                }
-            }
-            dismissPrediction()
-            triggerPredictionIfEnabled(client: client)
-            return true
-        }
-
-        // Escape — dismiss prediction
-        if keyCode == 0x35 {
-            dismissPrediction()
-            return true
-        }
-
-        // Enter — dismiss prediction (don't select anything)
-        if keyCode == 0x24 || keyCode == 0x4C {
-            dismissPrediction()
-            // Don't consume — let it pass through if user wants a newline
-            return false
-        }
-
-        // Up/Down arrows — navigate prediction candidates
-        if keyCode == 0x7E { // Up
-            NSApp.candidatePanel?.moveUp()
-            return true
-        }
-        if keyCode == 0x7D { // Down
-            NSApp.candidatePanel?.moveDown()
-            return true
-        }
-
-        // Space — dismiss prediction and pass through
-        if keyCode == 0x31 {
-            dismissPrediction()
-            return false
-        }
-
-        // Alphabetic input — dismiss prediction and start new composing
-        if Self.charForKeyCode(keyCode, shifted: isShifted) != nil {
-            dismissPrediction()
-            // Re-enter handleComposingEvent with this key
-            // (showingPrediction is now false, so it won't recurse)
-            return handleComposingEvent(event, client: client)
-        }
-
-        // Backspace — dismiss prediction
-        if keyCode == backspaceKeyCode {
-            dismissPrediction()
-            return false
-        }
-
-        // Symbol keys — dismiss prediction and insert the styled symbol
-        if let symbol = symbolForKeyCode(keyCode, shifted: isShifted) {
-            dismissPrediction()
-            client.insertText(symbol as NSString, replacementRange: replacementRange())
-            return true
-        }
-
-        // Any other key — dismiss prediction and pass through
-        dismissPrediction()
-        return false
-    }
-
-    /// Dismiss the prediction panel and reset prediction state.
-    private func dismissPrediction() {
-        showingPrediction = false
-        mozcConverter.cancel()
-        mozcConverter.currentCandidateStrings = []
-        hideCandidateWindow()
-    }
-
-    private func currentPredictionSelectionIndex() -> Int {
-        guard let panel = NSApp.candidatePanel,
-              panel.isVisible(),
-              panel.selectedIndex >= 0,
-              panel.selectedIndex < mozcConverter.currentCandidates.count else {
-            return mozcConverter.currentFocusedIndex
-        }
-        return panel.selectedIndex
-    }
-
-    /// Trigger prediction after a commit, if the setting is enabled.
-    private func triggerPredictionIfEnabled(client: any IMKTextInput) {
-        guard Settings.shared.japaneseKeyConfig.prediction else { return }
-
-        // Get preceding text from the client for Mozc's NWP engine.
-        // Use up to 20 characters before the cursor.
-        var precedingText = ""
-        let selRange = client.selectedRange()
-        if selRange.location != NSNotFound && selRange.location > 0 {
-            let start = max(0, selRange.location - 20)
-            let len = selRange.location - start
-            let fetchRange = NSRange(location: start, length: len)
-            if let attrStr = client.attributedSubstring(from: fetchRange) {
-                precedingText = attrStr.string
-            }
-        }
-
-        if let _ = mozcConverter.requestPrediction(precedingText: precedingText) {
-            showingPrediction = true
-            showCandidateWindow(client: client)
-        }
-    }
-
-    // MARK: - Live Conversion
-
-    /// Update the marked text with Mozc's live conversion result.
-    /// Called after each alphabetic input when live conversion is enabled.
-    ///
-    /// Strategy: cancel → feed hiragana → Space (peek conversion) → display kanji.
-    /// After peek, Mozc stays in CONVERSION state. Next keystroke will cancel() + re-feed.
-    private func updateLiveConversion(pending: String, client: any IMKTextInput) {
-        let kana = composer.composedKana
-
-        // Cancel any previous Mozc state and re-feed the full hiragana
-        mozcConverter.cancel()
-        guard mozcConverter.feedHiragana(kana) else {
-            liveConversionActive = false
-            liveConvertedText = nil
-            let display = kana + pending
-            client.setMarkedText(display as NSString,
-                                 selectionRange: NSRange(location: display.count, length: 0),
-                                 replacementRange: replacementRange())
-            return
-        }
-
-        // Trigger CONVERSION — preedit now contains kanji segments.
-        // Session stays in CONVERSION state (not reverted).
-        let convertedText = mozcConverter.peekConversion()
-
-        liveConversionActive = true
-        liveConvertedText = convertedText
-
-        if let converted = convertedText, converted != kana {
-            // Thin underline for live conversion (vs thick for .converting state)
-            let attrString = NSMutableAttributedString()
-
-            let convertedAttr = NSAttributedString(string: converted, attributes: [
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .markedClauseSegment: 0
-            ])
-            attrString.append(convertedAttr)
-
-            if !pending.isEmpty {
-                let pendingAttr = NSAttributedString(string: pending, attributes: [
-                    .underlineStyle: NSUnderlineStyle.single.rawValue,
-                    .markedClauseSegment: 1
-                ])
-                attrString.append(pendingAttr)
-            }
-
-            client.setMarkedText(attrString,
-                                 selectionRange: NSRange(location: attrString.length, length: 0),
-                                 replacementRange: replacementRange())
-        } else {
-            // No conversion result — show hiragana normally
-            let display = kana + pending
-            client.setMarkedText(display as NSString,
-                                 selectionRange: NSRange(location: display.count, length: 0),
-                                 replacementRange: replacementRange())
-        }
-    }
-
-    /// Commit the current live conversion result.
-    /// Uses the peeked conversion text from the last updateLiveConversion call.
-    private func commitLiveConversion(client: any IMKTextInput) {
-        guard composer.isComposing else { return }
-
-        let composedKana = composer.composedKana
-        var text = composer.flush()
-        if liveConversionActive {
-            text = Self.liveConversionCommitText(
-                convertedText: liveConvertedText,
-                composedKana: composedKana,
-                flushedText: text
-            )
-        } else if shiftKatakanaActive || capsLockKatakanaActive {
-            text = hiraganaToKatakana(text)
-            shiftKatakanaActive = false
-            capsLockKatakanaActive = false
-        }
-        if !text.isEmpty {
-            // Commit via insertText only — setMarkedText("") first deletes the
-            // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
-            client.insertText(text as NSString, replacementRange: replacementRange())
-        }
-
-        composer.clear()
-        liveConversionActive = false
-        liveConvertedText = nil
-        mozcConverter.reset()
-
-        // Trigger prediction after commit
-        triggerPredictionIfEnabled(client: client)
     }
 
     // MARK: - Converting State (Mozc key forwarding)
@@ -798,8 +428,18 @@ final class JapaneseEngine: InputEngine {
         // Send to Mozc. An Output carrying an error code is a failed request,
         // not an empty conversion — processing it as a normal answer silently
         // ends the composition the user is still editing.
-        guard let output = mozcConverter.sendKeyEvent(mozcKey), !output.hasErrorCode else {
-            // IPC or session error — commit whatever we have
+        guard let output = mozcConverter.sendKeyEvent(mozcKey) else {
+            // No answer: Mozc is hung or gone, and asking it to submit would
+            // only wait again. Commit what is on screen and let it restart.
+            if let text = mozcConverter.displayedText {
+                client.insertText(text as NSString, replacementRange: replacementRange())
+            }
+            mozcConverter.discardLocalState()
+            mozcConverter.serverStoppedAnswering()
+            leaveConversion()
+            return false
+        }
+        guard !output.hasErrorCode else {
             commitConversion(client: client)
             return false
         }
@@ -812,46 +452,12 @@ final class JapaneseEngine: InputEngine {
     // MARK: - Conversion Helpers
 
     private func triggerMozcConversion(client: any IMKTextInput) -> Bool {
-        DeveloperLogger.shared.log("Japanese", "Conversion triggered",
-                                   metadata: ["liveConversion": "\(liveConversionActive)"])
-        if liveConversionActive {
-            // The live-conversion peek fed Mozc only the resolved kana — pending
-            // romaji (e.g. the ん from a trailing "n") is missing from that
-            // session, and reusing its CONVERSION state means any extra Space
-            // sent to "populate candidates" actually advances the selection.
-            // Re-convert the full flushed hiragana from scratch instead: one
-            // extra IPC round-trip on the Space press, deterministic result.
-            let hiragana = composer.flush()
-            guard !hiragana.isEmpty else { return false }
-
-            liveConversionActive = false
-            liveConvertedText = nil
-            mozcConverter.cancel()
-
-            if mozcConverter.convert(hiragana: hiragana) {
-                conversionState = .converting
-                if let preedit = mozcConverter.currentPreedit, !preedit.segment.isEmpty {
-                    renderPreedit(preedit, client: client)
-                } else {
-                    client.setMarkedText(hiragana as NSString,
-                                         selectionRange: NSRange(location: hiragana.count, length: 0),
-                                         replacementRange: replacementRange())
-                }
-                showCandidateWindow(client: client)
-                return true
-            }
-
-            // Mozc completely unavailable — commit hiragana
-            client.insertText(hiragana as NSString, replacementRange: replacementRange())
-            return true
-        }
-
-        // Normal (non-live) conversion path
         let hiragana = composer.flush()
         guard !hiragana.isEmpty else { return false }
+        DeveloperLogger.shared.log("Japanese", "Conversion triggered",
+                                   metadata: ["length": "\(hiragana.count)"])
 
-        let convertOk = mozcConverter.convert(hiragana: hiragana)
-        if convertOk {
+        if mozcConverter.convert(hiragana: hiragana) {
             DeveloperLogger.shared.log("Japanese", "Conversion succeeded",
                                        metadata: ["candidates": "\(mozcConverter.currentCandidateStrings.count)"])
             conversionState = .converting
@@ -869,43 +475,40 @@ final class JapaneseEngine: InputEngine {
             return true
         }
 
-        // Mozc unavailable or no candidates — commit hiragana directly
-        client.insertText(hiragana as NSString, replacementRange: replacementRange())
+        keepComposing(hiragana, client: client)
         return true
     }
 
-    /// Send a configurable Japanese IME key (F6-F10) to Mozc during composing state.
+    /// Mozc could not convert — it is starting or restarting in the background,
+    /// and nothing waits for it here. Keep what was typed as the composition
+    /// rather than committing it, so Space converts once Mozc is back and Enter
+    /// still commits it as is.
+    private func keepComposing(_ hiragana: String, client: any IMKTextInput) {
+        mozcConverter.discardLocalState()
+        composer.restore(kana: hiragana)
+        client.setMarkedText(hiragana as NSString,
+                             selectionRange: NSRange(location: hiragana.count, length: 0),
+                             replacementRange: replacementRange())
+    }
+
+    /// Send a function key to Mozc for the current composition: F7 (katakana)
+    /// or F10 (romaji) — the Caps Lock actions.
     private func sendFunctionKeyToMozc(_ specialKey: Mozc_Commands_KeyEvent.SpecialKey,
                                        client: any IMKTextInput) -> Bool {
         let hiragana = composer.flush()
         guard !hiragana.isEmpty else { return false }
         mozcConverter.prepareForConversion(hiragana: hiragana)
 
-        // If live conversion is active, Mozc is in CONVERSION state from peekConversion.
-        // Cancel and re-feed so the function key works from SUGGESTION state.
-        if liveConversionActive {
-            liveConversionActive = false
-            liveConvertedText = nil
-            mozcConverter.cancel()
-            guard mozcConverter.feedHiragana(hiragana) else {
-                mozcConverter.reset()
-                client.insertText(hiragana as NSString, replacementRange: replacementRange())
-                return true
-            }
-        } else {
-            guard mozcConverter.feedHiragana(hiragana) else {
-                mozcConverter.reset()
-                client.insertText(hiragana as NSString, replacementRange: replacementRange())
-                return true
-            }
+        guard mozcConverter.feedHiragana(hiragana) else {
+            keepComposing(hiragana, client: client)
+            return true
         }
 
         var keyEvent = Mozc_Commands_KeyEvent()
         keyEvent.specialKey = specialKey
 
         guard let output = mozcConverter.sendKeyEvent(keyEvent) else {
-            mozcConverter.reset()
-            client.insertText(hiragana as NSString, replacementRange: replacementRange())
+            keepComposing(hiragana, client: client)
             return true
         }
 
@@ -924,7 +527,7 @@ final class JapaneseEngine: InputEngine {
                 showCandidateWindow(client: client)
             }
         } else {
-            // F-key didn't produce preedit — commit hiragana as fallback
+            // The key produced no preedit — commit hiragana as fallback
             mozcConverter.reset()
             client.insertText(hiragana as NSString, replacementRange: replacementRange())
         }
@@ -941,8 +544,6 @@ final class JapaneseEngine: InputEngine {
         mozcConverter.cancel()
         mozcConverter.reset()
         conversionState = .composing
-        liveConversionActive = false
-        liveConvertedText = nil
         hideCandidateWindow()
 
         if hiragana.isEmpty {
@@ -960,43 +561,28 @@ final class JapaneseEngine: InputEngine {
     }
 
     private func commitConversion(client: any IMKTextInput) {
-        let submittedText = mozcConverter.submit()
-        if let text = submittedText
-            ?? Self.conversionFallbackText(
-                preedit: mozcConverter.currentPreedit,
-                originalHiragana: mozcConverter.originalHiragana
-            ) {
+        if let text = mozcConverter.commit() {
             // Commit via insertText only — setMarkedText("") first deletes the
             // inserted text in Chromium (oldHasMarkedText) and JS-managed editors.
             client.insertText(text as NSString, replacementRange: replacementRange())
         }
-        if submittedText == nil {
-            mozcConverter.reset()
-        }
+        leaveConversion()
+    }
+
+    /// Back to composing once the conversion has been committed.
+    private func leaveConversion() {
         conversionState = .composing
         composer.clear()
-        liveConversionActive = false
-        liveConvertedText = nil
-        shiftKatakanaActive = false
         capsLockKatakanaActive = false
         hideCandidateWindow()
-
-        // Trigger prediction after commit
-        triggerPredictionIfEnabled(client: client)
     }
 
     private func commitComposing(client: any IMKTextInput) {
         guard composer.isComposing else { return }
 
-        if liveConversionActive {
-            commitLiveConversion(client: client)
-            return
-        }
-
         var text = composer.flush()
-        if shiftKatakanaActive || capsLockKatakanaActive {
+        if capsLockKatakanaActive {
             text = hiraganaToKatakana(text)
-            shiftKatakanaActive = false
             capsLockKatakanaActive = false
         }
         if !text.isEmpty {
@@ -1006,61 +592,13 @@ final class JapaneseEngine: InputEngine {
         }
     }
 
-    static func conversionFallbackText(
-        preedit: Mozc_Commands_Preedit?,
-        originalHiragana: String
-    ) -> String? {
-        if let preedit, !preedit.segment.isEmpty {
-            let text = preedit.segment.map(\.value).joined()
-            if !text.isEmpty {
-                return text
-            }
-        }
-        return originalHiragana.isEmpty ? nil : originalHiragana
-    }
-
-    static func liveConversionCommitText(
-        convertedText: String?,
-        composedKana: String,
-        flushedText: String
-    ) -> String {
-        guard let convertedText, !convertedText.isEmpty else {
-            return flushedText
-        }
-        guard !composedKana.isEmpty, flushedText.hasPrefix(composedKana) else {
-            return convertedText
-        }
-        let suffix = String(flushedText.dropFirst(composedKana.count))
-        return convertedText + suffix
-    }
-
     private func handleBackspace(client: any IMKTextInput) -> Bool {
         guard composer.isComposing else { return false }
         let result = composer.deleteBackward()
         let display = result.composing + result.pending
-
-        if display.isEmpty {
-            // All text deleted — clean up live conversion state
-            if liveConversionActive {
-                mozcConverter.cancel()
-                liveConversionActive = false
-            }
-            client.setMarkedText("" as NSString,
-                                 selectionRange: NSRange(location: 0, length: 0),
-                                 replacementRange: replacementRange())
-        } else if liveConversionActive && !composer.composedKana.isEmpty {
-            // Re-feed reduced hiragana for live conversion
-            updateLiveConversion(pending: composer.pendingRomaji, client: client)
-        } else {
-            // No kana left (only pending romaji) or live conversion off
-            if liveConversionActive {
-                mozcConverter.cancel()
-                liveConversionActive = false
-            }
-            client.setMarkedText(display as NSString,
-                                 selectionRange: NSRange(location: display.count, length: 0),
-                                 replacementRange: replacementRange())
-        }
+        client.setMarkedText(display as NSString,
+                             selectionRange: NSRange(location: display.count, length: 0),
+                             replacementRange: replacementRange())
         return true
     }
 
@@ -1128,13 +666,6 @@ final class JapaneseEngine: InputEngine {
     private func buildMozcKeyEvent(keyCode: UInt16, shifted: Bool) -> Mozc_Commands_KeyEvent? {
         var keyEvent = Mozc_Commands_KeyEvent()
 
-        // Check configurable Japanese IME keys first
-        if let specialKey = japaneseIMEKeyToSpecialKey(keyCode) {
-            keyEvent.specialKey = specialKey
-            if shifted { keyEvent.modifierKeys = [.shift] }
-            return keyEvent
-        }
-
         switch keyCode {
         case 0x7B: keyEvent.specialKey = .left
         case 0x7C: keyEvent.specialKey = .right
@@ -1154,20 +685,6 @@ final class JapaneseEngine: InputEngine {
         }
 
         return keyEvent
-    }
-
-    /// Map a macOS keyCode to a Mozc SpecialKey using the configurable Japanese IME key settings.
-    /// Returns nil if the keyCode doesn't match any configured Japanese IME key.
-    private func japaneseIMEKeyToSpecialKey(_ keyCode: UInt16) -> Mozc_Commands_KeyEvent.SpecialKey? {
-        let config = Settings.shared.japaneseKeyConfig
-        switch keyCode {
-        case config.hiraganaKeyCode:     return .f6
-        case config.fullKatakanaKeyCode: return .f7
-        case config.halfKatakanaKeyCode: return .f8
-        case config.fullRomajiKeyCode:   return .f9
-        case config.halfRomajiKeyCode:   return .f10
-        default: return nil
-        }
     }
 
     /// Returns a Japanese symbol string for symbol/punctuation keys based on settings,

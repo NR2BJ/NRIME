@@ -12,8 +12,6 @@ final class JapaneseEngineTests: XCTestCase {
         // Pin a known config so tests don't depend on (or pollute) real user settings.
         originalConfig = Settings.shared.japaneseKeyConfig
         var config = JapaneseKeyConfig.default
-        config.prediction = false      // no Mozc IPC in unit tests
-        config.liveConversion = false
         Settings.shared.japaneseKeyConfig = config
         engine = JapaneseEngine()
         client = MockTextInputClient()
@@ -122,13 +120,8 @@ final class JapaneseEngineTests: XCTestCase {
     }
 
     func testShiftHasNoSpecialActionForLetters() {
-        // The Shift key action was retired: even a stored "romaji" setting is
-        // ignored, and Shift+letter composes kana like the plain letter.
-        var config = Settings.shared.japaneseKeyConfig
-        config.shiftKeyAction = .romaji
-        Settings.shared.japaneseKeyConfig = config
-        XCTAssertEqual(Settings.shared.japaneseKeyConfig.shiftKeyAction, .none)
-
+        // The Shift key action was removed: Shift+letter composes kana like
+        // the plain letter (romaji is typed in English mode).
         XCTAssertTrue(engine.handleEvent(
             keyEvent(keyCode: 0x00, modifiers: [.shift]), client: client)) // Shift+a
 
@@ -254,31 +247,15 @@ final class JapaneseEngineTests: XCTestCase {
     func testConversionFallbackPrefersCurrentPreedit() {
         let preedit = makePreedit(["変", "換"])
 
-        let text = JapaneseEngine.conversionFallbackText(
-            preedit: preedit,
-            originalHiragana: "へんかん"
-        )
+        let text = MozcConverter.displayedText(preedit: preedit, reading: "へんかん")
 
         XCTAssertEqual(text, "変換")
     }
 
     func testConversionFallbackUsesOriginalHiraganaWhenPreeditMissing() {
-        let text = JapaneseEngine.conversionFallbackText(
-            preedit: nil,
-            originalHiragana: "かな"
-        )
+        let text = MozcConverter.displayedText(preedit: nil, reading: "かな")
 
         XCTAssertEqual(text, "かな")
-    }
-
-    func testLiveConversionCommitTextAppendsResolvedPendingTail() {
-        let text = JapaneseEngine.liveConversionCommitText(
-            convertedText: "漢字",
-            composedKana: "かんじ",
-            flushedText: "かんじん"
-        )
-
-        XCTAssertEqual(text, "漢字ん")
     }
 
     private func makePreedit(_ segments: [String]) -> Mozc_Commands_Preedit {

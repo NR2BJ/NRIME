@@ -21,8 +21,6 @@ final class AuditRegressionTests: XCTestCase {
         Settings.shared.tapThreshold = 0.2
         Settings.shared.shiftEnterDelay = 0.015
         var config = JapaneseKeyConfig.default
-        config.prediction = false
-        config.liveConversion = false
         Settings.shared.japaneseKeyConfig = config
         client = MockTextInputClient()
         controller = NRIMEInputController(server: nil, delegate: nil, client: nil)

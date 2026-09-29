@@ -75,22 +75,12 @@ struct ShortcutConfig: Codable, Equatable {
 
 /// Japanese IME key configuration.
 ///
-/// Some fields are retired (see `withRetiredOptionsOff()`): they stay so
-/// stored settings and older exports still decode, but are always off.
+/// Stored settings from older versions also carry the F6–F10 conversion keys,
+/// the Shift key action, live conversion, prediction and the ↓ trigger —
+/// features removed on 2026-09-29. Decoding ignores those keys.
 struct JapaneseKeyConfig: Codable, Equatable {
-    /// Retired: F6–F10 conversion keys while composing (hiragana, full/half
-    /// katakana, full/half romaji). Always nil.
-    var hiraganaKeyCode: UInt16? = nil
-    var fullKatakanaKeyCode: UInt16? = nil
-    var halfKatakanaKeyCode: UInt16? = nil
-    var fullRomajiKeyCode: UInt16? = nil
-    var halfRomajiKeyCode: UInt16? = nil
-
     /// Caps Lock action in Japanese mode
     var capsLockAction: CapsLockAction = .capsLock
-    /// Retired: Shift+letter as katakana or romaji. Always .none — Shift
-    /// does nothing special; switching to English is the way to type romaji.
-    var shiftKeyAction: ShiftKeyAction = .none
 
     /// Punctuation style: .japanese -> 。、  .fullWidthWestern -> ．，
     var punctuationStyle: PunctuationStyle = .japanese
@@ -101,42 +91,14 @@ struct JapaneseKeyConfig: Codable, Equatable {
     /// Whether Space inserts full-width space (U+3000) instead of half-width (U+0020)
     var fullWidthSpace: Bool = false
 
-    /// Retired: live conversion. Always false.
-    var liveConversion: Bool = false
-    /// Retired: prediction candidates. Always false.
-    var prediction: Bool = false
-
     /// Candidate panel font size in points (default: 14)
     var candidateFontSize: CGFloat = 14
 
     /// Conversion trigger keys
     var conversionTriggerSpace: Bool = true
     var conversionTriggerTab: Bool = true
-    /// Retired: ↓ as a conversion trigger. Always false (↓ commits, like the
-    /// other arrows).
-    var conversionTriggerDownArrow: Bool = false
 
     static let `default` = JapaneseKeyConfig()
-
-    /// This configuration with the retired options forced off.
-    ///
-    /// Removed from the settings app on 2026-09-29 because the owner does not
-    /// use them. Applied wherever a configuration is read, so a stored value
-    /// or an imported file cannot quietly turn one back on with no switch
-    /// left to turn it off.
-    func withRetiredOptionsOff() -> JapaneseKeyConfig {
-        var config = self
-        config.hiraganaKeyCode = nil
-        config.fullKatakanaKeyCode = nil
-        config.halfKatakanaKeyCode = nil
-        config.fullRomajiKeyCode = nil
-        config.halfRomajiKeyCode = nil
-        config.shiftKeyAction = .none
-        config.liveConversion = false
-        config.prediction = false
-        config.conversionTriggerDownArrow = false
-        return config
-    }
 }
 
 /// Caps Lock behavior options for Japanese input
@@ -144,13 +106,6 @@ enum CapsLockAction: String, Codable, CaseIterable {
     case capsLock = "capsLock"           // System default (toggle caps)
     case katakana = "katakana"           // Convert to full-width katakana
     case romaji = "romaji"               // Convert to half-width romaji
-}
-
-/// Shift key behavior options for Japanese input
-enum ShiftKeyAction: String, Codable, CaseIterable {
-    case none = "none"                   // Normal shift (no special behavior)
-    case katakana = "katakana"           // Shift+input -> katakana
-    case romaji = "romaji"               // Shift+input -> romaji passthrough
 }
 
 /// Punctuation style options for Japanese input

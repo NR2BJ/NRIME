@@ -7,10 +7,12 @@ final class DeveloperLoggerTests: XCTestCase {
     override func setUp() {
         super.setUp()
         Settings.shared.developerModeEnabled = true
+        DeveloperLogger.shared.maxLogBytesForTesting = 512 * 1024
         try? FileManager.default.removeItem(at: DeveloperLogLocation.directoryURL())
     }
 
     override func tearDown() {
+        DeveloperLogger.shared.maxLogBytesForTesting = nil
         Settings.shared.developerModeEnabled = false
         try? FileManager.default.removeItem(at: DeveloperLogLocation.directoryURL())
         super.tearDown()

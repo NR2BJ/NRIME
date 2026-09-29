@@ -32,8 +32,6 @@ final class JapaneseSymbolRoutingTests: XCTestCase {
         Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
 
         var config = JapaneseKeyConfig.default
-        config.prediction = false        // no Mozc IPC in unit tests
-        config.liveConversion = false
         Settings.shared.japaneseKeyConfig = config
 
         client = MockTextInputClient()

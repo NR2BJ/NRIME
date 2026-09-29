@@ -29,6 +29,7 @@ final class MozcServerManager {
 
     /// Launch Mozc in the background so the first conversion does not pay startup cost.
     func prewarmServer() {
+        if AppGroupDefaults.isRunningTests { return }
         warmupQueue.async { [weak self] in
             guard let self else { return }
             switch self.prepareServerForUse() {
@@ -42,18 +43,67 @@ final class MozcServerManager {
         }
     }
 
-    /// Ensures mozc_server is running. Returns true if server is available.
-    func ensureServerRunning() -> Bool {
-        switch prepareServerForUse() {
-        case .reachable:
-            return true
-        case .alreadyRunning:
-            return waitUntilReachable(timeout: launchWaitBudget)
-        case .launched:
-            return waitUntilReachable(timeout: launchWaitBudget)
-        case .launchFailed:
-            NSLog("NRIME: Failed to launch mozc_server")
-            return false
+    /// Whether the server answers its port right now — one bootstrap lookup,
+    /// cheap enough for the keystroke thread.
+    func isServerReachableNow() -> Bool {
+#if DEBUG
+        if let reachable = reachableForTesting { return reachable }
+#endif
+        return isServerReachable()
+    }
+
+#if DEBUG
+    /// Test seam: what `isServerReachableNow` answers under tests.
+    var reachableForTesting: Bool?
+#endif
+
+    /// Start the server if it is not running, without waiting for it.
+    func startInBackground() {
+        runInBackground(restart: false)
+    }
+
+    /// Kill and relaunch the server off the calling thread — at most once per
+    /// cooldown, and never two at a time. Callers do not wait: the keystroke
+    /// that found the server gone gives up, and a later one finds it back.
+    func restartInBackground() {
+        runInBackground(restart: true)
+    }
+
+    private let backgroundLock = NSLock()
+    private var backgroundWorkInFlight = false
+    private var lastBackgroundRestart = Date.distantPast
+    private let backgroundRestartCooldown: TimeInterval = 5.0
+
+    private func runInBackground(restart: Bool) {
+        // Tests must not start or kill the user's server.
+        if AppGroupDefaults.isRunningTests { return }
+        backgroundLock.lock()
+        let now = Date()
+        guard !backgroundWorkInFlight,
+              !restart || now.timeIntervalSince(lastBackgroundRestart) >= backgroundRestartCooldown else {
+            backgroundLock.unlock()
+            return
+        }
+        backgroundWorkInFlight = true
+        if restart { lastBackgroundRestart = now }
+        backgroundLock.unlock()
+
+        warmupQueue.async { [weak self] in
+            guard let self else { return }
+            if restart {
+                MozcClient.removeStaleLockFiles()
+                _ = self.restartServer()
+            } else {
+                switch self.prepareServerForUse() {
+                case .alreadyRunning, .launched:
+                    _ = self.waitUntilReachable(timeout: self.launchWaitBudget)
+                case .reachable, .launchFailed:
+                    break
+                }
+            }
+            self.backgroundLock.lock()
+            self.backgroundWorkInFlight = false
+            self.backgroundLock.unlock()
         }
     }
 

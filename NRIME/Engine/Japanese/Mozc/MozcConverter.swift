@@ -33,17 +33,15 @@ final class MozcConverter {
     /// The original hiragana text being converted.
     var originalHiragana: String = ""
 
-    /// Whether Mozc server is available.
-    private(set) var isAvailable = false
-
     /// Whether Mozc currently has an active conversion (segments in preedit).
     private(set) var isConverting: Bool = false
 
     /// The currently focused candidate index from Mozc's candidate window.
     private(set) var currentFocusedIndex: Int = 0
 
-    /// The last Output returned by feedHiragana (for live conversion).
-    private(set) var lastFeedOutput: Mozc_Commands_Output? = nil
+    /// Bumped whenever a reading is fed, so a deferred submit can tell that the
+    /// conversion it was meant for is over.
+    private var feedGeneration = 0
 
     // MARK: - Key Forwarding API
 
@@ -52,22 +50,20 @@ final class MozcConverter {
         return client.sendKey(keyEvent)
     }
 
-    /// Send a session command to Mozc.
-    func sendCommand(_ command: Mozc_Commands_SessionCommand) -> Mozc_Commands_Output? {
-        return client.sendCommand(command)
-    }
-
     /// Feed hiragana characters to Mozc to build composition state (without triggering conversion).
-    /// If IPC fails (stale server), automatically restarts mozc_server and retries once.
-    /// The last character's Output is stored in `lastFeedOutput` for live conversion.
+    ///
+    /// Never waits for the server: this runs on the keystroke thread, where
+    /// launching or restarting mozc_server and polling for it used to freeze
+    /// every key for seconds. An unreachable or unresponsive server is started
+    /// or restarted in the background and this conversion simply fails; the
+    /// caller keeps the composition so the next attempt works once it is back.
     func feedHiragana(_ hiragana: String) -> Bool {
-        guard serverManager.ensureServerRunning() else {
-            DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed — server not running")
-            isAvailable = false
+        feedGeneration &+= 1
+        guard serverManager.isServerReachableNow() else {
+            DeveloperLogger.shared.log("MozcConvert", "feedHiragana skipped — server not reachable, starting it in the background")
+            serverManager.startInBackground()
             return false
         }
-        isAvailable = true
-        lastFeedOutput = nil
 
         let chars = Array(hiragana)
         var retried = false
@@ -80,27 +76,21 @@ final class MozcConverter {
             let output = client.sendKey(keyEvent)
 
             if let output, !output.hasErrorCode {
-                lastFeedOutput = output
                 i += 1
-            } else if !retried {
-                if output != nil {
-                    // Server answered with an error — typically a stale session
-                    // ID after a restart triggered by another input controller.
-                    // A fresh session is enough; no server restart needed.
-                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana got error code — resetting session and retrying")
-                    client.resetSession()
-                } else {
-                    // IPC failure — restart server and retry from beginning
-                    DeveloperLogger.shared.log("MozcConvert", "feedHiragana IPC failed — restarting server and retrying")
-                    client.resetSession()
-                    guard serverManager.restartServer() else {
-                        DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed — server restart unsuccessful")
-                        isAvailable = false
-                        return false
-                    }
-                }
+            } else if output != nil, !retried {
+                // Server answered with an error — typically a stale session
+                // ID after a restart triggered by another input controller.
+                // A fresh session is enough; no server restart needed.
+                DeveloperLogger.shared.log("MozcConvert", "feedHiragana got error code — resetting session and retrying")
+                client.resetSession()
                 retried = true
                 i = 0
+            } else if output == nil {
+                // No answer: the server is hung or gone. Restart it in the
+                // background and give up on this conversion.
+                DeveloperLogger.shared.log("MozcConvert", "feedHiragana IPC failed — restarting server in the background")
+                serverStoppedAnswering()
+                return false
             } else {
                 DeveloperLogger.shared.log("MozcConvert", "feedHiragana failed after retry")
                 client.resetSession()
@@ -147,37 +137,82 @@ final class MozcConverter {
         return result
     }
 
-    /// Submit the current conversion and return the committed text.
-    func submit() -> String? {
-        var submitCmd = Mozc_Commands_SessionCommand()
-        submitCmd.type = .submit
-
-        guard let output = client.sendCommand(submitCmd) else { return nil }
-
-        isConverting = false
-        currentCandidateStrings = []
-        currentCandidates = []
-        currentPreedit = nil
-        currentFocusedIndex = 0
-
-        if output.hasResult, output.result.hasValue {
+    /// Submit the conversion and return the text to commit: Mozc's result or,
+    /// when it does not answer or answers without one (a stale session after a
+    /// restart), `fallback` — by default what is on screen. The word the user
+    /// confirmed is never dropped or turned back into its reading. Local state
+    /// is cleared either way, without asking Mozc anything else.
+    func commit(fallback: String? = nil) -> String? {
+        let onScreen = fallback ?? displayedText
+        var command = Mozc_Commands_SessionCommand()
+        command.type = .submit
+        let output = client.sendCommand(command)
+        if output == nil {
+            serverStoppedAnswering()
+        }
+        discardLocalState()
+        if let output, output.hasResult, !output.result.value.isEmpty {
             return output.result.value
         }
+        return onScreen
+    }
 
-        // Fallback: preedit text
-        if output.hasPreedit {
-            let text = output.preedit.segment.map { $0.value }.joined()
-            if !text.isEmpty { return text }
+    /// Commit without waiting for Mozc: returns what is on screen and clears
+    /// local state now, and submits on the next turn of the main run loop so
+    /// Mozc still learns the choice. Nothing waits for that answer. A reading
+    /// fed in the meantime has already ended the conversion in Mozc, and the
+    /// submit is skipped rather than landing on the new one.
+    func commitLater() -> String? {
+        let text = displayedText
+        let generation = feedGeneration
+        discardLocalState()
+        DispatchQueue.main.async { [self] in
+            let stillCurrent = feedGeneration == generation
+#if DEBUG
+            deferredSubmitForTesting?(stillCurrent)
+#endif
+            guard stillCurrent, client.hasActiveSession else { return }
+            var command = Mozc_Commands_SessionCommand()
+            command.type = .submit
+            if client.sendCommand(command) == nil {
+                serverStoppedAnswering()
+            }
         }
+        return text
+    }
 
-        return nil
+#if DEBUG
+    /// Test seam: told when a deferred submit runs, and whether it still applied.
+    var deferredSubmitForTesting: ((_ stillCurrent: Bool) -> Void)?
+#endif
+
+    /// The conversion as it is displayed: its segments, else the reading.
+    var displayedText: String? {
+        Self.displayedText(preedit: currentPreedit, reading: originalHiragana)
+    }
+
+    static func displayedText(preedit: Mozc_Commands_Preedit?, reading: String) -> String? {
+        if let preedit, !preedit.segment.isEmpty {
+            let text = preedit.segment.map(\.value).joined()
+            if !text.isEmpty {
+                return text
+            }
+        }
+        return reading.isEmpty ? nil : reading
+    }
+
+    /// Mozc did not answer: forget the session (asking it to delete one would
+    /// only wait again) and restart the server in the background.
+    func serverStoppedAnswering() {
+        client.forgetSession()
+        serverManager.restartInBackground()
     }
 
     // MARK: - Conversion
 
     /// Convert hiragana to kanji candidates via Mozc.
-    /// Returns true if conversion produced a preedit or candidates.
-    /// If IPC fails after feedHiragana, restarts server and retries the full sequence once.
+    /// Returns true if conversion produced a preedit or candidates; false when
+    /// Mozc is unavailable (being started in the background) or found nothing.
     func convert(hiragana: String) -> Bool {
         DeveloperLogger.shared.log("MozcConvert", "Convert requested",
                                    metadata: ["length": "\(hiragana.count)"])
@@ -190,22 +225,13 @@ final class MozcConverter {
         var spaceKey = Mozc_Commands_KeyEvent()
         spaceKey.specialKey = .space
 
-        var output = client.sendKey(spaceKey)
-        if output == nil {
-            // Space key IPC failed — restart server and retry entire sequence
-            client.resetSession()
-            guard serverManager.restartServer(),
-                  feedHiragana(hiragana) else {
-                return false
-            }
-            output = client.sendKey(spaceKey)
-            guard output != nil else {
-                client.resetSession()
-                return false
-            }
+        guard let output = client.sendKey(spaceKey) else {
+            // No answer to Space: restart in the background, don't wait here.
+            serverStoppedAnswering()
+            return false
         }
 
-        let result = updateFromOutput(output!)
+        let result = updateFromOutput(output)
         DeveloperLogger.shared.log("MozcConvert", "Convert result",
                                    metadata: ["candidates": "\(currentCandidateStrings.count)",
                                               "hasPreedit": "\(result.preedit != nil)"])
@@ -222,27 +248,6 @@ final class MozcConverter {
         originalHiragana = hiragana
     }
 
-    /// Peek at the conversion result without committing.
-    /// Sends Space to trigger conversion, reads the preedit (which now contains kanji segments).
-    /// After this call, the Mozc session is in CONVERSION state (not reverted).
-    /// The caller should call cancel() before the next feedHiragana() if needed.
-    func peekConversion() -> String? {
-        var spaceKey = Mozc_Commands_KeyEvent()
-        spaceKey.specialKey = .space
-
-        guard let output = client.sendKey(spaceKey) else { return nil }
-
-        if output.hasPreedit, !output.preedit.segment.isEmpty {
-            currentPreedit = output.preedit
-            isConverting = true
-            // Also extract candidates for when user presses Space to see full list
-            extractCandidates(from: output)
-            return output.preedit.segment.map { $0.value }.joined()
-        }
-
-        return nil
-    }
-
     /// Cancel the current conversion, reverting to hiragana.
     func cancel() {
         var command = Mozc_Commands_SessionCommand()
@@ -256,12 +261,6 @@ final class MozcConverter {
         isConverting = false
     }
 
-    /// Clear Mozc's learned user history and prediction data.
-    func clearUserHistory() {
-        client.clearUserHistory()
-        client.clearUserPrediction()
-    }
-
     /// Reset all state (e.g., on mode switch or deactivate).
     func reset() {
         if isConverting || !currentCandidateStrings.isEmpty {
@@ -273,32 +272,18 @@ final class MozcConverter {
         currentFocusedIndex = 0
         originalHiragana = ""
         isConverting = false
-        lastFeedOutput = nil
     }
 
-    // MARK: - Prediction
-
-    /// Request next-word prediction from Mozc after committing text.
-    /// `precedingText` is the text before the cursor (up to ~20 chars), used by Mozc's NWP engine.
-    /// Returns a MozcResult with prediction candidates, or nil if none.
-    func requestPrediction(precedingText: String = "") -> MozcResult? {
-        var command = Mozc_Commands_SessionCommand()
-        command.type = .requestNwp
-
-        var context: Mozc_Commands_Context? = nil
-        if !precedingText.isEmpty {
-            var ctx = Mozc_Commands_Context()
-            ctx.precedingText = precedingText
-            context = ctx
-        }
-
-        guard let output = client.sendCommand(command, context: context) else { return nil }
-
-        let result = updateFromOutput(output)
-        return result.hasCandidates ? result : nil
+    /// Forget the conversion here without telling Mozc — it is unreachable,
+    /// or has already been told. The session is sorted out on its next use.
+    func discardLocalState() {
+        currentCandidateStrings = []
+        currentCandidates = []
+        currentPreedit = nil
+        currentFocusedIndex = 0
+        originalHiragana = ""
+        isConverting = false
     }
-
-    // MARK: - Candidate Selection
 
     /// Select a candidate by its index using Mozc's SELECT_CANDIDATE command.
     /// Returns the output from Mozc after selection (may commit segment and advance to next).
