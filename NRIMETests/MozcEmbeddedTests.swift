@@ -69,6 +69,24 @@ final class MozcEmbeddedTests: XCTestCase {
         XCTAssertTrue(found, "Words added to the user dictionary are conversion candidates after a reload")
     }
 
+    func testLearningIsSavedShortlyAfterACommit() {
+        // mozc_server saved learning on a watchdog timer; nothing else would
+        // before an update's killall.
+        let originalDelay = MozcEngine.syncDelay
+        MozcEngine.syncDelay = 0.05
+        defer { MozcEngine.syncDelay = originalDelay }
+        let converter = MozcConverter()
+        let savesBefore = MozcEngine.shared.syncCountForTesting
+
+        XCTAssertTrue(converter.convert(hiragana: "がっこう"))
+        XCTAssertNotNil(converter.commit())
+        let saved = expectation(description: "saved")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { saved.fulfill() }
+        wait(for: [saved], timeout: 2)
+
+        XCTAssertEqual(MozcEngine.shared.syncCountForTesting, savesBefore + 1, "One save for the commit")
+    }
+
     func testReportsItsVersion() {
         let version = String(cString: nrime_mozc_version())
         XCTAssertEqual(version.split(separator: ".").count, 4, version)

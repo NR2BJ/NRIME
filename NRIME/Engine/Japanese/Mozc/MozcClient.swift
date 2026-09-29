@@ -144,6 +144,10 @@ final class MozcClient {
         let start = ProcessInfo.processInfo.systemUptime
         let output = MozcEngine.shared.eval(input)
         let duration = ProcessInfo.processInfo.systemUptime - start
+        // A committed result is something Mozc learns from: have it saved.
+        if let output, output.hasResult {
+            MozcEngine.shared.learningChanged()
+        }
         // A command takes about a millisecond in process; log the exceptions
         // (by type, never content) so slow keys can be traced to Mozc or not.
         if duration >= 0.02 {

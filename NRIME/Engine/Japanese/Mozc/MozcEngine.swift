@@ -92,11 +92,37 @@ final class MozcEngine {
         return try? Mozc_Commands_Output(serializedBytes: Data(bytes: response, count: responseSize))
     }
 
-    /// Save learning to disk. Mozc also saves when a session ends; this covers
-    /// quitting (updates, logout) with sessions still open.
+    /// Save learning to disk. Mozc also saves when a session ends.
     func sync() {
+        syncScheduled = false
+#if DEBUG
+        syncCountForTesting += 1
+#endif
         send(.syncData)
     }
+
+    /// Mozc keeps what it learns in memory until a sync. mozc_server had a
+    /// watchdog sending CLEANUP — which syncs — every few minutes; in process
+    /// nothing does, and an update ends the input method with killall, which
+    /// skips applicationWillTerminate. So a commit schedules a save shortly
+    /// after: one for any number of commits in that window.
+    func learningChanged() {
+        guard !syncScheduled else { return }
+        syncScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.syncDelay) {
+            if MozcEngine.shared.syncScheduled {
+                MozcEngine.shared.sync()
+            }
+        }
+    }
+
+    private var syncScheduled = false
+    static var syncDelay: TimeInterval = 20
+
+#if DEBUG
+    /// Test seam: how many times learning was saved.
+    private(set) var syncCountForTesting = 0
+#endif
 
     /// Read the user dictionary again after the settings app changed it.
     /// Mozc reloads in the background; new words appear a moment later.
