@@ -23,8 +23,11 @@
 "shiftDoubleTap.description" = "Caps Lockを切り替えるための2回のShiftタップの最大間隔です。Shift+CapsLockでも直接切り替えできます。";
 
 /* GeneralTab - Shift Enter Delay */
-"section.shiftEnterDelay" = "Shift+Enter 遅延 (Electron)";
-"shiftEnterDelay.description" = "テキスト確定と改行挿入の間の遅延時間です。Electronアプリ（VS Code、Discordなど）で入力中のテキストが消える場合は値を上げてください。";
+"section.shiftEnterDelay" = "Shift+Enter 改行の待ち時間";
+"shiftEnterDelay.description" = "入力中の文字を確定してから改行を入れるまでの待ち時間です。Electronアプリ（VS Code、Discordなど）で入力中の文字が消える場合は値を上げてください。入力中に押した⌘ショートカットも、同じだけ待ってからアプリへ送り直します。";
+"shiftEnterDelay.codexDescription" = "Codexは改行文字を入れるとメッセージを送信してしまうため、確定後この時間だけ待ってからShift+Enterを送り直します。確定だけで改行されない場合は値を上げ、うまくいく場合は下げて、動作する最小の値を見つけてください。待っている間に打った文字は、改行のあとに順番どおり入ります。";
+"shiftEnterDelay.codex" = "Codex";
+"shiftEnterDelay.electron" = "Electronアプリ";
 
 /* GeneralTab - Display */
 "section.display" = "表示";
@@ -159,6 +162,11 @@
 "dictionary.fieldWord" = "単語（変換）:";
 "dictionary.fieldPOS" = "品詞:";
 "dictionary.fieldComment" = "コメント（任意）:";
+"dictionary.readingHint" = "読みはひらがなで保存されます（カタカナはひらがなに変換）。小書きの仮名（ゃ・っ・ぁなど）や長音符ーも使えます。";
+"dictionary.problem.empty" = "読みと単語を入力してください。";
+"dictionary.problem.tooLong" = "300文字まで入力できます。";
+"dictionary.problem.lineBreak" = "タブや改行は使えません。";
+"dictionary.problem.duplicate" = "同じ単語がすでにあります。";
 "dictionary.save" = "保存";
 
 /* PerAppTab */
@@ -213,12 +221,12 @@
 
 /* 2026-09-29: 입력기 권한 */
 "section.permissions" = "入力メソッドの権限";
-"permissions.postEvents" = "キーイベントの送信";
 "permissions.accessibility" = "アクセシビリティ";
+"permissions.deviceControl" = "デバイスの制御とデータへのアクセス";
 "permissions.granted" = "許可済み";
 "permissions.denied" = "オフ";
 "permissions.unknown" = "未確認";
-"permissions.description" = "確定後に⌘+キーやCodexのShift+Enterをアプリへ送り直すために必要です。「オフ」の場合は、システム設定 > プライバシーとセキュリティ > アクセシビリティでNRIMEを一覧から削除（−）し、/Library/Input Methods/NRIME.app を追加（+）し直してください。オンに見えても古いビルドへの許可なら適用されません。";
+"permissions.description" = "確定後に⌘+キーやCodexのShift+Enterをアプリへ送り直すために必要です。「オフ」の場合は、システム設定 > プライバシーとセキュリティ > デバイスの制御とデータへのアクセス（macOS 26以前: アクセシビリティ）でNRIMEをオンにしてください。一覧にない場合は下の「再確認 / 権限を要求」を押すか、+ボタンで /Library/Input Methods/NRIME.app を追加してください。オンなのに「オフ」と表示される場合は、一覧から削除（−）してから追加し直してください。";
 "permissions.checkedAt" = "入力メソッドの最終確認: %@";
 "permissions.recheck" = "再確認 / 権限を要求";
 "permissions.openSettings" = "システム設定を開く";

@@ -60,6 +60,8 @@ class NRIMEInputController: IMKInputController {
     private struct EventTrace {
         var path = "engine"
         var sensitive = false
+        /// A key held during a Codex newline replay, now coming back.
+        var releasedHeldKey = false
     }
 
     private func process(_ event: NSEvent, client: any IMKTextInput, trace: inout EventTrace) -> Bool {
@@ -71,6 +73,7 @@ class NRIMEInputController: IMKInputController {
                 trace.path = "repost"
                 return false
             }
+            trace.releasedHeldKey = userData == KeyEventReposter.heldKeyTag
         } else if event.type == .keyDown {
             // cgEvent is nil — we can't detect reposted events via tag
             DeveloperLogger.shared.log("Controller", "event.cgEvent is NIL", metadata: [
@@ -87,6 +90,7 @@ class NRIMEInputController: IMKInputController {
         // replacement range from swallowing the composition this key starts.
         if event.type == .keyDown {
             KeyEventReposter.flushPendingNewline()
+            KeyEventReposter.noteKeyDown()
         }
 
         let mode = StateManager.shared.currentMode
@@ -164,11 +168,11 @@ class NRIMEInputController: IMKInputController {
         if let panel = NSApp.candidatePanel, panel.isVisible() {
             shortcutHandler.observeConsumedKeyDown(event)
             trace.path = "candidates"
-            return handleCandidateNavigation(event, client: client, panel: panel)
+            return handleCandidateNavigation(event, client: client, panel: panel, trace: &trace)
         }
 
         // 4. Shortcut detection + engine routing
-        return routeEvent(event, client: client)
+        return routeEvent(event, client: client, trace: &trace)
     }
 
     /// Handle all keyboard events during Japanese Mozc conversion.
@@ -309,7 +313,8 @@ class NRIMEInputController: IMKInputController {
 
     /// Handle keyboard events when the candidate panel is visible (Korean hanja only).
     /// Japanese conversion is handled entirely by handleJapaneseConversion() above.
-    private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, panel: CandidatePanel) -> Bool {
+    private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, panel: CandidatePanel,
+                                           trace: inout EventTrace) -> Bool {
         guard event.type == .keyDown else { return false }
 
         switch event.keyCode {
@@ -390,7 +395,7 @@ class NRIMEInputController: IMKInputController {
             endHanjaSessionIfNeeded(client: client)
             panel.hide()
             if shouldPassThrough {
-                return routeEvent(event, client: client)
+                return routeEvent(event, client: client, trace: &trace)
             }
             return false
 
@@ -398,7 +403,7 @@ class NRIMEInputController: IMKInputController {
             // Dismiss panel and route event through normal handling
             endHanjaSessionIfNeeded(client: client)
             panel.hide()
-            return routeEvent(event, client: client)
+            return routeEvent(event, client: client, trace: &trace)
         }
     }
 
@@ -682,13 +687,24 @@ class NRIMEInputController: IMKInputController {
 
     /// Route an event through shortcut detection and engine handling.
     /// Shared by handle() and handleCandidateNavigation's default case.
-    private func routeEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
+    private func routeEvent(_ event: NSEvent, client: any IMKTextInput,
+                            trace: inout EventTrace) -> Bool {
         if shortcutHandler.onAction == nil {
             wireUpShortcutHandler()
         }
         // flagsChanged was already fed to the shortcut handler in handle() step
-        // 1.9 — feeding it twice would corrupt the press/release tracking.
-        if event.type != .flagsChanged, shortcutHandler.handleEvent(event) {
+        // 1.9 — feeding it twice would corrupt the press/release tracking. A
+        // released held key was shown to it when it was first pressed.
+        if event.type != .flagsChanged, !trace.releasedHeldKey, shortcutHandler.handleEvent(event) {
+            return true
+        }
+
+        // A Codex newline replay is still waiting: this key was typed after
+        // the newline and must reach the app after it. Held here — after the
+        // shortcut handler has seen it, so a Shift held for it is not a tap.
+        if !trace.releasedHeldKey,
+           KeyEventReposter.holdForPendingReplay(event, client: client as AnyObject) {
+            trace.path = "held"
             return true
         }
 
@@ -879,6 +895,9 @@ class NRIMEInputController: IMKInputController {
         // isARepeat is only valid for key events; flagsChanged would throw.
         if !isFlags, event.isARepeat {
             metadata["repeat"] = "Y"
+        }
+        if trace.releasedHeldKey {
+            metadata["released"] = "Y"
         }
         DeveloperLogger.shared.log("Key", isFlags ? "flags" : "down", metadata: metadata)
     }

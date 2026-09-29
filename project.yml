@@ -49,6 +49,8 @@ targets:
         type: file
       - path: Shared/PermissionStatus.swift
         type: file
+      - path: Shared/UserDictionaryReading.swift
+        type: file
       - path: NRIME/Resources/mozc_server
         buildPhase: resources
         type: file
@@ -107,6 +109,8 @@ targets:
       - path: Shared/AppGroupDefaults.swift
         type: file
       - path: Shared/PermissionStatus.swift
+        type: file
+      - path: Shared/UserDictionaryReading.swift
         type: file
       - path: NRIME/Engine/Japanese/Proto/user_dictionary_storage.pb.swift
         type: file

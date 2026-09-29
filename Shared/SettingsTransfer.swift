@@ -22,6 +22,7 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     // which is different from "the user turned it off".
     var indicatorPositionMode: String?
     var shiftEnterDelay: Double?
+    var codexNewlineDelay: Double?
     var tapHoldBufferingEnabled: Bool?
     var tapOverlapWindow: Double?
     var secureInputASCIIFallback: Bool?
@@ -40,6 +41,7 @@ enum SettingsTransfer {
 
     static let indicatorPositionModeKey = "indicatorPositionMode"
     static let shiftEnterDelayKey = "shiftEnterDelay"
+    static let codexNewlineDelayKey = "codexNewlineDelay"
     static let tapHoldBufferingEnabledKey = "tapHoldBufferingEnabled"
     static let tapOverlapWindowKey = "tapOverlapWindow"
     static let secureInputASCIIFallbackKey = "secureInputASCIIFallback"
@@ -88,6 +90,9 @@ enum SettingsTransfer {
             shiftEnterDelay: defaults.double(forKey: shiftEnterDelayKey) > 0
                 ? defaults.double(forKey: shiftEnterDelayKey)
                 : 0.015,
+            codexNewlineDelay: defaults.double(forKey: codexNewlineDelayKey) > 0
+                ? defaults.double(forKey: codexNewlineDelayKey)
+                : 0.12,
             tapHoldBufferingEnabled: defaults.bool(forKey: tapHoldBufferingEnabledKey),
             tapOverlapWindow: defaults.double(forKey: tapOverlapWindowKey) > 0
                 ? defaults.double(forKey: tapOverlapWindowKey)
@@ -134,6 +139,9 @@ enum SettingsTransfer {
         }
         if let value = snapshot.shiftEnterDelay {
             defaults.set(value, forKey: shiftEnterDelayKey)
+        }
+        if let value = snapshot.codexNewlineDelay {
+            defaults.set(value, forKey: codexNewlineDelayKey)
         }
         if let value = snapshot.tapHoldBufferingEnabled {
             defaults.set(value, forKey: tapHoldBufferingEnabledKey)

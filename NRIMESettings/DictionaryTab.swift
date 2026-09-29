@@ -149,12 +149,16 @@ struct DictionaryTab: View {
             manager.load()
         }
         .sheet(isPresented: $showingAddSheet) {
-            DictionaryEntryEditor(mode: .add) { key, value, pos, comment in
+            DictionaryEntryEditor(mode: .add, problem: { key, value, pos, comment in
+                manager.problem(key: key, value: value, pos: pos, comment: comment, excluding: nil)
+            }) { key, value, pos, comment in
                 manager.addEntry(key: key, value: value, pos: pos, comment: comment)
             }
         }
         .sheet(item: $editingEntry) { entry in
-            DictionaryEntryEditor(mode: .edit(entry)) { key, value, pos, comment in
+            DictionaryEntryEditor(mode: .edit(entry), problem: { key, value, pos, comment in
+                manager.problem(key: key, value: value, pos: pos, comment: comment, excluding: entry.id)
+            }) { key, value, pos, comment in
                 manager.updateEntry(id: entry.id, key: key, value: value, pos: pos, comment: comment)
             }
         }
@@ -172,13 +176,15 @@ struct DictionaryTab: View {
 
 // MARK: - Entry Editor Sheet
 
-private struct DictionaryEntryEditor: View {
+struct DictionaryEntryEditor: View {
     enum Mode {
         case add
         case edit(UserDictionaryManager.DictionaryEntry)
     }
 
     let mode: Mode
+    /// Why the entry as typed cannot be saved, or nil (see UserDictionaryManager.problem).
+    let problem: (String, String, UserDictionaryManager.PosType, String) -> String?
     let onSave: (String, String, UserDictionaryManager.PosType, String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -195,9 +201,15 @@ private struct DictionaryEntryEditor: View {
         }
     }
 
-    private var isValid: Bool {
-        !key.trimmingCharacters(in: .whitespaces).isEmpty
-        && !value.trimmingCharacters(in: .whitespaces).isEmpty
+    private var normalizedKey: String {
+        UserDictionaryManager.normalizedReading(key)
+    }
+
+    private var currentProblem: String? {
+        problem(normalizedKey,
+                value.trimmingCharacters(in: .whitespaces),
+                pos,
+                comment.trimmingCharacters(in: .whitespaces))
     }
 
     var body: some View {
@@ -224,8 +236,23 @@ private struct DictionaryEntryEditor: View {
 
                 TextField(L("dictionary.fieldComment"), text: $comment)
                     .textFieldStyle(.roundedBorder)
+
+                Text(L("dictionary.readingHint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 20)
+
+            // Shown once something has been typed, so an empty new entry
+            // does not open with an error.
+            if let problem = currentProblem, !key.isEmpty || !value.isEmpty {
+                Text(problem)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+            }
 
             // Buttons
             HStack {
@@ -238,7 +265,7 @@ private struct DictionaryEntryEditor: View {
 
                 Button(L("dictionary.save")) {
                     onSave(
-                        key.trimmingCharacters(in: .whitespaces),
+                        normalizedKey,
                         value.trimmingCharacters(in: .whitespaces),
                         pos,
                         comment.trimmingCharacters(in: .whitespaces)
@@ -246,12 +273,12 @@ private struct DictionaryEntryEditor: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isValid)
+                .disabled(currentProblem != nil)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 420, height: 280)
+        .frame(width: 420, height: 330)
         .onAppear {
             if case .edit(let entry) = mode {
                 key = entry.key

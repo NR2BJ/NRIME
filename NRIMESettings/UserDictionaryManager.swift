@@ -280,17 +280,44 @@ final class UserDictionaryManager: ObservableObject {
         return true
     }
 
+    // MARK: - Validation
+
+    /// See UserDictionaryReading.normalized.
+    static func normalizedReading(_ text: String) -> String {
+        UserDictionaryReading.normalized(text)
+    }
+
+    /// Why an entry cannot be saved, or nil. `key` is the normalized reading;
+    /// `excluding` is the entry being edited.
+    func problem(key: String, value: String, pos: PosType, comment: String,
+                 excluding id: UUID?) -> String? {
+        if key.isEmpty || value.isEmpty {
+            return L("dictionary.problem.empty")
+        }
+        let fields = [key, value, comment]
+        if fields.contains(where: { $0.count > 300 }) {
+            return L("dictionary.problem.tooLong")
+        }
+        if fields.contains(where: { $0.contains(where: { $0 == "\t" || $0.isNewline }) }) {
+            return L("dictionary.problem.lineBreak")
+        }
+        if entries.contains(where: { $0.id != id && $0.key == key && $0.value == value && $0.pos == pos }) {
+            return L("dictionary.problem.duplicate")
+        }
+        return nil
+    }
+
     // MARK: - CRUD
 
     func addEntry(key: String, value: String, pos: PosType = .noun, comment: String = "") {
-        let entry = DictionaryEntry(key: key, value: value, pos: pos, comment: comment)
+        let entry = DictionaryEntry(key: Self.normalizedReading(key), value: value, pos: pos, comment: comment)
         entries.append(entry)
         save()
     }
 
     func updateEntry(id: UUID, key: String, value: String, pos: PosType, comment: String) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
-        entries[index].key = key
+        entries[index].key = Self.normalizedReading(key)
         entries[index].value = value
         entries[index].pos = pos
         entries[index].comment = comment

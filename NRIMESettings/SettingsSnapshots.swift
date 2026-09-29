@@ -17,6 +17,13 @@ enum SettingsSnapshots {
             ("general", AnyView(GeneralTab()), 1500),
             ("japanese", AnyView(JapaneseTab()), 1150),
             ("japanese-dictionary", AnyView(JapaneseTab(startOnDictionary: true)), 520),
+            ("dictionary-editor", AnyView(DictionaryEntryEditor(
+                mode: .edit(UserDictionaryManager.DictionaryEntry(key: "ﾁｬｯｷｭｰﾓﾂ", value: "茶っ究ー津")),
+                problem: { key, _, _, _ in
+                    // Show the reading as it will be saved, where the error line goes.
+                    "\(L("dictionary.fieldReading")): \(key)"
+                },
+                onSave: { _, _, _, _ in })), 330),
         ]
         for (name, view, height) in pages {
             render(view, height: height, to: directory.appendingPathComponent("\(name).png"))

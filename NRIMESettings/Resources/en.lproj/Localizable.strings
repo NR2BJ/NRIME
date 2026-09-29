@@ -23,8 +23,11 @@
 "shiftDoubleTap.description" = "Maximum interval between two Shift taps to toggle Caps Lock. Shift+CapsLock also toggles Caps Lock directly.";
 
 /* GeneralTab - Shift Enter Delay */
-"section.shiftEnterDelay" = "Shift+Enter Delay (Electron)";
-"shiftEnterDelay.description" = "Delay between committing text and inserting newline on Shift+Enter. Increase if composing text disappears in Electron apps (VS Code, Discord, etc.).";
+"section.shiftEnterDelay" = "Shift+Enter Newline Delay";
+"shiftEnterDelay.description" = "How long to wait between committing the composition and inserting the newline. Increase it if composing text disappears in Electron apps (VS Code, Discord, etc.). ⌘ shortcuts pressed while composing are re-sent after the same wait.";
+"shiftEnterDelay.codexDescription" = "Codex sends the message when a newline character is inserted, so NRIME commits, waits this long, and re-sends Shift+Enter. If you only get the commit and no newline, increase it; if it works, lower it to find the smallest value that still works. Keys typed during the wait go in after the newline, in order.";
+"shiftEnterDelay.codex" = "Codex";
+"shiftEnterDelay.electron" = "Electron apps";
 
 /* GeneralTab - Display */
 "section.display" = "Display";
@@ -159,6 +162,11 @@
 "dictionary.fieldWord" = "Word (conversion):";
 "dictionary.fieldPOS" = "Part of Speech:";
 "dictionary.fieldComment" = "Comment (optional):";
+"dictionary.readingHint" = "Readings are stored in hiragana (katakana is converted). Small kana (ゃ, っ, ぁ…) and the long-vowel mark ー work too.";
+"dictionary.problem.empty" = "Enter a reading and a word.";
+"dictionary.problem.tooLong" = "Up to 300 characters.";
+"dictionary.problem.lineBreak" = "Tabs and line breaks are not allowed.";
+"dictionary.problem.duplicate" = "The same word is already in the dictionary.";
 "dictionary.save" = "Save";
 
 /* PerAppTab */
@@ -213,12 +221,12 @@
 
 /* 2026-09-29: 입력기 권한 */
 "section.permissions" = "Input method permissions";
-"permissions.postEvents" = "Post key events";
 "permissions.accessibility" = "Accessibility";
+"permissions.deviceControl" = "Device Control and Data Access";
 "permissions.granted" = "Allowed";
 "permissions.denied" = "Off";
 "permissions.unknown" = "Not checked yet";
-"permissions.description" = "Needed to re-send ⌘+key or Codex Shift+Enter to the app after committing. If it shows Off, remove NRIME from System Settings > Privacy & Security > Accessibility (−) and add /Library/Input Methods/NRIME.app again (+). An entry that looks enabled may belong to an older build and not apply.";
+"permissions.description" = "Needed to re-send ⌘+key or Codex Shift+Enter to the app after committing. If it shows Off, turn NRIME on in System Settings > Privacy & Security > Device Control and Data Access (Accessibility on macOS 26 and earlier). If NRIME is not listed, press Check again / Request below, or add /Library/Input Methods/NRIME.app with the + button. If it is on but still shows Off, remove it from the list (−) and add it again.";
 "permissions.checkedAt" = "Last checked by the input method: %@";
 "permissions.recheck" = "Check again / Request";
 "permissions.openSettings" = "Open System Settings";

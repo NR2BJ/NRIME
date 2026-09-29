@@ -10,8 +10,10 @@ final class SettingsStore: ObservableObject {
     private let defaults: UserDefaults
 
     init() {
-        let suiteName = "group.com.nrime.inputmethod"
-        defaults = UserDefaults(suiteName: suiteName) ?? UserDefaults.standard
+        // Through AppGroupDefaults like every other App Group user: a test or
+        // snapshot run (which loads, and so writes back, every setting) must
+        // not touch the owner's live configuration.
+        defaults = AppGroupDefaults.make()
 
         _inlineIndicatorEnabled = Published(initialValue: true)
         _indicatorPositionMode = Published(initialValue: "caret")
@@ -23,6 +25,7 @@ final class SettingsStore: ObservableObject {
         _toggleNonEnglishShortcut = Published(initialValue: .defaultToggleNonEnglish)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
         _shiftEnterDelay = Published(initialValue: 0.015)
+        _codexNewlineDelay = Published(initialValue: 0.12)
         _tapHoldBufferingEnabled = Published(initialValue: false)
         _tapOverlapWindow = Published(initialValue: 0.05)
         _japaneseKeyConfig = Published(initialValue: .default)
@@ -79,6 +82,11 @@ final class SettingsStore: ObservableObject {
 
     @Published var shiftEnterDelay: Double {
         didSet { defaults.set(shiftEnterDelay, forKey: "shiftEnterDelay") }
+    }
+
+    /// Codex's own wait before the Shift+Enter replay (see Settings.codexNewlineDelay).
+    @Published var codexNewlineDelay: Double {
+        didSet { defaults.set(codexNewlineDelay, forKey: "codexNewlineDelay") }
     }
 
     // MARK: - Input Method Permissions
@@ -146,6 +154,8 @@ final class SettingsStore: ObservableObject {
         tapThreshold = tapVal > 0 ? tapVal : 0.2
         let seVal = defaults.double(forKey: "shiftEnterDelay")
         shiftEnterDelay = seVal > 0 ? seVal : 0.015
+        let cxVal = defaults.double(forKey: "codexNewlineDelay")
+        codexNewlineDelay = cxVal > 0 ? cxVal : 0.12
         tapHoldBufferingEnabled = defaults.bool(forKey: "tapHoldBufferingEnabled")
         let towVal = defaults.double(forKey: "tapOverlapWindow")
         tapOverlapWindow = towVal > 0 ? towVal : 0.05

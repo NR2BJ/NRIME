@@ -6,6 +6,14 @@ struct GeneralTab: View {
     @State private var transferStatusMessage: String = ""
     @State private var transferStatusIsError = false
 
+    /// What System Settings calls the list NRIME has to be on: macOS 27
+    /// renamed "Accessibility" to "Device Control and Data Access".
+    private static var permissionTitle: String {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
+            ? L("permissions.deviceControl")
+            : L("permissions.accessibility")
+    }
+
     var body: some View {
         let _ = lang.revision
         Form {
@@ -68,12 +76,27 @@ struct GeneralTab: View {
             Section(L("section.shiftEnterDelay")) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
+                        Text(L("shiftEnterDelay.electron"))
+                            .frame(width: 80, alignment: .leading)
                         Text("\(Int(round(store.shiftEnterDelay * 1000)))ms")
                             .monospacedDigit()
                             .frame(width: 50, alignment: .trailing)
                         Slider(value: $store.shiftEnterDelay, in: 0.005...0.050, step: 0.005)
                     }
                     Text(L("shiftEnterDelay.description"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L("shiftEnterDelay.codex"))
+                            .frame(width: 80, alignment: .leading)
+                        Text("\(Int(round(store.codexNewlineDelay * 1000)))ms")
+                            .monospacedDigit()
+                            .frame(width: 50, alignment: .trailing)
+                        Slider(value: $store.codexNewlineDelay, in: 0.010...0.200, step: 0.005)
+                    }
+                    Text(L("shiftEnterDelay.codexDescription"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -124,10 +147,10 @@ struct GeneralTab: View {
             }
 
             Section(L("section.permissions")) {
-                PermissionRow(title: L("permissions.postEvents"),
-                              granted: store.permissionStatus?.postEvents)
-                PermissionRow(title: L("permissions.accessibility"),
-                              granted: store.permissionStatus?.accessibility)
+                // One grant covers both: posting events is allowed by the
+                // Accessibility grant, which is the only switch macOS offers.
+                PermissionRow(title: Self.permissionTitle,
+                              granted: store.permissionStatus.map { $0.postEvents || $0.accessibility })
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L("permissions.description"))
                         .font(.caption)

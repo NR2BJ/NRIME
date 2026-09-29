@@ -90,6 +90,20 @@ final class Settings {
         set { defaults.set(newValue, forKey: "shiftEnterDelay") }
     }
 
+    /// How long the Codex Shift+Enter replay waits after the commit. 120 ms
+    /// was never measured (it went in while NRIME could not post events at
+    /// all), so it is adjustable: the developer log records whether each
+    /// replay produced a newline, which finds the smallest value that works.
+    var codexNewlineDelay: TimeInterval {
+        get {
+            let val = defaults.double(forKey: "codexNewlineDelay")
+            return val > 0 ? val : Self.defaultCodexNewlineDelay
+        }
+        set { defaults.set(newValue, forKey: "codexNewlineDelay") }
+    }
+
+    static let defaultCodexNewlineDelay: TimeInterval = 0.12
+
     // MARK: - Input Source Recovery
 
     var preventABCSwitch: Bool {
