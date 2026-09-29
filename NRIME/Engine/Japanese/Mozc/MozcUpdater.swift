@@ -67,6 +67,8 @@ final class MozcUpdater {
             let outcome = await Self.check(installed: installed, bad: bad)
             await MainActor.run {
                 MozcUpdater.shared.checking = false
+                // A failed check (offline, GitHub down) is not a check.
+                if case .failed = outcome { return }
                 MozcEngine.updateStatus { status in
                     status.checkedAt = Date()
                     if case .downloaded(let component) = outcome {
