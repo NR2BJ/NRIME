@@ -56,6 +56,7 @@ final class TapHoldBufferingTests: XCTestCase {
         Settings.shared.tapHoldBufferingEnabled = originalEnabled
         Settings.shared.tapThreshold = originalThreshold
         StateManager.shared.switchTo(.english)
+        ShortcutHandler.physicalModifierFlags = { NSEvent.modifierFlags }
         for (key, config) in originalShortcuts {
             Settings.shared.setShortcut(config, for: key)
         }
@@ -306,6 +307,54 @@ final class TapHoldBufferingTests: XCTestCase {
 
         XCTAssertTrue(firedActions.isEmpty, "A capital A")
         XCTAssertEqual(replays.first?.keepShift, true)
+    }
+
+    // MARK: - A slow app delivers the release late
+
+    // Shift is already up when the window runs out, but the app has not passed
+    // the release on yet (busy system). The tap must still be decided by the
+    // release's own timestamp, not settled as a capital by the timer.
+    func testLateReleaseFromASlowAppStillCountsAsATap() {
+        _ = handler.handleEvent(shiftDown(rightShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyD, side: .right, at: 0.080)))
+
+        ShortcutHandler.physicalModifierFlags = { [] }   // physically up already
+        handler.fireTimeoutForTesting()
+        XCTAssertTrue(handler.hasPendingLetterForTesting, "Waits for the release in flight")
+        XCTAssertTrue(replays.isEmpty)
+
+        _ = handler.handleEvent(shiftUp(rightShift, at: 0.100))   // arrives late, overlap 20 ms
+        XCTAssertEqual(firedActions, [.toggleEnglish])
+        XCTAssertEqual(replays.first?.keepShift, false)
+    }
+
+    // Still physically held when the window runs out: a deliberate Shift+letter.
+    func testTimeoutWithShiftStillHeldSettlesAsHold() {
+        _ = handler.handleEvent(shiftDown(rightShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyR, side: .right, at: 0.060)))
+
+        ShortcutHandler.physicalModifierFlags = { .shift }
+        handler.fireTimeoutForTesting()
+        XCTAssertFalse(handler.hasPendingLetterForTesting)
+        XCTAssertEqual(replays.first?.keepShift, true, "ㄲ")
+    }
+
+    // Up, but the release never reaches this controller (focus moved): the
+    // letter is not held forever.
+    func testReleaseThatNeverArrivesIsSettledAfterTheLimit() {
+        _ = handler.handleEvent(shiftDown(rightShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyD, side: .right, at: 0.080)))
+
+        ShortcutHandler.physicalModifierFlags = { [] }
+        handler.fireTimeoutForTesting()
+        let settled = expectation(description: "settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        XCTAssertFalse(handler.hasPendingLetterForTesting)
+        XCTAssertEqual(replays.count, 1)
+        XCTAssertEqual(replays.first?.keepShift, true)
+        XCTAssertTrue(firedActions.isEmpty)
     }
 
     func testShiftMattersTable() {

@@ -33,8 +33,9 @@ final class ShortcutHandler {
         /// decides how quickly Shift must come up for the press to be a tap.
         let shiftMatters: Bool
         var flushWork: DispatchWorkItem
-        /// Whether the timeout already yielded once to a release still in flight.
-        var deferredOnce = false
+        /// When the timeout found Shift already up and began waiting for its
+        /// release event (see flushPendingOnTimeout).
+        var waitStartedAt: TimeInterval?
     }
     private var pendingLetter: PendingLetter?
 
@@ -613,31 +614,41 @@ final class ShortcutHandler {
         onReplay?(pending.event, true)
     }
 
-    /// The overlap window elapsed. Firing a timer is only evidence that time
-    /// passed on *this* thread, which under load can lag far behind the physical
-    /// keyboard — so if the modifier is already physically up, its release event
-    /// is queued behind whatever stalled us. Yield once so that event decides
-    /// with its own timestamp instead of settling a real tap as a capital.
+    /// The tap window elapsed. Firing a timer is only evidence that time
+    /// passed on *this* thread. If Shift is already physically up, its release
+    /// happened and the event is on its way — through the app being typed in,
+    /// which lags behind the keyboard whenever the system is busy. So wait for
+    /// it and let its own timestamp decide, rather than settle a tap as ㄲ or a
+    /// capital because the app was slow. This used to wait 20 ms once: a busy
+    /// app took longer, and the tap was lost.
     private func flushPendingOnTimeout() {
         guard var pending = pendingLetter else { return }
 
-        if !pending.deferredOnce,
-           let flag = ShortcutConfig.modifierFlag(for: pending.modifierKeyCode),
-           !NSEvent.modifierFlags.contains(flag) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let flag = ShortcutConfig.modifierFlag(for: pending.modifierKeyCode),
+           !Self.physicalModifierFlags().contains(flag),
+           now - (pending.waitStartedAt ?? now) < Self.releaseWaitLimit {
             pending.flushWork.cancel()
-            pending.deferredOnce = true
+            pending.waitStartedAt = pending.waitStartedAt ?? now
             let work = DispatchWorkItem { [weak self] in self?.flushPendingOnTimeout() }
             pending.flushWork = work
             pendingLetter = pending
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.releaseGracePeriod, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.releasePollInterval, execute: work)
             return
         }
 
-        flushPendingAsHold(reason: "timeout")
+        // Still held: a deliberate Shift+letter. Up but no event within the
+        // limit: the release went elsewhere (focus moved); settle it.
+        flushPendingAsHold(reason: pending.waitStartedAt == nil ? "timeout" : "releaseNotDelivered")
     }
 
-    /// How long the timeout waits for an in-flight release before giving up.
-    private static let releaseGracePeriod: TimeInterval = 0.02
+    /// How often, and how long at most, the timeout waits for a release event
+    /// that is known to have happened.
+    private static let releasePollInterval: TimeInterval = 0.01
+    private static let releaseWaitLimit: TimeInterval = 0.5
+
+    /// The modifier keys physically down right now. Replaceable in tests.
+    static var physicalModifierFlags: () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
 
     /// Whether any enabled modifier+key combo shortcut is bound to this modifier.
     private func anyEnabledComboUses(modifierKeyCode: UInt16) -> Bool {
@@ -665,6 +676,11 @@ final class ShortcutHandler {
     /// Test seam: fire the overlap-window timeout synchronously.
     func flushPendingForTesting() {
         flushPendingAsHold(reason: "test")
+    }
+
+    /// Test seam: the tap window's timer firing now.
+    func fireTimeoutForTesting() {
+        flushPendingOnTimeout()
     }
 
     var hasPendingLetterForTesting: Bool { pendingLetter != nil }
@@ -835,6 +851,11 @@ final class ShortcutHandler {
         ]
         if let overlap { metadata["overlapMs"] = Self.ms(overlap) }
         if let hold { metadata["holdMs"] = Self.ms(hold) }
+        // How long the release event took to arrive after Shift was already
+        // up: how far the app lagged behind the keyboard.
+        if let started = pending.waitStartedAt {
+            metadata["waitedMs"] = Self.ms(ProcessInfo.processInfo.systemUptime - started)
+        }
         DeveloperLogger.shared.log("Tap", "Buffered letter", metadata: metadata)
     }
 
