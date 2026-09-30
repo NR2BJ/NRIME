@@ -16,21 +16,15 @@ enum ChromiumDetector {
     /// the commit, not an inserted "\n". For these the Shift+Enter workaround
     /// replays the key press instead.
     ///
-    /// Their editors settle a composition only after it has ended — Codex's
-    /// is ProseMirror (finishes 20 ms later), Claude desktop's is Lexical (its
-    /// app bundle names it; ProseMirror appears nowhere). A real key press is
-    /// handled after that; an "\n" inserted right after the commit can land
-    /// first and take the composed syllable with it. The race depends on
-    /// timing, so a slower Mac loses more often (the owner's MacBook did).
-    /// cssgsg has the same code and the same exposure.
+    /// Claude desktop was on this list for 1.0.12-beta.7 and is not any more:
+    /// with no wait its inserted "\n" lost the syllable being composed, but
+    /// the replayed key lost it too on a slower Mac (Codex, same day). What
+    /// both needed was the wait; with it, the inserted "\n" that worked in
+    /// Claude for months is back.
     private static let newlineKeyPressBundleIDs: Set<String> = [
         // ChatGPT/Codex desktop: an inserted "\n" sends the message
         // (verified 2026-07 beta test).
         "com.openai.codex",
-        // Claude desktop: an inserted "\n" right after the commit took the
-        // composing syllable with it — "없긴 하니" + Shift+Enter arrived as
-        // "없긴 하" (2026-09-30, once the old 15 ms wait was gone).
-        "com.anthropic.claudefordesktop",
     ]
 
     /// Whether this app needs the Shift+Enter newline as a real key press.

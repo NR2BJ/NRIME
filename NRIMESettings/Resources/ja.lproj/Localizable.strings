@@ -175,7 +175,7 @@
 "permissions.granted" = "許可済み";
 "permissions.denied" = "オフ";
 "permissions.unknown" = "未確認";
-"permissions.description" = "確定後に⌘+キーやCodex・ClaudeのShift+Enterをアプリへ送り直すために必要です。「オフ」の場合は、システム設定 > プライバシーとセキュリティ > デバイスの制御とデータへのアクセス（macOS 26以前: アクセシビリティ）でNRIMEをオンにしてください。一覧にない場合は下の「再確認 / 権限を要求」を押すか、+ボタンで /Library/Input Methods/NRIME.app を追加してください。オンなのに「オフ」と表示される場合は、一覧から削除（−）してから追加し直してください。";
+"permissions.description" = "確定後に⌘+キーやCodexのShift+Enterをアプリへ送り直すために必要です。「オフ」の場合は、システム設定 > プライバシーとセキュリティ > デバイスの制御とデータへのアクセス（macOS 26以前: アクセシビリティ）でNRIMEをオンにしてください。一覧にない場合は下の「再確認 / 権限を要求」を押すか、+ボタンで /Library/Input Methods/NRIME.app を追加してください。オンなのに「オフ」と表示される場合は、一覧から削除（−）してから追加し直してください。";
 "permissions.checkedAt" = "入力メソッドの最終確認: %@";
 "permissions.recheck" = "再確認 / 権限を要求";
 "permissions.openSettings" = "システム設定を開く";

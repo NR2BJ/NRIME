@@ -71,6 +71,13 @@ class NRIMEInputController: IMKInputController {
         // Cache client for the global mouse monitor callback.
         cachedClient = client as AnyObject
 
+        // A newline still waiting out its wait belongs before this keystroke.
+        // Delivering it now keeps the order the user typed and stops its
+        // replacement range from swallowing the composition this key starts.
+        if event.type == .keyDown {
+            KeyEventReposter.flushPendingNewline()
+        }
+
         let mode = StateManager.shared.currentMode
 
         // 1. Language-switch hotkeys run before any suppression below.
@@ -146,11 +153,11 @@ class NRIMEInputController: IMKInputController {
         if let panel = NSApp.candidatePanel, panel.isVisible() {
             shortcutHandler.observeConsumedKeyDown(event)
             trace.path = "candidates"
-            return handleCandidateNavigation(event, client: client, panel: panel)
+            return handleCandidateNavigation(event, client: client, panel: panel, trace: &trace)
         }
 
         // 4. Shortcut detection + engine routing
-        return routeEvent(event, client: client)
+        return routeEvent(event, client: client, trace: &trace)
     }
 
     /// Handle all keyboard events during Japanese Mozc conversion.
@@ -291,7 +298,8 @@ class NRIMEInputController: IMKInputController {
 
     /// Handle keyboard events when the candidate panel is visible (Korean hanja only).
     /// Japanese conversion is handled entirely by handleJapaneseConversion() above.
-    private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, panel: CandidatePanel) -> Bool {
+    private func handleCandidateNavigation(_ event: NSEvent, client: any IMKTextInput, panel: CandidatePanel,
+                                           trace: inout EventTrace) -> Bool {
         guard event.type == .keyDown else { return false }
 
         switch event.keyCode {
@@ -372,7 +380,7 @@ class NRIMEInputController: IMKInputController {
             endHanjaSessionIfNeeded(client: client)
             panel.hide()
             if shouldPassThrough {
-                return routeEvent(event, client: client)
+                return routeEvent(event, client: client, trace: &trace)
             }
             return false
 
@@ -380,7 +388,7 @@ class NRIMEInputController: IMKInputController {
             // Dismiss panel and route event through normal handling
             endHanjaSessionIfNeeded(client: client)
             panel.hide()
-            return routeEvent(event, client: client)
+            return routeEvent(event, client: client, trace: &trace)
         }
     }
 
@@ -662,13 +670,24 @@ class NRIMEInputController: IMKInputController {
 
     /// Route an event through shortcut detection and engine handling.
     /// Shared by handle() and handleCandidateNavigation's default case.
-    private func routeEvent(_ event: NSEvent, client: any IMKTextInput) -> Bool {
+    private func routeEvent(_ event: NSEvent, client: any IMKTextInput,
+                            trace: inout EventTrace) -> Bool {
         if shortcutHandler.onAction == nil {
             wireUpShortcutHandler()
         }
         // flagsChanged was already fed to the shortcut handler in handle() step
         // 1.9 — feeding it twice would corrupt the press/release tracking.
         if event.type != .flagsChanged, shortcutHandler.handleEvent(event) {
+            return true
+        }
+
+        // A Codex newline replay is still waiting: this key was typed after
+        // the newline and must reach the app after it. Held here, after the
+        // shortcut handler has seen it. Posted back after the newline, it comes
+        // through here again as an ordinary key (IMK drops event tags) and the
+        // shortcut handler sees it a second time — nothing for a plain key.
+        if KeyEventReposter.holdForPendingReplay(event, client: client as AnyObject) {
+            trace.path = "held"
             return true
         }
 

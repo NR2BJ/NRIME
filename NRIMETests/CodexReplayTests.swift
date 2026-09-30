@@ -3,21 +3,26 @@ import InputMethodKit
 import XCTest
 @testable import NRIME
 
-/// Codex Shift+Enter: the commit lands, then Shift+Enter is posted again on
-/// the next turn of the run loop — no wait, and nothing held (2026-09-30).
+/// Codex Shift+Enter: the commit lands, then Shift+Enter is posted again
+/// after a short wait (KeyEventReposter.keyPressWait). Keys typed during the
+/// wait are held and posted after the newline, in order.
 @MainActor
 final class CodexReplayTests: XCTestCase {
+    private typealias Sent = (keyCode: UInt16, flags: CGEventFlags)
+
     private var client: MockTextInputClient!
     private var controller: NRIMEInputController!
-    private var sent: [(keyCode: UInt16, flags: CGEventFlags)] = []
+    private var sent: [[Sent]] = []
 
     override func setUp() {
         super.setUp()
+        KeyEventReposter.resetPendingForTesting()
         ChromiumDetector.overrideForTesting = true
         ChromiumDetector.newlineQuirkOverrideForTesting = true
+        KeyEventReposter.frontmostBundleIDForTesting = .some("com.openai.codex")
         sent = []
-        KeyEventReposter.captureForTesting = { [weak self] keyCode, flags in
-            self?.sent.append((keyCode, flags))
+        KeyEventReposter.sequenceCaptureForTesting = { [weak self] keys in
+            self?.sent.append(keys)
         }
         client = MockTextInputClient()
         controller = NRIMEInputController(server: nil, delegate: nil, client: nil)
@@ -26,7 +31,9 @@ final class CodexReplayTests: XCTestCase {
     }
 
     override func tearDown() {
-        KeyEventReposter.captureForTesting = nil
+        KeyEventReposter.resetPendingForTesting()
+        KeyEventReposter.sequenceCaptureForTesting = nil
+        KeyEventReposter.frontmostBundleIDForTesting = nil
         KeyEventReposter.postEventAccessForTesting = nil
         ChromiumDetector.overrideForTesting = nil
         ChromiumDetector.newlineQuirkOverrideForTesting = nil
@@ -59,33 +66,54 @@ final class CodexReplayTests: XCTestCase {
         XCTAssertEqual(client.insertedTexts, ["ㄱ"])
     }
 
-    func testShiftEnterIsPostedAgainRightAfterTheKeyBeingHandled() {
+    func testReplayWaitsThenSendsShiftEnter() {
         commitWithShiftEnter()
 
-        XCTAssertTrue(sent.isEmpty, "Not from inside the Shift+Enter being handled…")
-        settle(0.03)
-        XCTAssertEqual(sent.map(\.keyCode), [0x24], "…but on the next turn")
-        XCTAssertEqual(sent.first?.flags, .maskShift, "A plain Enter would send the message")
+        settle(KeyEventReposter.keyPressWait / 2)
+        XCTAssertTrue(sent.isEmpty, "Not before the commit has had time to settle")
+        settle(KeyEventReposter.keyPressWait + 0.05)
+        XCTAssertEqual(sent.first?.map(\.keyCode), [0x24])
+        XCTAssertEqual(sent.first?.first?.flags, .maskShift, "A plain Enter would send the message")
         XCTAssertEqual(client.insertedTexts, ["ㄱ"], "No \\n insert — it would send the message in Codex")
     }
 
-    /// The posted key comes back through the input method like any other:
-    /// with nothing composing, it goes on to the app.
-    func testThePostedShiftEnterComesBackAndPassesThrough() {
+    func testKeysTypedDuringTheWaitReachTheAppAfterTheNewline() {
         commitWithShiftEnter()
-        settle(0.03)
 
-        XCTAssertFalse(controller.handle(key(0x24, "\r", shift: true), client: client))
-        settle(0.03)
-        XCTAssertEqual(sent.count, 1, "Passed on, not posted a second time")
+        XCTAssertTrue(controller.handle(key(0x02, "d"), client: client)) // ㅇ, during the wait
+        XCTAssertTrue(controller.handle(key(0x28, "k"), client: client)) // ㅏ
+        XCTAssertEqual(client.insertedTexts, ["ㄱ"], "Nothing typed during the wait reaches the app yet…")
+        XCTAssertEqual(client.markedString, "", "…not even as a composition, which would land above the newline")
+
+        settle(KeyEventReposter.keyPressWait + 0.1)
+        XCTAssertEqual(sent.count, 1)
+        XCTAssertEqual(sent.first?.map(\.keyCode), [0x24, 0x02, 0x28], "Newline first, then the keys in order")
     }
 
-    func testClaudeDesktopGetsTheKeyPressToo() {
-        XCTAssertTrue(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.anthropic.claudefordesktop"),
-                      "An inserted newline right after the commit dropped the composing syllable")
+    func testKeyInAnotherTextFieldSendsTheNewlineAtOnce() {
+        commitWithShiftEnter()
+
+        let otherField = MockTextInputClient()
+        XCTAssertFalse(KeyEventReposter.holdForPendingReplay(key(0x02, "d"), client: otherField),
+                       "Not typed after that newline — handled normally")
+        XCTAssertEqual(sent.map { $0.map(\.keyCode) }, [[0x24]], "…and the newline went out first")
+    }
+
+    func testNewlineIsDroppedWhenCodexIsNoLongerInFront() {
+        commitWithShiftEnter()
+        XCTAssertTrue(controller.handle(key(0x02, "d"), client: client))
+
+        KeyEventReposter.frontmostBundleIDForTesting = .some("com.apple.Safari")
+        settle(KeyEventReposter.keyPressWait + 0.1)
+        XCTAssertEqual(sent.first?.map(\.keyCode), [0x02],
+                       "A stray Shift+Enter must not reach another app; the typed key still goes out")
+    }
+
+    /// Claude went back to the inserted newline (with its wait) after 1.0.12-beta.7.
+    func testOnlyCodexGetsTheKeyPress() {
         XCTAssertTrue(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.openai.codex"))
-        XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.hnc.Discord"),
-                       "Discord keeps the inserted newline, which works there")
+        XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.anthropic.claudefordesktop"))
+        XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.hnc.Discord"))
     }
 
     func testWithoutPermissionOnlyTheCommitHappens() {
@@ -93,8 +121,8 @@ final class CodexReplayTests: XCTestCase {
         commitWithShiftEnter()
 
         XCTAssertTrue(controller.handle(key(0x02, "d"), client: client))
-        XCTAssertEqual(client.markedString, "ㅇ", "The next key composes as usual")
-        settle(0.05)
+        XCTAssertEqual(client.markedString, "ㅇ", "No replay is waiting, so the key is not held")
+        settle(KeyEventReposter.keyPressWait + 0.1)
         XCTAssertTrue(sent.isEmpty)
     }
 

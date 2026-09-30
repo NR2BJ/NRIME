@@ -83,9 +83,9 @@ final class KoreanEngineTests: XCTestCase {
         XCTAssertEqual(client.insertedTexts, ["가"], "Commit lands synchronously")
         XCTAssertFalse(engine.isCurrentlyComposing)
 
-        // The newline goes in on the next turn, clear of oldHasMarkedText.
+        // The newline goes in after a short wait, clear of oldHasMarkedText.
         let settled = expectation(description: "async newline")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + KeyEventReposter.insertWait + 0.05) {
             settled.fulfill()
         }
         wait(for: [settled], timeout: 1.0)
@@ -117,9 +117,9 @@ final class KoreanEngineTests: XCTestCase {
         XCTAssertTrue(handled)
         XCTAssertEqual(client.insertedTexts, ["가"], "Commit lands synchronously")
 
-        // The replay is posted on the next turn, after the commit.
+        // The replay is posted after its wait, once the commit has settled.
         let settled = expectation(description: "async repost")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + KeyEventReposter.keyPressWait + 0.05) {
             settled.fulfill()
         }
         wait(for: [settled], timeout: 2.0)

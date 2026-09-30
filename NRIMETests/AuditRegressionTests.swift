@@ -60,26 +60,18 @@ final class AuditRegressionTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { done.fulfill() }
         wait(for: [done], timeout: 2)
     }
-    /// One turn of the main queue: what the key just handled queued has run.
-    func nextTurn() {
-        let done = expectation(description: "next turn")
-        DispatchQueue.main.async { done.fulfill() }
-        wait(for: [done], timeout: 2)
-    }
-    /// The newline once waited out a delay, and a key typed during it started a
-    /// composition the newline then replaced. It now goes in on the next turn,
-    /// before the app can send another key (the app waits for handle() to
-    /// answer), so there is no such window.
+    /// A key typed while the newline waits gets the newline delivered first
+    /// (flushPendingNewline), so the newline cannot replace the composition
+    /// that key starts.
     func testNewlineMustNotReplaceTheNextComposition() {
         composeGa()
         press(0x24, flags: rightShift)
-        nextTurn()
-        XCTAssertEqual(client.insertedTexts, ["가", "\n"], "In before anything else can be typed")
-        press(0x01) // s -> Korean ㄴ
+        press(0x01) // s -> Korean ㄴ, while the newline still waits
+        XCTAssertEqual(client.insertedTexts, ["가", "\n"], "Delivered before the next key")
         press(0x28) // k -> 아: 나
         XCTAssertEqual(client.markedString, "나")
         settle()
-        XCTAssertEqual(client.markedString, "나", "Newline must not replace a later preedit")
+        XCTAssertEqual(client.markedString, "나", "Delayed newline must not replace a later preedit")
     }
     func testCandidateShiftEnterMustNotBecomeASoloShiftTap() {
         composeGa()

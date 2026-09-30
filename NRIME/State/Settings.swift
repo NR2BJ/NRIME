@@ -74,6 +74,19 @@ final class Settings {
         set { defaults.set(newValue, forKey: "tapHoldBufferingEnabled") }
     }
 
+    // MARK: - Shift+Enter newline waits (no UI)
+
+    /// A hidden override, in milliseconds, for the Chromium Shift+Enter
+    /// newline waits (KeyEventReposter.insertWait / keyPressWait), to try
+    /// values on another Mac without a new build, e.g.
+    /// `defaults write group.com.nrime.inputmethod newlineInsertWaitMs -int 40`.
+    /// Unset: the built-in value. New keys on purpose: the old settings
+    /// (shiftEnterDelay, codexNewlineDelay) still hold 0 on the owner's Macs.
+    func newlineWaitOverride(_ key: String) -> TimeInterval? {
+        guard defaults.object(forKey: key) != nil else { return nil }
+        return max(0, min(0.5, Double(defaults.integer(forKey: key)) / 1000))
+    }
+
     // MARK: - Input Source Recovery
 
     var preventABCSwitch: Bool {
