@@ -5,7 +5,7 @@
 All-in-one input method for macOS. Handles Korean, English, and Japanese in a **single input source**.
 
 - Instant language switching via shortcuts (no input source switching)
-- Fully offline (no network required)
+- Typing and conversion stay on this Mac (nothing you type leaves it; the network is used only to check GitHub for updates)
 - Full Electron app support (VS Code, Slack, Discord, etc.)
 - Japanese conversion powered by [Google Mozc](https://github.com/google/mozc) (BSD license)
 - No background processes (no LaunchAgents)
@@ -21,22 +21,12 @@ If not visible, log out/in and add NRIME via **System Settings > Keyboard > Inpu
 
 ### Language Switching
 
-Two switching modes are supported. All shortcuts can be changed or **disabled** in settings.
-Use direct selection only, toggle only, or both.
-
-**Direct selection** — switch to a specific language
+Two shortcuts switch languages. Both can be changed or **disabled** in settings.
 
 | Function | Default Shortcut |
 |----------|-----------------|
-| Switch to Korean | `Right Shift + 1` |
-| Switch to Japanese | `Right Shift + 2` |
-
-**Toggle** — switch between English and non-English
-
-| Function | Default Shortcut |
-|----------|-----------------|
-| Toggle English / previous language | `Right Shift` tap |
-| Toggle non-English mode (KR/JP) | (unset — configure in settings) |
+| Toggle English (between English and the previous language) | `Right Shift` tap |
+| Toggle Non-English Mode (between Korean and Japanese) | `Shift + Space` |
 
 ### Korean
 
@@ -44,7 +34,7 @@ Dubeolsik layout. Hanja conversion: `Option + Enter` while composing (or after s
 
 ### Japanese
 
-Romaji input > live hiragana conversion > `Space` for kanji conversion.
+Romaji input > hiragana composition > `Space` for kanji conversion.
 
 ```
 nihongo > にほんご > Space > 日本語
@@ -57,28 +47,28 @@ During conversion: `Up/Down` to navigate, `1-9` for direct selection, `Enter` to
 
 | Key | Function |
 |-----|----------|
-| Space / Tab / Down | Show candidates (each toggleable in settings) |
-| Left / Right | Move between segments |
+| Space / Tab | Start conversion (while composing — each toggleable in settings) |
+| Up / Down | Navigate candidates |
+| Left / Right | Move between segments (pages the list when there is one) |
 | Shift + Left / Right | Resize segment |
-| F6 | Hiragana |
-| F7 | Full-width katakana |
-| F8 | Half-width katakana |
-| F9 | Full-width romaji |
-| F10 | Half-width romaji |
-| Tab | Select prediction |
+| 1 – 9 | Pick a candidate by number |
+| Tab | Expand / collapse candidates (while the candidate window is open) |
+| Enter | Confirm conversion |
+| Escape | Cancel conversion |
 
 </details>
 
 ### Additional Features
 
-- **Shift double-tap > CapsLock toggle**: interval adjustable via slider (0.15-0.6s)
-- **Per-app language memory**: remembers last-used language per app (whitelist/blacklist mode)
-- **Inline mode indicator**: shows current input mode near the cursor
-- **Auto-update**: check and install updates from GitHub Releases (About tab)
-- **Multilingual settings UI**: Korean/English/Japanese (changeable in About tab, restart required)
+- **Inline mode indicator**: shows the current input mode near the text cursor (or mouse cursor) when the mode changes
+- **Japanese user dictionary**: register your own words (reading, word, part of speech) as conversion candidates (Japanese tab > User Dictionary)
+- **Auto-update**: check and install updates from GitHub Releases (About tab, Stable/Beta channel)
+- **Multilingual settings UI**: Korean/English/Japanese (changeable in About tab, applies immediately)
 - **Settings export/import**: JSON backup for transferring settings
 - **Developer mode**: diagnostic logging (local only, never uploaded)
 - **Prevent ABC input source switching**: prevents the system from switching to ABC
+- **Switch to ABC while typing passwords**: while macOS secure input is on (password fields), hands the keyboard to the ABC layout and switches back afterwards (on by default)
+- **Fast tap-switch correction (experimental)**: fixes stray capitals/double consonants when typing too quickly after a Shift tap (off by default)
 - **Caps Lock for language switching**: works with Karabiner-Elements Caps Lock > F18 mapping
 
 ## Settings
@@ -89,40 +79,46 @@ Click the NRIME icon in the menu bar to open the settings app.
 
 | Section | Contents |
 |---------|----------|
-| Shortcuts | English toggle, non-English toggle, Korean switch, Japanese switch, Hanja conversion — each customizable/disableable |
+| Shortcuts | Toggle English, Toggle Non-English Mode, Hanja Conversion — each can be recorded (Record) or disabled (Clear) |
 | Tap Threshold | Modifier-only tap recognition time slider (0.1-0.5s) |
-| Shift Double-Tap > CapsLock | Double-tap interval adjustment (0.15-0.6s) |
-| Display | Inline mode indicator, prevent ABC switching, candidate font size, conversion trigger keys (Space/Tab/Down) |
-| Developer Mode | Diagnostic log ON/OFF, open/reveal in Finder/clear log |
-| Backup & Restore | Export settings (JSON) / import settings |
+| Fast tap-switch correction (experimental) | Fixes stray capitals/double consonants when typing right after a Shift tap (off by default), decision window slider (30-80ms) |
+| Display | Show inline indicator on mode switch (Indicator Position: Text Cursor/Mouse Cursor), Prevent switching to ABC, Switch to ABC while typing passwords, Candidate Font Size (12-24pt) |
+| Input method permissions | Device Control and Data Access (Accessibility on macOS 26 and earlier) status, Check again / Request, Open System Settings — needed to re-send ⌘+key or Codex Shift+Enter to the app after committing |
+| Developer | Enable Developer Mode (diagnostic log), Open Log/Reveal in Finder/Clear Log |
+| Backup & Restore | Export Settings (JSON) / Import Settings |
 
 ### Japanese Tab
 
+Switch between the **Settings** and **User Dictionary** pages at the top.
+
+**Settings**
+
 | Section | Contents |
 |---------|----------|
-| Conversion Keys | Hiragana/full-width katakana/half-width katakana/full-width romaji/half-width romaji key customization |
-| Key Behavior | Caps Lock action (default/katakana/romaji), Shift key action (none/katakana/romaji) |
-| Space | Half-width/full-width space selection |
-| Punctuation | Japanese style (。、) / Western style (．，), `/` > `・` mapping, `¥` key > `¥` mapping |
-| Input Features | Live conversion, prediction |
+| Conversion Trigger Keys | Space, Tab — keys that start conversion while composing (each ON/OFF) |
+| Key Behavior | Caps Lock Action — Caps Lock (Default)/Convert to Katakana/Convert to Romaji |
+| Space | Space Width — Half-width (U+0020)/Full-width (U+3000), applies when not composing |
+| Punctuation & Symbols | Punctuation Style — Japanese (。、)/Full-width Western (．，)/Half-width Western (.,), output preview, `/` key > `・` (Nakaguro), `\` key > `¥` (Yen Sign) |
 | Conversion Engine (Mozc) | Mozc version in use; check for a newer one and apply it at once |
 | Conversion History | Clear Mozc conversion history |
 | Conversion Shortcuts | In-conversion key reference guide |
 
-### Per-App Tab
+**User Dictionary**
 
-| Section | Contents |
-|---------|----------|
-| Per-app language memory | ON/OFF toggle |
-| Mode | Whitelist (remember selected apps only) / Blacklist (exclude selected apps) |
-| App list | Add/remove apps (file picker) |
+| Item | Contents |
+|------|----------|
+| Word list | Reading (hiragana), word, part of speech, comment; search |
+| Editing | `+` to add, double-click to edit, `−` to delete |
+| Auto-learning | Auto-learned conversions are not listed — clear them with Clear Conversion History on the Settings page |
 
 ### About Tab
 
 | Section | Contents |
 |---------|----------|
+| Version | Current version, GitHub link |
 | Auto-update | Check latest version from GitHub Releases, download, install |
-| Language setting | Change settings app UI language (Korean/English/Japanese) |
+| Update Channel | Stable/Beta (beta receives test builds first) |
+| Language | Change settings app UI language (Korean/English/Japanese) |
 
 ## Compatibility
 
