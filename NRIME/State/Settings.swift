@@ -84,6 +84,11 @@ final class Settings {
     /// (they are not in the settings export). Unset: the built-in value. New
     /// keys on purpose: the old settings (shiftEnterDelay, codexNewlineDelay)
     /// still hold 0 on the owner's Macs.
+    /// Apps that get Shift+Enter re-sent as a key press (NewlineKeyPress).
+    var newlineKeyPressApps: [String] {
+        defaults.stringArray(forKey: NewlineKeyPress.appsKey) ?? NewlineKeyPress.defaultApps
+    }
+
     func newlineWaitOverride(_ key: String) -> TimeInterval? {
         guard defaults.object(forKey: key) != nil else { return nil }
         return max(0, min(0.5, Double(defaults.integer(forKey: key)) / 1000))

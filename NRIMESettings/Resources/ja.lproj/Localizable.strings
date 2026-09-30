@@ -156,10 +156,15 @@
 /* GeneralTab - Shift+Enter Newline Wait */
 "section.newlineWait" = "Shift+Enter 改行の待ち時間";
 "newlineWait.none" = "待ちなし";
-"newlineWait.insert" = "Electron・Chromiumアプリ";
-"newlineWait.insert.description" = "入力中の文字を確定してから改行を入れるまでの待ち時間です。Discord、Slack、Claude、VS Codeなど、Web技術で作られたアプリすべてに適用されます。入力中の文字が消える場合は値を上げてください。入力中に押した⌘ショートカットも、同じだけ待ってから送り直します。デフォルト20ms。";
-"newlineWait.keyPress" = "Shift+Enterを送り直すアプリ";
-"newlineWait.keyPress.description" = "改行文字を入れるとメッセージを送信してしまうアプリ（現在はCodex）には、確定後にShift+Enterキーを送り直します。その前の待ち時間です。入力中の文字が消える場合は値を上げてください。「デバイスの制御とデータへのアクセス」の権限が必要です。デフォルト50ms。";
+"newlineWait.insert" = "改行の挿入・⌘ショートカット";
+"newlineWait.insert.description" = "Discord、Slack、Claude、VS CodeなどWeb技術（Electron・Chromium）で作られたアプリで確定してから改行を入れるまで、そしてすべてのアプリで入力中に押した⌘ショートカットを送り直すまでの待ち時間です。入力中の文字が消える場合は値を上げてください。デフォルト20ms。";
+"newlineWait.keyPress" = "Shift+Enterの送り直し";
+"newlineWait.keyPress.description" = "下のリストのアプリで、確定してからShift+Enterキーを送り直すまでの待ち時間です。入力中の文字が消える場合は値を上げてください。「デバイスの制御とデータへのアクセス」の権限が必要です。デフォルト50ms。";
+"newlineWait.keyPressApps" = "Shift+Enterを送り直すアプリ";
+"newlineWait.keyPressApps.description" = "Web技術で作られたアプリのうち、改行文字を入れるとメッセージを送信してしまうアプリを追加してください（例：Codex）。これらのアプリには改行文字の代わりにShift+Enterキーを送り直します。";
+"newlineWait.addApp" = "アプリを追加…";
+"newlineWait.removeApp" = "リストから外す";
+"newlineWait.noApps" = "なし — すべてのアプリに改行文字を入れます";
 
 "tapHoldBuffering.enable" = "高速タップ切替補正（実験的）";
 "tapHoldBuffering.description" = "Shiftをタップしてすぐに文字を打ち、文字がShiftより先に押されても言語を切り替えます。Shiftに意味のないキー（濃音以外のハングルのキー、日本語のすべての文字）はそのまま切り替えます。濃音（ㄲㄸㅃㅆㅉㅒㅖ）と英語の大文字は、Shiftをとても素早く（30ms以内に）離したときだけ切り替え、ハングル入力中（単語の途中）の濃音は切り替えません。";

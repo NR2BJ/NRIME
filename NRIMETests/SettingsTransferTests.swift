@@ -115,6 +115,21 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertEqual(targetDefaults.string(forKey: "indicatorPositionMode"), "mouse")
     }
 
+    /// The key-press app list travels with the settings; the waits do not
+    /// (the right value differs from Mac to Mac).
+    func testKeyPressAppsTravelButTheWaitsDoNot() throws {
+        sourceDefaults.set(["com.openai.codex", "com.example.chat"], forKey: NewlineKeyPress.appsKey)
+        sourceDefaults.set(35, forKey: "newlineInsertWaitMs")
+
+        let snapshot = SettingsTransfer.capture(from: sourceDefaults, appVersion: "1.0.12")
+        let decoded = try SettingsTransfer.decode(from: SettingsTransfer.encode(snapshot))
+        SettingsTransfer.apply(decoded, to: targetDefaults)
+
+        XCTAssertEqual(targetDefaults.stringArray(forKey: NewlineKeyPress.appsKey),
+                       ["com.openai.codex", "com.example.chat"])
+        XCTAssertNil(targetDefaults.object(forKey: "newlineInsertWaitMs"))
+    }
+
     /// Exports written before the per-app, double-tap, direct-switch,
     /// newline-wait and tap-window settings were removed still import: their
     /// extra keys are ignored.
@@ -150,5 +165,7 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertNil(targetDefaults.object(forKey: "shiftEnterDelay"), "The newline no longer waits")
         XCTAssertNil(targetDefaults.object(forKey: "codexNewlineDelay"))
         XCTAssertNil(targetDefaults.object(forKey: "tapOverlapWindow"), "The tap windows are fixed now")
+        XCTAssertNil(targetDefaults.object(forKey: NewlineKeyPress.appsKey),
+                     "An export that knew nothing of the list leaves this Mac's list alone")
     }
 }

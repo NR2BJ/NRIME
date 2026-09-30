@@ -130,11 +130,22 @@ final class CodexReplayTests: XCTestCase {
         XCTAssertEqual(KeyEventReposter.keyPressWait, 0.5, accuracy: 0.0001)
     }
 
-    /// Claude went back to the inserted newline (with its wait) after 1.0.12-beta.7.
-    func testOnlyCodexGetsTheKeyPress() {
+    /// The key-press apps are a setting: Codex unless the owner changed the
+    /// list (Claude went back to the inserted newline after 1.0.12-beta.7).
+    func testKeyPressAppsFollowTheSetting() {
+        let testing = UserDefaults(suiteName: AppGroupDefaults.testingSuiteName)!
+        defer { testing.removeObject(forKey: NewlineKeyPress.appsKey) }
+        testing.removeObject(forKey: NewlineKeyPress.appsKey)
         XCTAssertTrue(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.openai.codex"))
         XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.anthropic.claudefordesktop"))
         XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.hnc.Discord"))
+
+        testing.set(["com.hnc.Discord"], forKey: NewlineKeyPress.appsKey)
+        XCTAssertTrue(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.hnc.Discord"), "Added in the settings app")
+        XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.openai.codex"), "Removed from the list")
+
+        testing.set([String](), forKey: NewlineKeyPress.appsKey)
+        XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.openai.codex"), "An empty list stays empty")
     }
 
     func testWithoutPermissionOnlyTheCommitHappens() {

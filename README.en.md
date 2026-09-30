@@ -83,7 +83,7 @@ Click the NRIME icon in the menu bar to open the settings app.
 | Tap Threshold | Modifier-only tap recognition time slider (0.1-0.5s) |
 | Fast tap-switch correction (experimental) | Fixes stray capitals/double consonants when typing right after a Shift tap (off by default). Keys where Shift means nothing always switch; double consonants and capitals only when Shift comes up within 30 ms; a double consonant mid-word never does |
 | Display | Show inline indicator on mode switch (Indicator Position: Text Cursor/Mouse Cursor), Prevent switching to ABC, Switch to ABC while typing passwords, Candidate Font Size (12-24pt) |
-| Shift+Enter newline wait | How long Shift+Enter waits after the commit before the newline — Electron and Chromium apps (0-100 ms, default 20 ms, also for re-sent ⌘ shortcuts), apps that get Shift+Enter re-sent (where an inserted newline sends the message, Codex for now: 0-200 ms, default 50 ms). Kept per Mac |
+| Shift+Enter newline wait | Newline insert and ⌘ shortcuts (0-100 ms, default 20 ms: the newline in apps built on web technology, and ⌘ shortcuts re-sent in any app), Shift+Enter re-send (0-100 ms, default 50 ms), the list of apps that get Shift+Enter re-sent (apps that send the message on an inserted newline, Codex by default — add/remove apps). The waits are kept per Mac |
 | Input method permissions | Device Control and Data Access (Accessibility on macOS 26 and earlier) status, Check again / Request, Open System Settings — needed to re-send ⌘+key or Codex Shift+Enter to the app after committing |
 | Developer | Enable Developer Mode (diagnostic log), Open Log/Reveal in Finder/Clear Log |
 | Backup & Restore | Export Settings (JSON) / Import Settings |

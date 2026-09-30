@@ -1,5 +1,6 @@
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct GeneralTab: View {
     @ObservedObject private var lang = LocalizedBundle.shared
@@ -14,6 +15,34 @@ struct GeneralTab: View {
     /// A slider over whole milliseconds.
     private static func msBinding(_ value: Binding<Int>) -> Binding<Double> {
         Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0.rounded()) })
+    }
+
+    private static func appURL(_ bundleID: String) -> URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+    }
+
+    /// The app's name as Finder shows it; the bundle ID when it is not installed.
+    private static func appName(_ bundleID: String) -> String {
+        guard let url = appURL(bundleID) else { return bundleID }
+        let name = FileManager.default.displayName(atPath: url.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    private static func appIcon(_ bundleID: String) -> NSImage? {
+        appURL(bundleID).map { NSWorkspace.shared.icon(forFile: $0.path) }
+    }
+
+    /// Pick apps in /Applications and add their bundle IDs.
+    private static func chooseApps(_ add: @escaping ([String]) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            guard response == .OK else { return }
+            add(panel.urls.compactMap { Bundle(url: $0)?.bundleIdentifier })
+        }
     }
 
     /// What System Settings calls the list NRIME has to be on: macOS 27
@@ -94,8 +123,47 @@ struct GeneralTab: View {
                             .monospacedDigit()
                             .frame(width: 70, alignment: .trailing)
                     }
-                    Slider(value: Self.msBinding($store.newlineKeyPressWaitMs), in: 0...200, step: 5)
+                    Slider(value: Self.msBinding($store.newlineKeyPressWaitMs), in: 0...100, step: 5)
                     Text(L("newlineWait.keyPress.description"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("newlineWait.keyPressApps"))
+                    if store.newlineKeyPressApps.isEmpty {
+                        Text(L("newlineWait.noApps"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(store.newlineKeyPressApps, id: \.self) { bundleID in
+                        HStack(spacing: 8) {
+                            if let icon = Self.appIcon(bundleID) {
+                                Image(nsImage: icon)
+                                    .resizable()
+                                    .frame(width: 18, height: 18)
+                            }
+                            Text(verbatim: Self.appName(bundleID))
+                            Text(verbatim: bundleID)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button {
+                                store.newlineKeyPressApps.removeAll { $0 == bundleID }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(L("newlineWait.removeApp"))
+                        }
+                    }
+                    Button(L("newlineWait.addApp")) {
+                        Self.chooseApps { ids in
+                            for id in ids where !store.newlineKeyPressApps.contains(id) {
+                                store.newlineKeyPressApps.append(id)
+                            }
+                        }
+                    }
+                    Text(L("newlineWait.keyPressApps.description"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

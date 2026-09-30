@@ -12,24 +12,19 @@ enum ChromiumDetector {
     static var newlineQuirkOverrideForTesting: Bool?
 #endif
 
-    /// Electron apps whose editor needs Shift+Enter as a real key press after
-    /// the commit, not an inserted "\n". For these the Shift+Enter workaround
-    /// replays the key press instead.
+    /// Whether this app needs the Shift+Enter newline as a real key press
+    /// after the commit, not an inserted "\n": Chromium apps whose editor
+    /// sends the message on an inserted newline. That cannot be told from the
+    /// app itself, so it is a list the owner edits in Settings > General
+    /// (NewlineKeyPress; Codex by default).
     ///
-    /// Claude desktop was on this list for 1.0.12-beta.7 and is not any more:
+    /// Claude desktop was on the list for 1.0.12-beta.7 and is not any more:
     /// with no wait its inserted "\n" lost the syllable being composed, but
     /// the replayed key lost it too on a slower Mac (Codex, same day). What
     /// both needed was the wait; with it, the inserted "\n" that worked in
     /// Claude for months is back.
-    private static let newlineKeyPressBundleIDs: Set<String> = [
-        // ChatGPT/Codex desktop: an inserted "\n" sends the message
-        // (verified 2026-07 beta test).
-        "com.openai.codex",
-    ]
-
-    /// Whether this app needs the Shift+Enter newline as a real key press.
     static func needsNewlineKeyPress(bundleID: String) -> Bool {
-        newlineKeyPressBundleIDs.contains(bundleID)
+        Settings.shared.newlineKeyPressApps.contains(bundleID)
     }
 
     /// Whether the frontmost app needs the Shift+Enter newline as a key press.

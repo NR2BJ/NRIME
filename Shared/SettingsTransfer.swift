@@ -25,6 +25,9 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     var indicatorPositionMode: String?
     var tapHoldBufferingEnabled: Bool?
     var secureInputASCIIFallback: Bool?
+    /// Apps that get Shift+Enter re-sent (NewlineKeyPress). The waits stay
+    /// out: the right value differs from Mac to Mac.
+    var newlineKeyPressApps: [String]?
     /// Which shortcuts this export actually looked at. Without it a newer
     /// import would read an older export's silence as "clear that shortcut".
     var capturedShortcutNames: [String]?
@@ -87,6 +90,8 @@ enum SettingsTransfer {
             secureInputASCIIFallback: defaults.object(forKey: secureInputASCIIFallbackKey) == nil
                 ? true
                 : defaults.bool(forKey: secureInputASCIIFallbackKey),
+            newlineKeyPressApps: defaults.stringArray(forKey: NewlineKeyPress.appsKey)
+                ?? NewlineKeyPress.defaultApps,
             capturedShortcutNames: shortcutNames
         )
     }
@@ -129,6 +134,9 @@ enum SettingsTransfer {
         }
         if let value = snapshot.secureInputASCIIFallback {
             defaults.set(value, forKey: secureInputASCIIFallbackKey)
+        }
+        if let value = snapshot.newlineKeyPressApps {
+            defaults.set(value, forKey: NewlineKeyPress.appsKey)
         }
 
         // Clearing a shortcut only transfers when the export was in a position

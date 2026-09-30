@@ -27,6 +27,7 @@ final class SettingsStore: ObservableObject {
         _tapHoldBufferingEnabled = Published(initialValue: false)
         _newlineInsertWaitMs = Published(initialValue: Self.defaultNewlineInsertWaitMs)
         _newlineKeyPressWaitMs = Published(initialValue: Self.defaultNewlineKeyPressWaitMs)
+        _newlineKeyPressApps = Published(initialValue: NewlineKeyPress.defaultApps)
         _japaneseKeyConfig = Published(initialValue: .default)
         _permissionStatus = Published(initialValue: nil)
 
@@ -92,6 +93,14 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard newlineKeyPressWaitMs != oldValue else { return }
             defaults.set(newlineKeyPressWaitMs, forKey: "newlineKeyPressWaitMs")
+        }
+    }
+
+    /// Apps that get Shift+Enter re-sent as a key press (bundle IDs).
+    @Published var newlineKeyPressApps: [String] {
+        didSet {
+            guard newlineKeyPressApps != oldValue else { return }
+            defaults.set(newlineKeyPressApps, forKey: NewlineKeyPress.appsKey)
         }
     }
 
@@ -174,6 +183,7 @@ final class SettingsStore: ObservableObject {
             ? Self.defaultNewlineInsertWaitMs : defaults.integer(forKey: "newlineInsertWaitMs")
         newlineKeyPressWaitMs = defaults.object(forKey: "newlineKeyPressWaitMs") == nil
             ? Self.defaultNewlineKeyPressWaitMs : defaults.integer(forKey: "newlineKeyPressWaitMs")
+        newlineKeyPressApps = defaults.stringArray(forKey: NewlineKeyPress.appsKey) ?? NewlineKeyPress.defaultApps
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         secureInputASCIIFallback = defaults.object(forKey: "secureInputASCIIFallback") == nil
             ? true : defaults.bool(forKey: "secureInputASCIIFallback")

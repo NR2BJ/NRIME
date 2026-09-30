@@ -114,3 +114,12 @@ enum PunctuationStyle: String, Codable, CaseIterable {
     case fullWidthWestern = "fullWidthWestern"   // ．，
     case halfWidthWestern = "halfWidthWestern"   // .,
 }
+
+/// Apps whose editor sends the message when a newline character is inserted,
+/// so Shift+Enter is re-sent there as a key press instead. Kept in the App
+/// Group and edited in Settings > General, so a new one needs no new build.
+enum NewlineKeyPress {
+    static let appsKey = "newlineKeyPressApps"
+    /// Unset: the one found so far (ChatGPT/Codex desktop, 2026-07).
+    static let defaultApps = ["com.openai.codex"]
+}
