@@ -87,6 +87,14 @@ final class SettingsStore: ObservableObject {
         permissionStatus = PermissionStatus.load(from: defaults)
     }
 
+    /// Ask the input method to check again without prompting; the answer
+    /// comes back as PermissionStatus.changedNotification.
+    func refreshPermissionStatus() {
+        reloadPermissionStatus()
+        DistributedNotificationCenter.default().postNotificationName(
+            PermissionStatus.refreshNotification, object: nil, userInfo: nil, deliverImmediately: true)
+    }
+
     /// Ask the input method to check again and to request what is missing.
     /// The answer arrives in the shared defaults a moment later.
     func requestPermissionRecheck() {

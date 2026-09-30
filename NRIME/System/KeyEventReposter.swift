@@ -46,13 +46,21 @@ enum KeyEventReposter {
     /// grant that allows posting: macOS answers the post-event check from it
     /// (apps holding only that grant are allowed), and on macOS 27 "Device
     /// Control and Data Access" is the only switch there is.
+    ///
+    /// The cached answer is stale the other way too: turned off, the grant
+    /// read "denied" through AXIsProcessTrusted while the preflight still said
+    /// "allowed" (2026-09-30). So on macOS 27, where that one switch decides,
+    /// only the live answer counts; before, a separate post-event grant may
+    /// exist and the preflight is asked as well.
     static var canPostEvents: Bool {
 #if DEBUG
         if AppGroupDefaults.isRunningTests {
             return postEventAccessForTesting ?? true
         }
 #endif
-        return CGPreflightPostEventAccess() || AXIsProcessTrusted()
+        if AXIsProcessTrusted() { return true }
+        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 { return false }
+        return CGPreflightPostEventAccess()
     }
 
     /// Re-send a modifier shortcut (Cmd/Ctrl/Option+key) after the commit.

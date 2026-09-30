@@ -6,16 +6,35 @@ import Cocoa
 /// user presses the button in settings — never on its own.
 enum PermissionMonitor {
     private static var lastCheck: Date = .distantPast
-    private static var observer: NSObjectProtocol?
+    private static var observers: [NSObjectProtocol] = []
+
+    /// macOS posts this when any app's Accessibility grant changes — turning
+    /// NRIME on or off in System Settings shows up at once, not at the next
+    /// activation.
+    private static let accessibilityChanged = Notification.Name("com.apple.accessibility.api")
 
     static func start() {
         refresh(force: true)
-        observer = DistributedNotificationCenter.default().addObserver(
+        let center = DistributedNotificationCenter.default()
+        observers.append(center.addObserver(
             forName: PermissionStatus.recheckNotification, object: nil, queue: .main
         ) { _ in
             requestMissing()
             refresh(force: true)
-        }
+        })
+        observers.append(center.addObserver(
+            forName: PermissionStatus.refreshNotification, object: nil, queue: .main
+        ) { _ in
+            refresh(force: true)
+        })
+        observers.append(center.addObserver(
+            forName: accessibilityChanged, object: nil, queue: .main
+        ) { _ in
+            // The new answer can take a moment to reach this process.
+            for delay in [0.5, 2.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { refresh(force: true) }
+            }
+        })
     }
 
     /// Cheap enough for activation, but throttled to once a minute.
@@ -41,6 +60,8 @@ enum PermissionMonitor {
                 "accessibility": "\(status.accessibility)",
             ])
         }
+        DistributedNotificationCenter.default().postNotificationName(
+            PermissionStatus.changedNotification, object: nil, userInfo: nil, deliverImmediately: true)
     }
 
     /// The Accessibility prompt adds NRIME to "Device Control and Data Access"

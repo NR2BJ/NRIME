@@ -17,6 +17,10 @@ struct PermissionStatus: Codable, Equatable {
 
     /// Posted by the settings app: check again, and ask for what is missing.
     static let recheckNotification = Notification.Name("com.nrime.inputmethod.recheckPermissions")
+    /// Posted by the settings app when it shows the status: check again, without asking.
+    static let refreshNotification = Notification.Name("com.nrime.inputmethod.refreshPermissions")
+    /// Posted by the input method after it has saved a fresh status.
+    static let changedNotification = Notification.Name("com.nrime.inputmethod.permissionsChanged")
 
     static func load(from defaults: UserDefaults) -> PermissionStatus? {
         guard let data = defaults.data(forKey: defaultsKey) else { return nil }

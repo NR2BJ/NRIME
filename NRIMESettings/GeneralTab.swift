@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct GeneralTab: View {
@@ -121,10 +122,11 @@ struct GeneralTab: View {
             }
 
             Section(L("section.permissions")) {
-                // One grant covers both: posting events is allowed by the
-                // Accessibility grant, which is the only switch macOS offers.
+                // The row is that switch. The post-event answer is not shown:
+                // macOS fixes it at the process's first check, so it stayed
+                // "allowed" after the switch was turned off.
                 PermissionRow(title: Self.permissionTitle,
-                              granted: store.permissionStatus.map { $0.postEvents || $0.accessibility })
+                              granted: store.permissionStatus.map(\.accessibility))
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L("permissions.description"))
                         .font(.caption)
@@ -147,7 +149,16 @@ struct GeneralTab: View {
                     }
                 }
             }
-            .onAppear { store.reloadPermissionStatus() }
+            .onAppear { store.refreshPermissionStatus() }
+            // Back from System Settings: check again.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                store.refreshPermissionStatus()
+            }
+            .onReceive(DistributedNotificationCenter.default()
+                .publisher(for: PermissionStatus.changedNotification)
+                .receive(on: RunLoop.main)) { _ in
+                store.reloadPermissionStatus()
+            }
 
             Section(L("section.developer")) {
                 VStack(alignment: .leading, spacing: 6) {
