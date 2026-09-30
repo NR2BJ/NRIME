@@ -129,4 +129,19 @@ final class TextInputGeometryTests: XCTestCase {
         XCTAssertEqual(x, 868)
     }
 
+    // MARK: - Is the caret inside the app?
+
+    /// A caret the app reports outside its own windows is wrong, even on a screen.
+    func testCaretOutsideTheAppsWindowsIsRejected() {
+        let windows = [NSRect(x: 100, y: 100, width: 800, height: 600)]
+        XCTAssertTrue(TextInputGeometry.caretIsInside(NSRect(x: 300, y: 400, width: 2, height: 18), windowFrames: windows))
+        XCTAssertFalse(TextInputGeometry.caretIsInside(NSRect(x: 1200, y: 400, width: 2, height: 18), windowFrames: windows),
+                       "Another window's text, a stale spot, a screen corner")
+        XCTAssertTrue(TextInputGeometry.caretIsInside(NSRect(x: 1200, y: 400, width: 2, height: 18),
+                                                      windowFrames: windows + [NSRect(x: 1000, y: 300, width: 400, height: 300)]),
+                      "Any of the app's windows counts (a popover, a second window)")
+        XCTAssertTrue(TextInputGeometry.caretIsInside(NSRect(x: 5000, y: 5000, width: 2, height: 18), windowFrames: []),
+                      "No window to check against rules nothing out")
+    }
+
 }

@@ -21,9 +21,10 @@ final class InlineIndicator {
         return panel.isVisible && panel.alphaValue > 0 && !isFading
     }
 
-    /// Show the mode indicator.
-    ///   "caret" — attributes(forCharacterIndex: 0), fail = don't show
-    ///   "mouse" — NSEvent.mouseLocation, always works
+    /// Show the mode indicator: next to the text cursor ("caret"), or next to
+    /// the mouse pointer ("mouse", or whenever the cursor cannot be placed with
+    /// confidence). It always shows — a lookup that fails is no reason to leave
+    /// the user guessing which mode is on.
     func show(for mode: InputMode, client: (any IMKTextInput)? = nil) {
         let labelWidth: CGFloat = mode.label.count > 1 ? 36 : 26
         let panelSize = NSSize(width: labelWidth, height: 24)
@@ -38,18 +39,7 @@ final class InlineIndicator {
         let gap: CGFloat = 4
         let origin: NSPoint
 
-        if Settings.shared.indicatorPositionMode == "mouse" {
-            let mouse = NSEvent.mouseLocation
-            origin = NSPoint(x: mouse.x + gap, y: mouse.y + gap)
-        } else {
-            // "caret" — use attributes(forCharacterIndex: 0)
-            guard let client = client else { return }
-            var rect = NSRect.zero
-            client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-            guard rect.height > 0 && !rect.equalTo(.zero) else { return }
-            let onScreen = NSScreen.screens.contains { $0.frame.intersects(rect.insetBy(dx: -50, dy: -50)) }
-            guard onScreen else { return }
-
+        if Settings.shared.indicatorPositionMode != "mouse", let rect = Self.caretRect(for: client) {
             let aboveY = rect.origin.y + rect.height + gap
             if let screenFrame = TextInputGeometry.screenFrame(containing: rect),
                aboveY + panelSize.height > screenFrame.maxY {
@@ -57,12 +47,10 @@ final class InlineIndicator {
             } else {
                 origin = NSPoint(x: rect.origin.x + gap, y: aboveY)
             }
+        } else {
+            let mouse = NSEvent.mouseLocation
+            origin = NSPoint(x: mouse.x + gap, y: mouse.y + gap)
         }
-
-        // A failed lookup reports the screen origin; a monitor placed to the
-        // left or below has genuinely negative coordinates, so test against the
-        // actual origin rather than treating everything low-and-left as failure.
-        if Self.looksLikeOriginFailure(origin) { return }
 
         fadeTimer?.invalidate()
         showGeneration &+= 1
@@ -85,6 +73,31 @@ final class InlineIndicator {
                 self.panel?.orderOut(nil)
             })
         }
+    }
+
+    /// Where the text cursor is, or nil when that is unknown or doubtful.
+    ///
+    /// The same lookup the candidate window uses (TextInputGeometry.caretRect:
+    /// the client's caret, then accessibility, then the last good position for
+    /// this field). It used to ask only for character 0, which some apps answer
+    /// with the start of the document or of the line, and others not at all —
+    /// the indicator then stood somewhere else or never showed. A line-start
+    /// answer is still refused (right height, wrong place), and so is any rect
+    /// outside the app's own windows.
+    private static func caretRect(for client: (any IMKTextInput)?) -> NSRect? {
+        guard let client, let result = TextInputGeometry.caretRect(for: client),
+              result.source != .attributesAtZero,
+              TextInputGeometry.isUsableRect(result.rect),
+              !looksLikeOriginFailure(result.rect.origin) else { return nil }
+        if let bundleID = client.bundleIdentifier(),
+           let pid = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.processIdentifier,
+           !TextInputGeometry.caretIsInside(result.rect, windowFrames: TextInputGeometry.windowFrames(ofPID: pid)) {
+            DeveloperLogger.shared.log("Indicator", "Caret outside the app's windows", metadata: [
+                "source": "\(result.source)",
+            ])
+            return nil
+        }
+        return result.rect
     }
 
     /// Whether this origin is the (0,0)-ish result of a failed caret lookup

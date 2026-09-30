@@ -503,12 +503,13 @@ class NRIMEInputController: IMKInputController {
         // Wire up mode change callback for inline indicator
         StateManager.shared.onModeChanged = { [weak self] mode in
             if Settings.shared.inlineIndicatorEnabled {
-                // Pre-commit position was already captured in shortcutAction.
-                // show() will use lastGoodResult which has the accurate pre-commit coords.
+                // show() finds the caret itself; when it cannot, the mouse.
                 let client = self?.resolvedClient()
                 InlineIndicator.shared.show(for: mode, client: client)
             }
         }
+
+        showModeSoonAfterActivation()
 
         // Restore per-app mode if enabled
         if let client = sender as? (any IMKTextInput) {
@@ -531,8 +532,41 @@ class NRIMEInputController: IMKInputController {
     }
 
     override func deactivateServer(_ sender: Any!) {
+        activationIndicatorWork?.cancel()
         handleDeactivateServer(sender)
         super.deactivateServer(sender)
+    }
+
+    // MARK: - Mode indicator on activation
+
+    private var activationIndicatorWork: DispatchWorkItem?
+    /// The field that last got the indicator on activation, and when.
+    private static var lastActivationIndicator: (clientID: ObjectIdentifier, at: TimeInterval)?
+
+    /// Show the current mode shortly after a field becomes active, so it is
+    /// known before typing — not only when the mode changes. It waits a moment
+    /// and shows only if this controller is still the active one: some apps
+    /// pass focus back and forth between views on a single click. Once per
+    /// field within two seconds; not over a composition, the candidates, or
+    /// secure input.
+    private func showModeSoonAfterActivation() {
+        activationIndicatorWork?.cancel()
+        guard Settings.shared.inlineIndicatorEnabled else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, NRIMEInputController.activeController === self,
+                  let client = self.resolvedClient(),
+                  !SecureInputDetector.isSystemSecureInputOn,
+                  !self.koreanEngine.isCurrentlyComposing,
+                  !self.japaneseEngine.isCurrentlyComposing,
+                  !(NSApp.candidatePanel?.isVisible() ?? false) else { return }
+            let id = ObjectIdentifier(client as AnyObject)
+            let now = ProcessInfo.processInfo.systemUptime
+            if let last = Self.lastActivationIndicator, last.clientID == id, now - last.at < 2 { return }
+            Self.lastActivationIndicator = (id, now)
+            InlineIndicator.shared.show(for: StateManager.shared.currentMode, client: client)
+        }
+        activationIndicatorWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
     }
 
     private func handleCommitComposition(_ sender: Any?) {
