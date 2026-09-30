@@ -33,10 +33,6 @@ echo "Building NRIMESettings..."
 xcodebuild -project NRIME.xcodeproj -scheme NRIMESettings -configuration Release \
     SYMROOT="$PROJECT_DIR/build" build
 
-echo "Building NRIMERestoreHelper..."
-xcodebuild -project NRIME.xcodeproj -scheme NRIMERestoreHelper -configuration Release \
-    SYMROOT="$PROJECT_DIR/build" build
-
 # Install FIRST (before kill, so macOS restarts with the NEW binary)
 echo "Installing to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
@@ -46,19 +42,18 @@ cp -R "$BUILD_DIR/$APP_NAME" "$INSTALL_DIR/"
 # Install companion app next to input method
 rm -rf "$INSTALL_DIR/$SETTINGS_APP"
 cp -R "$BUILD_DIR/$SETTINGS_APP" "$INSTALL_DIR/"
+# The login restore helper is gone (NRIME recovers the input source itself);
+# remove the copy older installs left.
 rm -rf "$INSTALL_DIR/$RESTORE_HELPER_APP"
-cp -R "$BUILD_DIR/$RESTORE_HELPER_APP" "$INSTALL_DIR/"
 
 # Strip quarantine/provenance xattrs (macOS Sequoia marks cp'd files as untrusted,
 # causing the input method to appear grayed-out in the input source menu)
 xattr -cr "$INSTALL_DIR/$APP_NAME"
 xattr -cr "$INSTALL_DIR/$SETTINGS_APP"
-xattr -cr "$INSTALL_DIR/$RESTORE_HELPER_APP"
 
 # Ensure executables have execute permissions
 chmod +x "$INSTALL_DIR/$APP_NAME/Contents/MacOS/NRIME"
 chmod +x "$INSTALL_DIR/$SETTINGS_APP/Contents/MacOS/NRIMESettings"
-chmod +x "$INSTALL_DIR/$RESTORE_HELPER_APP/Contents/MacOS/NRIMERestoreHelper"
 
 # Deregister all existing NRIME input sources to prevent duplicates
 echo "Cleaning up existing input sources..."
@@ -86,7 +81,7 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/F
 echo "Registering with LaunchServices..."
 "$LSREGISTER" -f "$INSTALL_DIR/$APP_NAME"
 "$LSREGISTER" -f "$INSTALL_DIR/$SETTINGS_APP"
-"$LSREGISTER" -f "$INSTALL_DIR/$RESTORE_HELPER_APP"
+"$LSREGISTER" -u "$INSTALL_DIR/$RESTORE_HELPER_APP" 2>/dev/null || true
 
 # Clean up old loginrestore LaunchAgent if present (no longer needed)
 LOGINRESTORE_PATH="$LAUNCH_AGENTS_DIR/com.nrime.inputmethod.loginrestore.plist"

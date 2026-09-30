@@ -155,33 +155,6 @@ targets:
     dependencies:
       - package: SwiftProtobuf
 
-  NRIMERestoreHelper:
-    type: application
-    platform: macOS
-    sources:
-      - path: NRIMERestoreHelper
-      - path: Shared/InputSourceSelector.swift
-        type: file
-      - path: Shared/LoginRestorePolicy.swift
-        type: file
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nrime.restorehelper
-        GENERATE_INFOPLIST_FILE: true
-        PRODUCT_NAME: NRIMERestoreHelper
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGNING_ALLOWED: false
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
-    info:
-      path: NRIMERestoreHelper/Info.plist
-      properties:
-        LSUIElement: true
-        CFBundleShortVersionString: "$(MARKETING_VERSION)"
-        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-    postBuildScripts:
-      - script: chmod +x "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}"
-        name: "Fix executable permissions"
-
   NRIMETests:
     type: bundle.unit-test
     platform: macOS

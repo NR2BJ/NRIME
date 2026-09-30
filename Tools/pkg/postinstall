@@ -25,6 +25,21 @@ if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
     rm -f "$MOZC_DIR/.server.lock" "$MOZC_DIR/.session.ipc" 2>/dev/null || true
 fi
 
+# The login restore helper is gone since NRIME recovers the input source itself
+# (its LaunchAgent is removed below); old installs left the app behind.
+RESTORE_HELPER="$INSTALL_DIR/NRIMERestoreHelper.app"
+if [ -d "$RESTORE_HELPER" ]; then
+    "$LSREGISTER" -u "$RESTORE_HELPER" 2>/dev/null || true
+    rm -rf "$RESTORE_HELPER"
+fi
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+    USER_HELPER="$(eval echo "~$CONSOLE_USER")/Library/Input Methods/NRIMERestoreHelper.app"
+    if [ -d "$USER_HELPER" ]; then
+        "$LSREGISTER" -u "$USER_HELPER" 2>/dev/null || true
+        rm -rf "$USER_HELPER"
+    fi
+fi
+
 # Remove quarantine
 xattr -cr "$APP_PATH" 2>/dev/null || true
 xattr -cr "$SETTINGS_PATH" 2>/dev/null || true
