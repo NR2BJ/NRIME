@@ -16,7 +16,7 @@
 
 /* GeneralTab - Display */
 "section.display" = "表示";
-"display.inlineIndicator" = "インライン表示（モード切替時と入力欄の移動時）";
+"display.inlineIndicator" = "モード切替時にインライン表示";
 "display.indicatorPosition" = "インジケーター位置";
 "display.indicatorPosition.caret" = "入力カーソルの横（不明ならマウスの横）";
 "display.indicatorPosition.mouse" = "マウスカーソル位置";

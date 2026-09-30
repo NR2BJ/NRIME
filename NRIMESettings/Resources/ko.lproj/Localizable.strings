@@ -16,7 +16,7 @@
 
 /* GeneralTab - Display */
 "section.display" = "표시";
-"display.inlineIndicator" = "인라인 표시기 보기 (모드를 바꾸거나 입력칸을 옮길 때)";
+"display.inlineIndicator" = "모드 전환 시 인라인 표시기 보기";
 "display.indicatorPosition" = "인디케이터 위치";
 "display.indicatorPosition.caret" = "입력 커서 옆 (모르면 마우스 옆)";
 "display.indicatorPosition.mouse" = "마우스 커서 위치";
