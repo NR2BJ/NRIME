@@ -25,6 +25,8 @@ final class SettingsStore: ObservableObject {
         _toggleNonEnglishShortcut = Published(initialValue: .defaultToggleNonEnglish)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
         _tapHoldBufferingEnabled = Published(initialValue: false)
+        _newlineInsertWaitMs = Published(initialValue: Self.defaultNewlineInsertWaitMs)
+        _newlineKeyPressWaitMs = Published(initialValue: Self.defaultNewlineKeyPressWaitMs)
         _japaneseKeyConfig = Published(initialValue: .default)
         _permissionStatus = Published(initialValue: nil)
 
@@ -71,6 +73,26 @@ final class SettingsStore: ObservableObject {
 
     @Published var tapHoldBufferingEnabled: Bool {
         didSet { defaults.set(tapHoldBufferingEnabled, forKey: "tapHoldBufferingEnabled") }
+    }
+
+    /// The Shift+Enter newline waits (see Settings.newlineWaitOverride in the
+    /// input method). Written only when changed, so opening the settings app
+    /// does not pin today's defaults on this Mac.
+    static let defaultNewlineInsertWaitMs = 20
+    static let defaultNewlineKeyPressWaitMs = 50
+
+    @Published var newlineInsertWaitMs: Int {
+        didSet {
+            guard newlineInsertWaitMs != oldValue else { return }
+            defaults.set(newlineInsertWaitMs, forKey: "newlineInsertWaitMs")
+        }
+    }
+
+    @Published var newlineKeyPressWaitMs: Int {
+        didSet {
+            guard newlineKeyPressWaitMs != oldValue else { return }
+            defaults.set(newlineKeyPressWaitMs, forKey: "newlineKeyPressWaitMs")
+        }
     }
 
     // MARK: - Input Method Permissions
@@ -148,6 +170,10 @@ final class SettingsStore: ObservableObject {
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2
         tapHoldBufferingEnabled = defaults.bool(forKey: "tapHoldBufferingEnabled")
+        newlineInsertWaitMs = defaults.object(forKey: "newlineInsertWaitMs") == nil
+            ? Self.defaultNewlineInsertWaitMs : defaults.integer(forKey: "newlineInsertWaitMs")
+        newlineKeyPressWaitMs = defaults.object(forKey: "newlineKeyPressWaitMs") == nil
+            ? Self.defaultNewlineKeyPressWaitMs : defaults.integer(forKey: "newlineKeyPressWaitMs")
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         secureInputASCIIFallback = defaults.object(forKey: "secureInputASCIIFallback") == nil
             ? true : defaults.bool(forKey: "secureInputASCIIFallback")

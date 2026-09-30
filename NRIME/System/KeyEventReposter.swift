@@ -71,13 +71,15 @@ enum KeyEventReposter {
     // MARK: - Waits
 
     /// How long the inserted "\n" — and a re-sent ⌘ shortcut — waits after
-    /// the commit. 15 ms held for months in Claude; a little more for a slower Mac.
+    /// the commit, in every Electron/Chromium app. 15 ms held for months in
+    /// Claude; the default leaves a little more. Adjustable in Settings > General.
     static var insertWait: TimeInterval {
         Settings.shared.newlineWaitOverride("newlineInsertWaitMs") ?? 0.02
     }
 
-    /// How long the replayed Shift+Enter waits after the commit (Codex). With
-    /// no wait the owner's MacBook lost the syllable now and then.
+    /// How long the replayed Shift+Enter waits after the commit, in apps where
+    /// an inserted newline would send the message (Codex). With no wait the
+    /// owner's MacBook lost the syllable now and then. Adjustable in Settings > General.
     static var keyPressWait: TimeInterval {
         Settings.shared.newlineWaitOverride("newlineKeyPressWaitMs") ?? 0.05
     }

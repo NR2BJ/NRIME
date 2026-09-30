@@ -7,6 +7,15 @@ struct GeneralTab: View {
     @State private var transferStatusMessage: String = ""
     @State private var transferStatusIsError = false
 
+    private static func waitLabel(_ ms: Int) -> String {
+        ms == 0 ? L("newlineWait.none") : "\(ms)ms"
+    }
+
+    /// A slider over whole milliseconds.
+    private static func msBinding(_ value: Binding<Int>) -> Binding<Double> {
+        Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0.rounded()) })
+    }
+
     /// What System Settings calls the list NRIME has to be on: macOS 27
     /// renamed "Accessibility" to "Device Control and Data Access".
     private static var permissionTitle: String {
@@ -61,6 +70,35 @@ struct GeneralTab: View {
                 Text(L("tapHoldBuffering.description"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(L("section.newlineWait")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L("newlineWait.insert"))
+                        Spacer()
+                        Text(Self.waitLabel(store.newlineInsertWaitMs))
+                            .monospacedDigit()
+                            .frame(width: 70, alignment: .trailing)
+                    }
+                    Slider(value: Self.msBinding($store.newlineInsertWaitMs), in: 0...100, step: 5)
+                    Text(L("newlineWait.insert.description"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L("newlineWait.keyPress"))
+                        Spacer()
+                        Text(Self.waitLabel(store.newlineKeyPressWaitMs))
+                            .monospacedDigit()
+                            .frame(width: 70, alignment: .trailing)
+                    }
+                    Slider(value: Self.msBinding($store.newlineKeyPressWaitMs), in: 0...200, step: 5)
+                    Text(L("newlineWait.keyPress.description"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(L("section.display")) {

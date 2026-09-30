@@ -109,6 +109,27 @@ final class CodexReplayTests: XCTestCase {
                        "A stray Shift+Enter must not reach another app; the typed key still goes out")
     }
 
+    /// The waits follow the settings app (the same keys work from Terminal),
+    /// fall back to the built-in values when unset, and stay within 0–500 ms.
+    func testWaitsFollowTheSetting() {
+        let testing = UserDefaults(suiteName: AppGroupDefaults.testingSuiteName)!
+        defer {
+            testing.removeObject(forKey: "newlineInsertWaitMs")
+            testing.removeObject(forKey: "newlineKeyPressWaitMs")
+        }
+        testing.removeObject(forKey: "newlineInsertWaitMs")
+        testing.removeObject(forKey: "newlineKeyPressWaitMs")
+        XCTAssertEqual(KeyEventReposter.insertWait, 0.02, accuracy: 0.0001)
+        XCTAssertEqual(KeyEventReposter.keyPressWait, 0.05, accuracy: 0.0001)
+
+        testing.set(0, forKey: "newlineInsertWaitMs")
+        XCTAssertEqual(KeyEventReposter.insertWait, 0, "0 is a real value: no wait")
+        testing.set(45, forKey: "newlineKeyPressWaitMs")
+        XCTAssertEqual(KeyEventReposter.keyPressWait, 0.045, accuracy: 0.0001)
+        testing.set(5000, forKey: "newlineKeyPressWaitMs")
+        XCTAssertEqual(KeyEventReposter.keyPressWait, 0.5, accuracy: 0.0001)
+    }
+
     /// Claude went back to the inserted newline (with its wait) after 1.0.12-beta.7.
     func testOnlyCodexGetsTheKeyPress() {
         XCTAssertTrue(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.openai.codex"))

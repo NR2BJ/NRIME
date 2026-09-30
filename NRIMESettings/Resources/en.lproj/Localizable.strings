@@ -153,6 +153,14 @@
 "update.channel.betaWarning" = "The beta channel receives test builds first. They may be unstable.";
 
 /* Tap-hold buffering */
+/* GeneralTab - Shift+Enter Newline Wait */
+"section.newlineWait" = "Shift+Enter Newline Wait";
+"newlineWait.none" = "No wait";
+"newlineWait.insert" = "Electron and Chromium apps";
+"newlineWait.insert.description" = "How long to wait after committing the composition before inserting the newline, in every app built on web technology, such as Discord, Slack, Claude and VS Code. If the syllable being composed disappears, increase it. ⌘ shortcuts pressed while composing are re-sent after the same wait. Default 20 ms.";
+"newlineWait.keyPress" = "Apps that get Shift+Enter re-sent";
+"newlineWait.keyPress.description" = "Apps that send the message when a newline character is inserted (Codex for now) get the Shift+Enter key press re-sent after the commit. This is the wait before it. If the syllable being composed disappears, increase it. Needs the Device Control and Data Access permission. Default 50 ms.";
+
 "tapHoldBuffering.enable" = "Fast tap-switch correction (experimental)";
 "tapHoldBuffering.description" = "Switches languages even when you tap Shift and type so quickly that the letter goes down before Shift comes up. On keys where Shift means nothing (Korean keys other than the double consonants, every Japanese letter) it always switches. Double consonants (ㄲㄸㅃㅆㅉㅒㅖ) and English capitals switch only when Shift comes up very quickly (within 30 ms), and a double consonant in the middle of a Korean word never does.";
 
