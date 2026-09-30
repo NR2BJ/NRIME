@@ -16,9 +16,13 @@ enum ChromiumDetector {
     /// the commit, not an inserted "\n". For these the Shift+Enter workaround
     /// replays the key press instead.
     ///
-    /// Both are ProseMirror editors. ProseMirror finishes a composition 20 ms
-    /// after it ends, and a key press makes it do so first; an inserted "\n"
-    /// does not, so it lands while the composed syllable is still unsettled.
+    /// Their editors settle a composition only after it has ended — Codex's
+    /// is ProseMirror (finishes 20 ms later), Claude desktop's is Lexical (its
+    /// app bundle names it; ProseMirror appears nowhere). A real key press is
+    /// handled after that; an "\n" inserted right after the commit can land
+    /// first and take the composed syllable with it. The race depends on
+    /// timing, so a slower Mac loses more often (the owner's MacBook did).
+    /// cssgsg has the same code and the same exposure.
     private static let newlineKeyPressBundleIDs: Set<String> = [
         // ChatGPT/Codex desktop: an inserted "\n" sends the message
         // (verified 2026-07 beta test).
