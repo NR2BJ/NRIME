@@ -83,7 +83,7 @@ Click the NRIME icon in the menu bar to open the settings app.
 | Tap Threshold | Modifier-only tap recognition time slider (0.1-0.5s) |
 | Fast tap-switch correction (experimental) | Fixes stray capitals/double consonants when typing right after a Shift tap (off by default). Keys where Shift means nothing always switch; double consonants and capitals only when Shift comes up within 30 ms; a double consonant mid-word never does |
 | Display | Show inline indicator on mode switch (Indicator Position: Text Cursor/Mouse Cursor), Prevent switching to ABC, Switch to ABC while typing passwords, Candidate Font Size (12-24pt) |
-| Input method permissions | Device Control and Data Access (Accessibility on macOS 26 and earlier) status, Check again / Request, Open System Settings — needed to re-send ⌘+key or Codex Shift+Enter to the app after committing |
+| Input method permissions | Device Control and Data Access (Accessibility on macOS 26 and earlier) status, Check again / Request, Open System Settings — needed to re-send ⌘+key or Shift+Enter in Codex and Claude to the app after committing |
 | Developer | Enable Developer Mode (diagnostic log), Open Log/Reveal in Finder/Clear Log |
 | Backup & Restore | Export Settings (JSON) / Import Settings |
 
@@ -216,7 +216,7 @@ Explains the root cause and fix for text loss when pressing modifier+key during 
 
 | Case | Method |
 |------|--------|
-| **Shift+Enter** | Commit text > `client.insertText("\n")` on the next turn of the run loop + `return true` (apps that send the message when `\n` is inserted, like Codex, get the Shift+Enter key press again instead) |
+| **Shift+Enter** | Commit text > `client.insertText("\n")` on the next turn of the run loop + `return true` (Codex and Claude desktop get the Shift+Enter key press again instead — Codex sends the message when `\n` is inserted, and Claude drops the syllable being composed when `\n` comes right after the commit) |
 | **Cmd+A/C/V/X/Z** | Commit text > CGEvent repost via `.cghidEventTap` + `return true` |
 
 ### Approaches that failed

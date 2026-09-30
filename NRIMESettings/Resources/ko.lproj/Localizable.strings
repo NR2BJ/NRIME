@@ -175,7 +175,7 @@
 "permissions.granted" = "허용됨";
 "permissions.denied" = "꺼짐";
 "permissions.unknown" = "아직 확인 안 됨";
-"permissions.description" = "조합을 확정한 뒤 ⌘+키나 Codex의 Shift+Enter를 앱에 다시 보내려면 필요합니다. '꺼짐'이면 시스템 설정 > 개인정보 보호 및 보안 > 기기 제어 및 데이터 접근(macOS 26 이하: 손쉬운 사용)에서 NRIME을 켜세요. 목록에 없으면 아래 '다시 확인 / 권한 요청'을 누르거나 + 버튼으로 /Library/Input Methods/NRIME.app을 추가하세요. 켜져 있는데도 '꺼짐'이면 목록에서 지운 뒤(−) 다시 추가하세요.";
+"permissions.description" = "조합을 확정한 뒤 ⌘+키나 Codex·Claude의 Shift+Enter를 앱에 다시 보내려면 필요합니다. '꺼짐'이면 시스템 설정 > 개인정보 보호 및 보안 > 기기 제어 및 데이터 접근(macOS 26 이하: 손쉬운 사용)에서 NRIME을 켜세요. 목록에 없으면 아래 '다시 확인 / 권한 요청'을 누르거나 + 버튼으로 /Library/Input Methods/NRIME.app을 추가하세요. 켜져 있는데도 '꺼짐'이면 목록에서 지운 뒤(−) 다시 추가하세요.";
 "permissions.checkedAt" = "입력기가 마지막으로 확인한 시각: %@";
 "permissions.recheck" = "다시 확인 / 권한 요청";
 "permissions.openSettings" = "시스템 설정 열기";

@@ -12,23 +12,37 @@ enum ChromiumDetector {
     static var newlineQuirkOverrideForTesting: Bool?
 #endif
 
-    /// Electron apps whose editor treats a programmatic insertText("\n") as
-    /// message submit rather than a line break (their newline path only fires
-    /// on a real Shift+Enter keydown). For these, the Shift+Enter workaround
-    /// replays the key press after the commit instead of inserting "\n".
-    private static let newlineInsertSubmitsBundleIDs: Set<String> = [
-        "com.openai.codex", // ChatGPT/Codex desktop — verified 2026-07 beta test
+    /// Electron apps whose editor needs Shift+Enter as a real key press after
+    /// the commit, not an inserted "\n". For these the Shift+Enter workaround
+    /// replays the key press instead.
+    ///
+    /// Both are ProseMirror editors. ProseMirror finishes a composition 20 ms
+    /// after it ends, and a key press makes it do so first; an inserted "\n"
+    /// does not, so it lands while the composed syllable is still unsettled.
+    private static let newlineKeyPressBundleIDs: Set<String> = [
+        // ChatGPT/Codex desktop: an inserted "\n" sends the message
+        // (verified 2026-07 beta test).
+        "com.openai.codex",
+        // Claude desktop: an inserted "\n" right after the commit took the
+        // composing syllable with it — "없긴 하니" + Shift+Enter arrived as
+        // "없긴 하" (2026-09-30, once the old 15 ms wait was gone).
+        "com.anthropic.claudefordesktop",
     ]
 
-    /// Whether the frontmost app is on the newline-submit quirk list.
-    static var frontmostAppTreatsNewlineInsertAsSubmit: Bool {
+    /// Whether this app needs the Shift+Enter newline as a real key press.
+    static func needsNewlineKeyPress(bundleID: String) -> Bool {
+        newlineKeyPressBundleIDs.contains(bundleID)
+    }
+
+    /// Whether the frontmost app needs the Shift+Enter newline as a key press.
+    static var frontmostAppNeedsNewlineKeyPress: Bool {
 #if DEBUG
         if let forced = newlineQuirkOverrideForTesting { return forced }
 #endif
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else {
             return false
         }
-        return newlineInsertSubmitsBundleIDs.contains(bundleID)
+        return needsNewlineKeyPress(bundleID: bundleID)
     }
 
     /// Returns true if the frontmost application uses Chromium/Electron.

@@ -14,8 +14,10 @@ import InputMethodKit
 ///
 /// For Shift+Enter, most Chromium apps get `insertText("\n")` instead
 /// (Shift+Return has no StandardKeyBinding.dict entry, so AppKit-driven paths
-/// misinterpret a replayed key). Apps whose editor submits on a programmatic
-/// "\n" (ChatGPT/Codex) get the replayed key press — with composition over,
+/// misinterpret a replayed key). Apps whose editor mishandles an inserted
+/// "\n" (Codex sends the message; Claude drops the syllable being composed —
+/// see ChromiumDetector.newlineKeyPressBundleIDs) get the replayed key press —
+/// with composition over,
 /// the renderer's own keydown handler inserts the line break exactly as for a
 /// physical Shift+Enter.
 ///
@@ -73,10 +75,10 @@ enum KeyEventReposter {
     }
 
     /// The Chromium Shift+Enter newline, performed after the commit has been
-    /// issued. Quirk apps (insertText("\n") submits there) get a replayed key
+    /// issued. Key-press apps (ChromiumDetector) get a replayed key
     /// press; everyone else gets the "\n" insert.
     static func performChromiumNewline(keyCode: UInt16, client: any IMKTextInput) {
-        if ChromiumDetector.frontmostAppTreatsNewlineInsertAsSubmit {
+        if ChromiumDetector.frontmostAppNeedsNewlineKeyPress {
             // Without permission the replayed key is dropped, and inserting
             // "\n" instead would send the message. Commit only; pressing
             // Shift+Enter again gives the newline.

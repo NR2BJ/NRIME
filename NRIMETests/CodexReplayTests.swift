@@ -80,6 +80,14 @@ final class CodexReplayTests: XCTestCase {
         XCTAssertEqual(sent.count, 1, "Passed on, not posted a second time")
     }
 
+    func testClaudeDesktopGetsTheKeyPressToo() {
+        XCTAssertTrue(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.anthropic.claudefordesktop"),
+                      "An inserted newline right after the commit dropped the composing syllable")
+        XCTAssertTrue(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.openai.codex"))
+        XCTAssertFalse(ChromiumDetector.needsNewlineKeyPress(bundleID: "com.hnc.Discord"),
+                       "Discord keeps the inserted newline, which works there")
+    }
+
     func testWithoutPermissionOnlyTheCommitHappens() {
         KeyEventReposter.postEventAccessForTesting = false
         commitWithShiftEnter()

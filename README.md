@@ -83,7 +83,7 @@ nihongo → にほんご → Space → 日本語
 | 탭 인식 시간 | 보조 키 단독 탭으로 인식하는 최대 시간 슬라이더 (0.1~0.5초) |
 | 빠른 탭 전환 보정 (실험적) | Shift 탭 직후 빠르게 친 글자가 쌍자음/대문자로 나오는 문제 보정 (기본 꺼짐). Shift가 뜻 없는 키는 그대로 전환, 쌍자음·대문자는 Shift를 30ms 안에 뗐을 때만, 단어 중간의 쌍자음은 전환 안 함 |
 | 표시 | 모드 전환 시 인라인 표시기 보기 (인디케이터 위치: 입력 커서 위치/마우스 커서 위치), ABC로 전환 방지, 암호 입력 시 영문 자판으로 전환, 후보 글꼴 크기 (12~24pt) |
-| 입력기 권한 | 기기 제어 및 데이터 접근(macOS 26 이하: 손쉬운 사용) 허용 상태, 다시 확인 / 권한 요청, 시스템 설정 열기 — 조합 확정 뒤 ⌘+키나 Codex의 Shift+Enter를 앱에 다시 보낼 때 필요 |
+| 입력기 권한 | 기기 제어 및 데이터 접근(macOS 26 이하: 손쉬운 사용) 허용 상태, 다시 확인 / 권한 요청, 시스템 설정 열기 — 조합 확정 뒤 ⌘+키나 Codex·Claude의 Shift+Enter를 앱에 다시 보낼 때 필요 |
 | 개발자 | 개발자 모드 활성화 (진단 로그), 로그 열기/Finder에서 보기/로그 지우기 |
 | 백업 및 복원 | 설정 내보내기 (JSON) / 가져오기 |
 
@@ -216,7 +216,7 @@ Electron/Chromium 기반 앱에서 IME 조합 중 modifier+key 입력 시 텍스
 
 | 상황 | 방법 |
 |------|------|
-| **Shift+Enter** | 텍스트 확정 → 다음 런루프 차례에 `client.insertText("\n")` + `return true` (Codex처럼 `\n`이 들어오면 메시지를 보내는 앱에는 Shift+Enter 키를 다시 보냄) |
+| **Shift+Enter** | 텍스트 확정 → 다음 런루프 차례에 `client.insertText("\n")` + `return true` (Codex·Claude 데스크톱에는 Shift+Enter 키를 다시 보냄 — Codex는 `\n`이 들어오면 메시지를 보내고, Claude는 확정 직후 `\n`이 조합 중이던 글자를 지움) |
 | **Cmd+A/C/V/X/Z** | 텍스트 확정 → CGEvent repost via `.cghidEventTap` + `return true` |
 
 ### 시도했지만 실패한 접근법

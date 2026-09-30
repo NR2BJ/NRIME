@@ -175,7 +175,7 @@
 "permissions.granted" = "Allowed";
 "permissions.denied" = "Off";
 "permissions.unknown" = "Not checked yet";
-"permissions.description" = "Needed to re-send ⌘+key or Codex Shift+Enter to the app after committing. If it shows Off, turn NRIME on in System Settings > Privacy & Security > Device Control and Data Access (Accessibility on macOS 26 and earlier). If NRIME is not listed, press Check again / Request below, or add /Library/Input Methods/NRIME.app with the + button. If it is on but still shows Off, remove it from the list (−) and add it again.";
+"permissions.description" = "Needed to re-send ⌘+key or Shift+Enter in Codex and Claude to the app after committing. If it shows Off, turn NRIME on in System Settings > Privacy & Security > Device Control and Data Access (Accessibility on macOS 26 and earlier). If NRIME is not listed, press Check again / Request below, or add /Library/Input Methods/NRIME.app with the + button. If it is on but still shows Off, remove it from the list (−) and add it again.";
 "permissions.checkedAt" = "Last checked by the input method: %@";
 "permissions.recheck" = "Check again / Request";
 "permissions.openSettings" = "Open System Settings";
