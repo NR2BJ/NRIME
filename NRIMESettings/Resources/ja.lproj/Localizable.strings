@@ -1,16 +1,12 @@
 /* SettingsView - Tab Names */
 "tab.general" = "一般";
 "tab.japanese" = "日本語";
-"tab.dictionary" = "辞書";
-"tab.perApp" = "アプリ別";
 "tab.about" = "情報";
 
 /* GeneralTab - Shortcuts */
 "section.shortcuts" = "ショートカット";
 "shortcut.toggleEnglish" = "英語に切替";
 "shortcut.toggleNonEnglish" = "非英語モード切替";
-"shortcut.switchKorean" = "韓国語に切替";
-"shortcut.switchJapanese" = "日本語に切替";
 "shortcut.hanjaConversion" = "漢字変換";
 
 /* GeneralTab - Tap Threshold */
@@ -18,16 +14,11 @@
 "tapThreshold.description" = "修飾キーを押してからタップと認識されなくなるまでの最大時間です。";
 "tapThreshold.notApplicable" = "該当なし — 修飾キー単独タップを使用するショートカットがありません。";
 
-/* GeneralTab - Double Tap */
-"section.shiftDoubleTap" = "Shift ダブルタップ → Caps Lock";
-"shiftDoubleTap.description" = "Caps Lockを切り替えるための2回のShiftタップの最大間隔です。Shift+CapsLockでも直接切り替えできます。";
-
 /* GeneralTab - Display */
 "section.display" = "表示";
 "display.inlineIndicator" = "モード切替時にインライン表示";
 "display.indicatorPosition" = "インジケーター位置";
 "display.indicatorPosition.caret" = "入力カーソル位置（不安定な場合あり）";
-"display.indicatorPosition.lineStart" = "行頭位置（安定）";
 "display.indicatorPosition.mouse" = "マウスカーソル位置";
 "display.preventABC" = "ABCへの切替を防止";
 "display.preventABC.description" = "他の入力ソースが選択されると自動的にNRIMEに戻します。ログイン/復帰後約15秒間は切り替えを試み続け、以降はNRIME内蔵のEN/KO/JAショートカットを使用します。";
@@ -60,25 +51,12 @@
 "shortcutRow.cancel" = "キャンセル";
 "shortcutRow.clear" = "クリア";
 
-/* JapaneseTab - Conversion Keys */
-"section.conversionKeys" = "変換キー";
-"conversionKeys.description" = "入力中にひらがなを他の文字種に変換するキーです。";
-"japanese.hiragana" = "ひらがな";
-"japanese.fullKatakana" = "全角カタカナ";
-"japanese.halfKatakana" = "半角カタカナ";
-"japanese.fullRomaji" = "全角ローマ字";
-"japanese.halfRomaji" = "半角ローマ字";
-
 /* JapaneseTab - Key Behavior */
 "section.keyBehavior" = "キー動作";
 "keyBehavior.capsLockAction" = "Caps Lock 動作";
 "capsLock.default" = "Caps Lock（デフォルト）";
 "capsLock.katakana" = "カタカナに変換";
 "capsLock.romaji" = "ローマ字に変換";
-"keyBehavior.shiftKeyAction" = "Shift キー動作";
-"shiftKey.none" = "なし（デフォルト）";
-"shiftKey.katakana" = "カタカナ入力";
-"shiftKey.romaji" = "ローマ字入力";
 
 /* JapaneseTab - Space */
 "section.space" = "スペース";
@@ -91,19 +69,11 @@
 "section.punctuation" = "句読点と記号";
 "punctuation.style" = "句読点スタイル";
 "punctuation.japanese" = "日本語  。、";
-"punctuation.western" = "欧文  ．，";
 "punctuation.fullWidthWestern" = "全角西洋式 (．，)";
 "punctuation.slashToNakaguro" = "/ キー → ・（中黒）";
 "punctuation.slashDescription" = "スラッシュで中黒を入力";
 "punctuation.yenKey" = "\\ キー → ¥（円記号）";
 "punctuation.yenDescription" = "バックスラッシュで円記号を入力";
-
-/* JapaneseTab - Input Features */
-"section.inputFeatures" = "入力機能";
-"inputFeatures.liveConversion" = "ライブ変換";
-"inputFeatures.liveConversion.description" = "入力中にリアルタイムで変換結果を表示します";
-"inputFeatures.prediction" = "予測入力";
-"inputFeatures.prediction.description" = "テキスト確定後に次の単語を予測して表示します";
 
 /* JapaneseTab - Conversion History */
 "section.conversionHistory" = "変換履歴";
@@ -123,14 +93,6 @@
 "convShortcut.navigateCandidates" = "候補を選択";
 "convShortcut.confirmConversion" = "変換を確定";
 "convShortcut.cancelConversion" = "変換をキャンセル";
-"convShortcut.selectPrediction" = "予測を選択 / グリッド切替";
-
-/* JapaneseTab - Key Recorder */
-"keyRecorder.pressKey" = "キーを押してください...";
-"keyRecorder.none" = "なし";
-"keyRecorder.record" = "記録";
-"keyRecorder.cancel" = "キャンセル";
-"keyRecorder.clear" = "クリア";
 
 /* DictionaryTab */
 "dictionary.search" = "検索...";
@@ -162,34 +124,29 @@
 "dictionary.problem.duplicate" = "同じ単語がすでにあります。";
 "dictionary.save" = "保存";
 
-/* PerAppTab */
-"perApp.enableMemory" = "アプリ別言語モード記憶を有効化";
-"perApp.mode" = "モード";
-"perApp.whitelist" = "ホワイトリスト — リストのアプリのみ記憶";
-"perApp.blacklist" = "ブラックリスト — リスト以外のアプリを記憶";
-"perApp.rememberedApps" = "記憶するアプリ";
-"perApp.excludedApps" = "除外するアプリ";
-"perApp.noApps" = "アプリが追加されていません。";
-"perApp.addApp" = "アプリを追加...";
-
 /* AboutTab */
-"about.title" = "NRIME";
 "about.subtitle" = "オールインワン入力メソッド";
 "about.languages" = "韓国語 / 英語 / 日本語";
-"about.github" = "GitHub";
 "about.language" = "言語";
-"about.languageRestart" = "言語を変更するにはアプリを再起動する必要があります。";
 
 /* Common */
 "common.cancel" = "キャンセル";
 "common.ok" = "OK";
 "common.space" = "スペース";
 "common.tab" = "Tab";
-"common.downArrow" = "↓ 矢印";
 "punctuation.halfWidthWestern" = "半角西洋式 (.,)";
-"shiftDoubleTap.enable" = "Shiftダブルタップで Caps Lock 切替";
 
 /* Update channel */
+"update.checking" = "アップデートを確認中…";
+"update.upToDate" = "最新バージョンです";
+"update.available" = "新しいバージョン: v%@";
+"update.downloadAndInstall" = "ダウンロードしてインストール";
+"update.downloading" = "ダウンロード中…";
+"update.downloaded" = "ダウンロード完了";
+"update.installNow" = "今すぐインストール";
+"update.installing" = "インストール中…";
+"update.error" = "アップデートエラー";
+"update.checkNow" = "アップデートを確認";
 "update.channel" = "アップデートチャンネル";
 "update.channel.stable" = "正式版";
 "update.channel.beta" = "ベータ";
@@ -197,8 +154,7 @@
 
 /* Tap-hold buffering */
 "tapHoldBuffering.enable" = "高速タップ切替補正（実験的）";
-"tapHoldBuffering.description" = "Shiftタップ直後の高速入力で大文字などが混入する問題を補正します。Shift押下中に届いた文字を一時保留し、すぐにShiftを離すと言語切替+新モードで入力します。";
-"tapHoldBuffering.windowDescription" = "判定時間: 文字入力後この時間内にShiftを離すと切替意図と判断します。高速な大文字入力が誤認される場合は値を下げてください。";
+"tapHoldBuffering.description" = "Shiftをタップしてすぐに文字を打ち、文字がShiftより先に押されても言語を切り替えます。Shiftに意味のないキー（濃音以外のハングルのキー、日本語のすべての文字）はそのまま切り替えます。濃音（ㄲㄸㅃㅆㅉㅒㅖ）と英語の大文字は、Shiftをとても素早く（30ms以内に）離したときだけ切り替え、ハングル入力中（単語の途中）の濃音は切り替えません。";
 
 /* Secure input ASCII fallback */
 "secureInput.asciiFallback" = "パスワード入力時に英字キーボードへ切替";

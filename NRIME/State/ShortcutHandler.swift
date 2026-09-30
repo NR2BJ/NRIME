@@ -28,11 +28,41 @@ final class ShortcutHandler {
         let event: NSEvent
         let letterDownTimestamp: TimeInterval
         let modifierKeyCode: UInt16
+        let modifierDownTimestamp: TimeInterval
+        /// Whether Shift changes what this key types in the current mode —
+        /// decides how quickly Shift must come up for the press to be a tap.
+        let shiftMatters: Bool
         var flushWork: DispatchWorkItem
         /// Whether the timeout already yielded once to a release still in flight.
         var deferredOnce = false
     }
     private var pendingLetter: PendingLetter?
+
+    /// Set by NRIMEInputController: whether a Korean syllable is being composed.
+    var isComposingKorean: (() -> Bool)?
+
+    /// How soon after the letter Shift must come up for Shift+letter to be a
+    /// tap followed by the letter, where Shift changes the letter (ㄲ ㄸ ㅃ ㅆ
+    /// ㅉ ㅒ ㅖ, English capitals). Measured on the owner's typing (2026-09-30,
+    /// 104 double consonants): the fastest let go of Shift 47 ms after the
+    /// letter, 5% under 54 ms. The old single 50 ms window took about one in
+    /// fifty of them for a tap and switched the language.
+    static let shiftedLetterTapWindow: TimeInterval = 0.03
+
+    /// The same, where Shift changes nothing (the other Korean keys, every
+    /// Japanese letter): Shift has no purpose there but the tap, so the window
+    /// is wide. Still bounded, so a Shift held well past the letter is not
+    /// read as a tap.
+    static let shiftlessLetterTapWindow: TimeInterval = 0.08
+
+    /// Whether Shift changes what this letter key types in `mode`.
+    static func shiftMatters(keyCode: UInt16, in mode: InputMode) -> Bool {
+        switch mode {
+        case .english: return true                 // capitals
+        case .japanese: return false               // Shift+letter composes the same kana
+        case .korean: return JamoTable.shiftChangesJamo(forKeyCode: keyCode)
+        }
+    }
     /// event.timestamp of the tracked modifier's press — buffering decisions use
     /// event timestamps (not Date()) so 40ms-scale judgments stay accurate.
     private var modifierDownEventTimestamp: TimeInterval?
@@ -76,9 +106,8 @@ final class ShortcutHandler {
     private var lastKeyDownTimestamp: TimeInterval?
 
     /// How long one modifier may keep going up after the next one went down
-    /// and still be rollover rather than a chord. A fixed constant: the
-    /// buffering feature's tapOverlapWindow is a user setting for a different
-    /// decision and must not silently retune this one.
+    /// and still be rollover rather than a chord. Its own constant: the tap
+    /// buffering windows decide something else and must not retune this one.
     static let modifierRolloverWindow: TimeInterval = 0.05
 
     /// Hardware key presses the window server has seen, as of the tracked
@@ -244,7 +273,7 @@ final class ShortcutHandler {
             // Another modifier joining while a letter is buffered settles it as
             // a deliberate combo (hold).
             if pendingLetter != nil {
-                flushPendingAsHold()
+                flushPendingAsHold(reason: "otherModifier")
             }
             // Modifier pressed down — start tracking for potential tap.
             //
@@ -372,7 +401,8 @@ final class ShortcutHandler {
         // Release while a letter is buffered: the overlap between letter-down and
         // this release is the discriminating signal. A short overlap means the
         // letter was a rollover after an intended tap (switch mode, replay
-        // unshifted); a long one means a deliberate shifted letter.
+        // unshifted); a long one means a deliberate shifted letter. How short
+        // depends on whether Shift changes that letter (see the two windows).
         if !isNowDown && wasDown, let pending = pendingLetter, pending.modifierKeyCode == keyCode {
             pending.flushWork.cancel()
             pendingLetter = nil
@@ -380,7 +410,10 @@ final class ShortcutHandler {
             let hold = event.timestamp - (modifierDownEventTimestamp ?? event.timestamp)
             activeModifierKeyCode = nil
             modifierDownEventTimestamp = nil
-            if overlap < Settings.shared.tapOverlapWindow && hold < Settings.shared.tapThreshold {
+            let isTap = overlap < Self.tapWindow(for: pending) && hold < Settings.shared.tapThreshold
+            logBufferedLetter(pending, outcome: isTap ? "tap" : "hold", reason: "release",
+                              overlap: overlap, hold: hold)
+            if isTap {
                 _ = checkModifierOnlyTap(keyCode)
                 onReplay?(pending.event, false)
             } else {
@@ -452,7 +485,7 @@ final class ShortcutHandler {
     func observeConsumedKeyDown(_ event: NSEvent) {
         guard event.type == .keyDown else { return }
         if pendingLetter != nil {
-            flushPendingAsHold()
+            flushPendingAsHold(reason: "consumedKey")
         }
         twinTapCandidate = nil
         if activeModifierKeyCode != nil {
@@ -471,7 +504,7 @@ final class ShortcutHandler {
         //    combo (hold). This also covers the stuck case where the modifier's
         //    release event was never delivered (focus change mid-buffer).
         if pendingLetter != nil {
-            flushPendingAsHold()
+            flushPendingAsHold(reason: "secondKey")
         }
         // A key while both Shifts are down cannot be attributed to either one,
         // so an interrupted tap does not survive it.
@@ -534,31 +567,49 @@ final class ShortcutHandler {
               event.modifierFlags.intersection([.control, .option, .command]).isEmpty,
               onlyHeldSideIsDown(event, held: held)
         else { return false }
+        // A double consonant in the middle of a word is not ambiguous: nobody
+        // switches languages halfway through a syllable. It goes straight to
+        // the engine, with no wait. (Of the owner's double consonants, 68% came
+        // mid-word, among them the five fastest.)
+        if StateManager.shared.currentMode == .korean,
+           Self.shiftMatters(keyCode: event.keyCode, in: .korean),
+           isComposingKorean?() == true {
+            return false
+        }
         return true
+    }
+
+    private static func tapWindow(for pending: PendingLetter) -> TimeInterval {
+        pending.shiftMatters ? shiftedLetterTapWindow : shiftlessLetterTapWindow
     }
 
     private func bufferLetter(_ event: NSEvent) {
         guard let held = activeModifierKeyCode,
               let downTS = modifierDownEventTimestamp else { return }
         let work = DispatchWorkItem { [weak self] in self?.flushPendingOnTimeout() }
-        pendingLetter = PendingLetter(event: event,
-                                      letterDownTimestamp: event.timestamp,
-                                      modifierKeyCode: held,
-                                      flushWork: work)
-        // The buffer never outlives the overlap window, nor the point where the
+        let pending = PendingLetter(event: event,
+                                    letterDownTimestamp: event.timestamp,
+                                    modifierKeyCode: held,
+                                    modifierDownTimestamp: downTS,
+                                    shiftMatters: Self.shiftMatters(keyCode: event.keyCode,
+                                                                    in: StateManager.shared.currentMode),
+                                    flushWork: work)
+        pendingLetter = pending
+        // The buffer never outlives its tap window, nor the point where the
         // hold itself stops qualifying as a tap.
-        let deadline = min(Settings.shared.tapOverlapWindow,
+        let deadline = min(Self.tapWindow(for: pending),
                            (downTS + Settings.shared.tapThreshold) - event.timestamp)
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0.001, deadline), execute: work)
     }
 
     /// Settle the buffered letter as a deliberate shifted keystroke (hold).
-    private func flushPendingAsHold() {
+    private func flushPendingAsHold(reason: String) {
         guard let pending = pendingLetter else { return }
         pending.flushWork.cancel()
         pendingLetter = nil
         modifierWasUsedAsCombo = true
         comboReason = "bufferedHold"
+        logBufferedLetter(pending, outcome: "hold", reason: reason, overlap: nil, hold: nil)
         onReplay?(pending.event, true)
     }
 
@@ -582,7 +633,7 @@ final class ShortcutHandler {
             return
         }
 
-        flushPendingAsHold()
+        flushPendingAsHold(reason: "timeout")
     }
 
     /// How long the timeout waits for an in-flight release before giving up.
@@ -613,7 +664,7 @@ final class ShortcutHandler {
 #if DEBUG
     /// Test seam: fire the overlap-window timeout synchronously.
     func flushPendingForTesting() {
-        flushPendingAsHold()
+        flushPendingAsHold(reason: "test")
     }
 
     var hasPendingLetterForTesting: Bool { pendingLetter != nil }
@@ -765,10 +816,32 @@ final class ShortcutHandler {
         DeveloperLogger.shared.log("Tap", "Tap decision", metadata: metadata)
     }
 
+    /// One line per buffered letter, naming how it was settled and why, with
+    /// the timing the decision used: the data for tuning the two tap windows.
+    /// The letter's key code is recorded, never inside a password field.
+    private func logBufferedLetter(_ pending: PendingLetter, outcome: String, reason: String,
+                                   overlap: TimeInterval?, hold: TimeInterval?) {
+        guard DeveloperLogger.shared.isEnabled, !isLoggingRedacted else { return }
+        var metadata = [
+            "outcome": outcome,
+            "reason": reason,
+            "key": Self.keyName(pending.modifierKeyCode),
+            "letter": String(format: "0x%02X", pending.event.keyCode),
+            "mode": StateManager.shared.currentMode.label,
+            "shiftMatters": pending.shiftMatters ? "Y" : "N",
+            "windowMs": Self.ms(Self.tapWindow(for: pending)),
+            "ctl": String(diagID),
+            "leadMs": Self.ms(pending.letterDownTimestamp - pending.modifierDownTimestamp),
+        ]
+        if let overlap { metadata["overlapMs"] = Self.ms(overlap) }
+        if let hold { metadata["holdMs"] = Self.ms(hold) }
+        DeveloperLogger.shared.log("Tap", "Buffered letter", metadata: metadata)
+    }
+
     /// Whether log lines must leave out timing: secure input is on, or input
     /// goes to an authentication field (whose flag can lag the panel).
     private var isLoggingRedacted: Bool {
-        IsSecureEventInputEnabled() || (isSensitiveContext?() ?? false)
+        SecureInputDetector.isSystemSecureInputOn || (isSensitiveContext?() ?? false)
     }
 
     /// One line per release of a registered tap key, naming what decided it.

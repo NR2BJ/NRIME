@@ -25,7 +25,6 @@ final class SettingsStore: ObservableObject {
         _toggleNonEnglishShortcut = Published(initialValue: .defaultToggleNonEnglish)
         _hanjaConvertShortcut = Published(initialValue: .defaultHanjaConvert)
         _tapHoldBufferingEnabled = Published(initialValue: false)
-        _tapOverlapWindow = Published(initialValue: 0.05)
         _japaneseKeyConfig = Published(initialValue: .default)
         _permissionStatus = Published(initialValue: nil)
 
@@ -74,10 +73,6 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(tapHoldBufferingEnabled, forKey: "tapHoldBufferingEnabled") }
     }
 
-    @Published var tapOverlapWindow: Double {
-        didSet { defaults.set(tapOverlapWindow, forKey: "tapOverlapWindow") }
-    }
-
     // MARK: - Input Method Permissions
 
     /// What the input method last reported about its own grants. Read-only here.
@@ -91,6 +86,9 @@ final class SettingsStore: ObservableObject {
     /// comes back as PermissionStatus.changedNotification.
     func refreshPermissionStatus() {
         reloadPermissionStatus()
+        // A test or snapshot run must not set the real input method checking
+        // (it answers by writing the owner's App Group).
+        if AppGroupDefaults.isRunningTests { return }
         DistributedNotificationCenter.default().postNotificationName(
             PermissionStatus.refreshNotification, object: nil, userInfo: nil, deliverImmediately: true)
     }
@@ -150,8 +148,6 @@ final class SettingsStore: ObservableObject {
         let tapVal = defaults.double(forKey: "tapThreshold")
         tapThreshold = tapVal > 0 ? tapVal : 0.2
         tapHoldBufferingEnabled = defaults.bool(forKey: "tapHoldBufferingEnabled")
-        let towVal = defaults.double(forKey: "tapOverlapWindow")
-        tapOverlapWindow = towVal > 0 ? towVal : 0.05
         preventABCSwitch = defaults.bool(forKey: "preventABCSwitch")
         secureInputASCIIFallback = defaults.object(forKey: "secureInputASCIIFallback") == nil
             ? true : defaults.bool(forKey: "secureInputASCIIFallback")

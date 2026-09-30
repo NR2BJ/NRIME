@@ -224,6 +224,13 @@ enum JamoTable {
         return entry.base
     }
 
+    /// Whether Shift changes the jamo this key types: only the double
+    /// consonants and ㅒ/ㅖ (r e q t w o p). On every other key Shift+key is the
+    /// same jamo as the key alone.
+    static func shiftChangesJamo(forKeyCode keyCode: UInt16) -> Bool {
+        keyCodeMap[keyCode]?.shifted != nil
+    }
+
     private static let keyCodeMap: [UInt16: (base: Jamo, shifted: Jamo?)] = {
         var m: [UInt16: (base: Jamo, shifted: Jamo?)] = [:]
 

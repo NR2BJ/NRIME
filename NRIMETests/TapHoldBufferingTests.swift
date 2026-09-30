@@ -5,7 +5,9 @@ import XCTest
 /// Design-B tap-hold buffering: a letter arriving while a tap-registered
 /// modifier is briefly held is buffered; the modifier's release timing decides
 /// tap-rollover (switch + unshifted replay) vs deliberate shifted letter.
-/// Traces follow the design document (T1/T2/T3/T5/T8 + guards).
+/// Traces follow the design document (T1/T2/T3/T5/T8 + guards). Since
+/// 2026-09-30 the window depends on whether Shift changes the letter, and a
+/// double consonant typed mid-word is never buffered (the last section).
 final class TapHoldBufferingTests: XCTestCase {
 
     private var handler: ShortcutHandler!
@@ -13,26 +15,27 @@ final class TapHoldBufferingTests: XCTestCase {
     private var replays: [(keyCode: UInt16, keepShift: Bool)] = []
 
     private var originalEnabled: Bool = false
-    private var originalWindow: TimeInterval = 0.05
     private var originalThreshold: TimeInterval = 0.2
     private var originalShortcuts: [String: ShortcutConfig] = [:]
 
     private let rightShift = ShortcutConfig.keyCodeRightShift // 0x3C
     private let leftShift = ShortcutConfig.keyCodeLeftShift   // 0x38
-    private let keyA: UInt16 = 0x00
-    private let keyB: UInt16 = 0x0B
+    private let keyA: UInt16 = 0x00   // ㅁ — Shift changes nothing in Korean
+    private let keyB: UInt16 = 0x0B   // ㅠ
+    private let keyD: UInt16 = 0x02   // ㅇ
+    private let keyR: UInt16 = 0x0F   // ㄱ / Shift: ㄲ
+    private let keyT: UInt16 = 0x11   // ㅅ / Shift: ㅆ
 
     override func setUp() {
         super.setUp()
         originalEnabled = Settings.shared.tapHoldBufferingEnabled
-        originalWindow = Settings.shared.tapOverlapWindow
         originalThreshold = Settings.shared.tapThreshold
         for key in ["toggleEnglish", "toggleNonEnglish", "hanjaConvert"] {
             originalShortcuts[key] = Settings.shared.shortcut(for: key)
         }
         Settings.shared.tapHoldBufferingEnabled = true
-        Settings.shared.tapOverlapWindow = 0.05
         Settings.shared.tapThreshold = 0.2
+        StateManager.shared.switchTo(.korean)
         Settings.shared.setShortcut(.defaultToggleEnglish, for: "toggleEnglish")     // RS tap
         Settings.shared.setShortcut(.defaultToggleNonEnglish, for: "toggleNonEnglish") // Shift+Space combo
         Settings.shared.setShortcut(.defaultHanjaConvert, for: "hanjaConvert")
@@ -51,8 +54,8 @@ final class TapHoldBufferingTests: XCTestCase {
 
     override func tearDown() {
         Settings.shared.tapHoldBufferingEnabled = originalEnabled
-        Settings.shared.tapOverlapWindow = originalWindow
         Settings.shared.tapThreshold = originalThreshold
+        StateManager.shared.switchTo(.english)
         for (key, config) in originalShortcuts {
             Settings.shared.setShortcut(config, for: key)
         }
@@ -215,6 +218,105 @@ final class TapHoldBufferingTests: XCTestCase {
         XCTAssertTrue(consumed)
         XCTAssertEqual(firedActions, [.toggleEnglish])
         XCTAssertTrue(replays.isEmpty)
+    }
+
+    // MARK: - The window depends on what Shift does to the letter
+
+    /// The owner's setup: Left Shift tap toggles Korean/Japanese, and the same
+    /// Left Shift types every double consonant.
+    private func useLeftShiftTap() {
+        Settings.shared.setShortcut(
+            ShortcutConfig(keyCode: leftShift, modifierKeyCode: leftShift,
+                           modifiers: 0, isModifierOnlyTap: true, label: "Left Shift"),
+            for: "toggleNonEnglish")
+    }
+
+    // A fast ㄲ: Shift up 45 ms after the letter. The old 50 ms window took it
+    // for a tap and switched to Japanese.
+    func testFastDoubleConsonantStaysADoubleConsonant() {
+        useLeftShiftTap()
+        _ = handler.handleEvent(shiftDown(leftShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyR, side: .left, at: 0.060)))
+        _ = handler.handleEvent(shiftUp(leftShift, at: 0.105))
+
+        XCTAssertTrue(firedActions.isEmpty, "ㄲ, not a language switch")
+        XCTAssertEqual(replays.map(\.keyCode), [keyR])
+        XCTAssertEqual(replays.first?.keepShift, true)
+    }
+
+    // On a double consonant key only a very tight rollover counts as a tap.
+    func testTightRolloverOnADoubleConsonantKeyIsATap() {
+        _ = handler.handleEvent(shiftDown(rightShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyT, side: .right, at: 0.090)))
+        _ = handler.handleEvent(shiftUp(rightShift, at: 0.110))
+
+        XCTAssertEqual(firedActions, [.toggleEnglish])
+        XCTAssertEqual(replays.first?.keepShift, false, "The letter goes to English unshifted")
+    }
+
+    // Mid-word, a double consonant key is not even held back: nobody switches
+    // languages halfway through a syllable.
+    func testDoubleConsonantMidWordIsNotBuffered() {
+        useLeftShiftTap()
+        handler.isComposingKorean = { true }
+        _ = handler.handleEvent(shiftDown(leftShift, at: 0))
+
+        XCTAssertFalse(handler.handleEvent(letterDown(keyR, side: .left, at: 0.060)),
+                       "Straight to the engine as ㄲ")
+        XCTAssertFalse(handler.hasPendingLetterForTesting)
+        _ = handler.handleEvent(shiftUp(leftShift, at: 0.080))
+        XCTAssertTrue(firedActions.isEmpty, "Even a quick release is not a tap")
+    }
+
+    // At the start of a word the same key is still buffered and judged.
+    func testDoubleConsonantAtWordStartIsStillJudged() {
+        useLeftShiftTap()
+        handler.isComposingKorean = { false }
+        _ = handler.handleEvent(shiftDown(leftShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyR, side: .left, at: 0.060)))
+    }
+
+    // Where Shift changes nothing, a rollover with a longer overlap is a tap.
+    func testShiftlessKeyAllowsAWiderOverlap() {
+        _ = handler.handleEvent(shiftDown(rightShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyD, side: .right, at: 0.030)))
+        _ = handler.handleEvent(shiftUp(rightShift, at: 0.100))  // overlap 70 ms
+
+        XCTAssertEqual(firedActions, [.toggleEnglish])
+        XCTAssertEqual(replays.first?.keepShift, false)
+    }
+
+    // In Japanese Shift+letter types the same kana, so every letter is shiftless.
+    func testJapaneseLettersUseTheWideWindow() {
+        StateManager.shared.switchTo(.japanese)
+        useLeftShiftTap()
+        _ = handler.handleEvent(shiftDown(leftShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyT, side: .left, at: 0.040)))
+        _ = handler.handleEvent(shiftUp(leftShift, at: 0.100))  // overlap 60 ms
+
+        XCTAssertEqual(firedActions, [.toggleNonEnglish])
+    }
+
+    // In English every letter is a capital with Shift, so the tight window applies.
+    func testEnglishCapitalNeedsAVeryQuickRelease() {
+        StateManager.shared.switchTo(.english)
+        _ = handler.handleEvent(shiftDown(rightShift, at: 0))
+        XCTAssertTrue(handler.handleEvent(letterDown(keyA, side: .right, at: 0.050)))
+        _ = handler.handleEvent(shiftUp(rightShift, at: 0.090))  // overlap 40 ms
+
+        XCTAssertTrue(firedActions.isEmpty, "A capital A")
+        XCTAssertEqual(replays.first?.keepShift, true)
+    }
+
+    func testShiftMattersTable() {
+        XCTAssertTrue(ShortcutHandler.shiftMatters(keyCode: keyR, in: .korean))
+        XCTAssertTrue(ShortcutHandler.shiftMatters(keyCode: 0x1F, in: .korean), "ㅒ")
+        XCTAssertFalse(ShortcutHandler.shiftMatters(keyCode: keyD, in: .korean))
+        XCTAssertFalse(ShortcutHandler.shiftMatters(keyCode: keyR, in: .japanese))
+        XCTAssertTrue(ShortcutHandler.shiftMatters(keyCode: keyD, in: .english))
+        let shifted = (0...0x32).filter { JamoTable.shiftChangesJamo(forKeyCode: UInt16($0)) }
+        XCTAssertEqual(Set(shifted.map(UInt16.init)), [0x0C, 0x0D, 0x0E, 0x0F, 0x11, 0x1F, 0x23],
+                       "q w e r t o p — ㅃ ㅉ ㄸ ㄲ ㅆ ㅒ ㅖ")
     }
 
     // MARK: - Event helpers

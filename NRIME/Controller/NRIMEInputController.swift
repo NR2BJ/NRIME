@@ -690,6 +690,9 @@ class NRIMEInputController: IMKInputController {
         shortcutHandler.isSensitiveContext = { [weak self] in
             self?.isInSensitiveField() ?? false
         }
+        shortcutHandler.isComposingKorean = { [weak self] in
+            self?.koreanEngine.isCurrentlyComposing ?? false
+        }
 
         // Tap-hold buffering replay: a letter the handler consumed while the
         // tap modifier was held is now settled — route it to the current mode.
@@ -867,7 +870,7 @@ class NRIMEInputController: IMKInputController {
     /// is authentication UI. Cheap — a flag read and the cached bundle ID, no
     /// registry lookup and no call into the host app.
     private func isInSensitiveField() -> Bool {
-        IsSecureEventInputEnabled() || secureInputDetector.isAuthenticationClient(activeBundleID)
+        SecureInputDetector.isSystemSecureInputOn || secureInputDetector.isAuthenticationClient(activeBundleID)
     }
 
     private func resolvedClient() -> (any IMKTextInput)? {

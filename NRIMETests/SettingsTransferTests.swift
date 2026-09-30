@@ -106,20 +106,18 @@ final class SettingsTransferTests: XCTestCase {
 
     func testSnapshotCarriesTheKeyTimingSettings() throws {
         sourceDefaults.set(true, forKey: "tapHoldBufferingEnabled")
-        sourceDefaults.set(0.07, forKey: "tapOverlapWindow")
         sourceDefaults.set("mouse", forKey: "indicatorPositionMode")
 
         let snapshot = SettingsTransfer.capture(from: sourceDefaults, appVersion: "1.0.11")
         SettingsTransfer.apply(snapshot, to: targetDefaults)
 
         XCTAssertTrue(targetDefaults.bool(forKey: "tapHoldBufferingEnabled"))
-        XCTAssertEqual(targetDefaults.double(forKey: "tapOverlapWindow"), 0.07)
         XCTAssertEqual(targetDefaults.string(forKey: "indicatorPositionMode"), "mouse")
     }
 
-    /// Exports written before the per-app, double-tap, direct-switch and
-    /// newline-wait settings were removed still import: their extra keys are
-    /// ignored.
+    /// Exports written before the per-app, double-tap, direct-switch,
+    /// newline-wait and tap-window settings were removed still import: their
+    /// extra keys are ignored.
     func testExportWithRemovedSettingsStillImports() throws {
         let legacy = """
         {
@@ -138,6 +136,7 @@ final class SettingsTransferTests: XCTestCase {
           "doubleTapWindow": 0.3,
           "shiftEnterDelay": 0.035,
           "codexNewlineDelay": 0.12,
+          "tapOverlapWindow": 0.07,
           "shortcutData": {},
           "capturedShortcutNames": ["toggleEnglish", "toggleNonEnglish", "switchKorean", "switchJapanese", "hanjaConvert"]
         }
@@ -150,5 +149,6 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertNil(targetDefaults.object(forKey: "shiftDoubleTapEnabled"))
         XCTAssertNil(targetDefaults.object(forKey: "shiftEnterDelay"), "The newline no longer waits")
         XCTAssertNil(targetDefaults.object(forKey: "codexNewlineDelay"))
+        XCTAssertNil(targetDefaults.object(forKey: "tapOverlapWindow"), "The tap windows are fixed now")
     }
 }

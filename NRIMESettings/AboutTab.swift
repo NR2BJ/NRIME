@@ -74,20 +74,20 @@ struct AboutTab: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Checking for updates...")
+                Text(L("update.checking"))
                     .foregroundStyle(.secondary)
             }
 
         case .upToDate:
             VStack(spacing: 8) {
-                Label("You're up to date", systemImage: "checkmark.circle.fill")
+                Label(L("update.upToDate"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 checkButton
             }
 
         case .available(let version, let notes, let size):
             VStack(spacing: 12) {
-                Label("Update Available: v\(version)", systemImage: "arrow.down.circle.fill")
+                Label(String(format: L("update.available"), version), systemImage: "arrow.down.circle.fill")
                     .font(.headline)
                     .foregroundStyle(.blue)
 
@@ -109,14 +109,14 @@ struct AboutTab: View {
                 Button {
                     updateManager.downloadUpdate()
                 } label: {
-                    Label("Download & Install", systemImage: "arrow.down.to.line")
+                    Label(L("update.downloadAndInstall"), systemImage: "arrow.down.to.line")
                 }
                 .buttonStyle(.borderedProminent)
             }
 
         case .downloading(let progress):
             VStack(spacing: 8) {
-                Text("Downloading...")
+                Text(L("update.downloading"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -127,7 +127,7 @@ struct AboutTab: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)
 
-                Button("Cancel") {
+                Button(L("common.cancel")) {
                     updateManager.cancelDownload()
                 }
                 .buttonStyle(.plain)
@@ -137,14 +137,14 @@ struct AboutTab: View {
 
         case .readyToInstall:
             VStack(spacing: 8) {
-                Text("Download complete")
+                Text(L("update.downloaded"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 Button {
                     updateManager.installUpdate()
                 } label: {
-                    Label("Install Now", systemImage: "arrow.uturn.down.circle")
+                    Label(L("update.installNow"), systemImage: "arrow.uturn.down.circle")
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -153,13 +153,13 @@ struct AboutTab: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Installing...")
+                Text(L("update.installing"))
                     .foregroundStyle(.secondary)
             }
 
         case .error(let message):
             VStack(spacing: 8) {
-                Label("Update Error", systemImage: "exclamationmark.triangle.fill")
+                Label(L("update.error"), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
 
                 Text(message)
@@ -201,7 +201,7 @@ struct AboutTab: View {
         Button {
             updateManager.checkNow()
         } label: {
-            Label("Check for Updates", systemImage: "arrow.clockwise")
+            Label(L("update.checkNow"), systemImage: "arrow.clockwise")
         }
     }
 

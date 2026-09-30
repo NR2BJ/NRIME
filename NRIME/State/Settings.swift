@@ -65,19 +65,13 @@ final class Settings {
 
     /// When ON, a letter typed while a tap-shortcut modifier is still held is
     /// briefly buffered; the modifier's release timing decides between
-    /// "tap + letter in the new mode" and "deliberate shifted letter".
+    /// "tap + letter in the new mode" and "deliberate shifted letter". How
+    /// quickly it must come up depends on whether Shift changes that letter
+    /// (ShortcutHandler.shiftedLetterTapWindow / shiftlessLetterTapWindow) —
+    /// fixed values measured on real typing, no longer a setting.
     var tapHoldBufferingEnabled: Bool {
         get { defaults.bool(forKey: "tapHoldBufferingEnabled") }
         set { defaults.set(newValue, forKey: "tapHoldBufferingEnabled") }
-    }
-
-    /// Max letter↓→modifier↑ overlap still treated as a tap rollover (seconds).
-    var tapOverlapWindow: TimeInterval {
-        get {
-            let val = defaults.double(forKey: "tapOverlapWindow")
-            return val > 0 ? val : 0.05
-        }
-        set { defaults.set(newValue, forKey: "tapOverlapWindow") }
     }
 
     // MARK: - Input Source Recovery

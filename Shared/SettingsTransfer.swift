@@ -11,8 +11,9 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     var preventABCSwitch: Bool
     var developerModeEnabled: Bool
     // Per-app mode memory (perAppMode*) was removed on 2026-09-29, and the
-    // Shift+Enter newline waits (shiftEnterDelay, codexNewlineDelay) on
-    // 2026-09-30. Older exports still carry those keys; decoding ignores them.
+    // Shift+Enter newline waits (shiftEnterDelay, codexNewlineDelay) and the
+    // tap-buffering window (tapOverlapWindow) on 2026-09-30. Older exports
+    // still carry those keys; decoding ignores them.
     var lastNonEnglishMode: String?
     var shortcutData: [String: Data]
     var japaneseKeyConfigData: Data?
@@ -23,7 +24,6 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     // which is different from "the user turned it off".
     var indicatorPositionMode: String?
     var tapHoldBufferingEnabled: Bool?
-    var tapOverlapWindow: Double?
     var secureInputASCIIFallback: Bool?
     /// Which shortcuts this export actually looked at. Without it a newer
     /// import would read an older export's silence as "clear that shortcut".
@@ -40,7 +40,6 @@ enum SettingsTransfer {
 
     static let indicatorPositionModeKey = "indicatorPositionMode"
     static let tapHoldBufferingEnabledKey = "tapHoldBufferingEnabled"
-    static let tapOverlapWindowKey = "tapOverlapWindow"
     static let secureInputASCIIFallbackKey = "secureInputASCIIFallback"
 
     /// Shortcut names present in the first schema version (of those still in
@@ -85,9 +84,6 @@ enum SettingsTransfer {
             hanjaSelectionMemoryData: defaults.data(forKey: HanjaSelectionStore.defaultsKey),
             indicatorPositionMode: defaults.string(forKey: indicatorPositionModeKey) ?? "caret",
             tapHoldBufferingEnabled: defaults.bool(forKey: tapHoldBufferingEnabledKey),
-            tapOverlapWindow: defaults.double(forKey: tapOverlapWindowKey) > 0
-                ? defaults.double(forKey: tapOverlapWindowKey)
-                : 0.05,
             secureInputASCIIFallback: defaults.object(forKey: secureInputASCIIFallbackKey) == nil
                 ? true
                 : defaults.bool(forKey: secureInputASCIIFallbackKey),
@@ -130,9 +126,6 @@ enum SettingsTransfer {
         }
         if let value = snapshot.tapHoldBufferingEnabled {
             defaults.set(value, forKey: tapHoldBufferingEnabledKey)
-        }
-        if let value = snapshot.tapOverlapWindow {
-            defaults.set(value, forKey: tapOverlapWindowKey)
         }
         if let value = snapshot.secureInputASCIIFallback {
             defaults.set(value, forKey: secureInputASCIIFallbackKey)

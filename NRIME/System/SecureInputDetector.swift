@@ -3,10 +3,27 @@ import Carbon
 import IOKit
 
 final class SecureInputDetector {
-    /// Returns true if the system is in Secure Input mode (e.g., password fields).
-    /// Uses Carbon's IsSecureEventInputEnabled() for global detection.
-    func isSecureInputActive() -> Bool {
+    /// Whether secure input is on anywhere on this Mac (Carbon's
+    /// IsSecureEventInputEnabled). Every reading goes through here.
+    ///
+    /// Under tests only what a test sets counts: the real flag belongs to the
+    /// whole Mac, and while the screen was locked (loginwindow holds it) every
+    /// test that types Korean failed, with composition rightly suppressed.
+    static var isSystemSecureInputOn: Bool {
+#if DEBUG
+        if AppGroupDefaults.isRunningTests { return secureInputForTesting }
+#endif
         return IsSecureEventInputEnabled()
+    }
+
+#if DEBUG
+    /// Test seam: the secure input state tests see (off unless set).
+    static var secureInputForTesting = false
+#endif
+
+    /// Returns true if the system is in Secure Input mode (e.g., password fields).
+    func isSecureInputActive() -> Bool {
+        Self.isSystemSecureInputOn
     }
 
     /// Bundle ID of the process that turned secure input on, if it can be
