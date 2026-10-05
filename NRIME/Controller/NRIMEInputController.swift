@@ -500,15 +500,6 @@ class NRIMEInputController: IMKInputController {
 
         wireUpShortcutHandler()
 
-        // Wire up mode change callback for inline indicator
-        StateManager.shared.onModeChanged = { [weak self] mode in
-            if Settings.shared.inlineIndicatorEnabled {
-                // show() finds the caret itself; when it cannot, the mouse.
-                let client = self?.resolvedClient()
-                InlineIndicator.shared.show(for: mode, client: client)
-            }
-        }
-
         // Restore per-app mode if enabled
         if let client = sender as? (any IMKTextInput) {
             // Cache only a real answer: a controller's client never changes,
@@ -775,8 +766,7 @@ class NRIMEInputController: IMKInputController {
                 }
                 let switchEnd = ProcessInfo.processInfo.systemUptime
                 // commitMs: settling the old mode's text (Mozc submit for
-                // Japanese). switchMs: the mode change, including the inline
-                // indicator asking the host app where the caret is.
+                // Japanese). switchMs: the mode change and the menu bar icon.
                 self.logControllerEvent("shortcutAction", client: client, extra: [
                     "action": String(describing: action),
                     "previousMode": previousMode.label,

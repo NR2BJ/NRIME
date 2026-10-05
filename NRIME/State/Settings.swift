@@ -141,25 +141,6 @@ final class Settings {
         set { newValue?.save(to: defaults) }
     }
 
-    // MARK: - Inline Indicator
-
-    var inlineIndicatorEnabled: Bool {
-        get {
-            if defaults.object(forKey: "inlineIndicatorEnabled") == nil { return true }
-            return defaults.bool(forKey: "inlineIndicatorEnabled")
-        }
-        set { defaults.set(newValue, forKey: "inlineIndicatorEnabled") }
-    }
-
-    /// Indicator position mode: "caret" (input cursor) or "mouse" (mouse cursor).
-    var indicatorPositionMode: String {
-        get {
-            let val = defaults.string(forKey: "indicatorPositionMode")
-            return val ?? "caret"
-        }
-        set { defaults.set(newValue, forKey: "indicatorPositionMode") }
-    }
-
     // MARK: - Japanese IME Keys
     // JapaneseKeyConfig, CapsLockAction, PunctuationStyle
     // are defined in Shared/SettingsModels.swift

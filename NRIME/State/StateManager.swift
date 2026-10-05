@@ -11,10 +11,10 @@ final class StateManager {
     private var previousNonEnglishMode: InputMode
     private var currentAppBundleId: String?
 
-    /// Callback invoked when mode changes. Set by NRIMEInputController.
-    var onModeChanged: ((InputMode) -> Void)?
-
     /// Callback for updating the menu bar status icon. Set by AppDelegate.
+    /// The menu bar is the only place the mode is shown: the indicator next
+    /// to the text cursor was removed on 2026-10-06, as no lookup finds the
+    /// cursor in every app (Chromium answers with zero-size or stale rects).
     var onStatusIconUpdate: ((InputMode) -> Void)?
 
     private init() {
@@ -63,7 +63,6 @@ final class StateManager {
             "sourceID": mode.rawValue
         ])
 
-        onModeChanged?(mode)
         onStatusIconUpdate?(mode)
     }
 
@@ -90,7 +89,6 @@ final class StateManager {
         currentMode = .english
         previousNonEnglishMode = Settings.shared.lastNonEnglishMode
         currentAppBundleId = nil
-        onModeChanged = nil
         onStatusIconUpdate = nil
     }
 #endif

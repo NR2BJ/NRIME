@@ -28,7 +28,6 @@ final class SettingsTransferTests: XCTestCase {
     }
 
     func testSnapshotRoundTripRestoresSettingsAndMemory() throws {
-        sourceDefaults.set(false, forKey: SettingsTransfer.inlineIndicatorEnabledKey)
         sourceDefaults.set(0.34, forKey: SettingsTransfer.tapThresholdKey)
         sourceDefaults.set(true, forKey: SettingsTransfer.preventABCSwitchKey)
         sourceDefaults.set(true, forKey: SettingsTransfer.developerModeEnabledKey)
@@ -51,7 +50,6 @@ final class SettingsTransferTests: XCTestCase {
         let decoded = try SettingsTransfer.decode(from: encoded)
         SettingsTransfer.apply(decoded, to: targetDefaults)
 
-        XCTAssertEqual(targetDefaults.bool(forKey: SettingsTransfer.inlineIndicatorEnabledKey), false)
         XCTAssertEqual(targetDefaults.double(forKey: SettingsTransfer.tapThresholdKey), 0.34, accuracy: 0.0001)
         XCTAssertEqual(targetDefaults.bool(forKey: SettingsTransfer.preventABCSwitchKey), true)
         XCTAssertEqual(targetDefaults.bool(forKey: SettingsTransfer.developerModeEnabledKey), true)
@@ -70,7 +68,6 @@ final class SettingsTransferTests: XCTestCase {
             schemaVersion: SettingsTransferSnapshot.currentSchemaVersion,
             exportedAt: Date(),
             appVersion: "1.0.3",
-            inlineIndicatorEnabled: true,
             tapThreshold: 0.2,
             preventABCSwitch: false,
             developerModeEnabled: false,
@@ -106,13 +103,11 @@ final class SettingsTransferTests: XCTestCase {
 
     func testSnapshotCarriesTheKeyTimingSettings() throws {
         sourceDefaults.set(true, forKey: "tapHoldBufferingEnabled")
-        sourceDefaults.set("mouse", forKey: "indicatorPositionMode")
 
         let snapshot = SettingsTransfer.capture(from: sourceDefaults, appVersion: "1.0.11")
         SettingsTransfer.apply(snapshot, to: targetDefaults)
 
         XCTAssertTrue(targetDefaults.bool(forKey: "tapHoldBufferingEnabled"))
-        XCTAssertEqual(targetDefaults.string(forKey: "indicatorPositionMode"), "mouse")
     }
 
     /// The key-press app list travels with the settings; the waits do not
@@ -131,8 +126,8 @@ final class SettingsTransferTests: XCTestCase {
     }
 
     /// Exports written before the per-app, double-tap, direct-switch,
-    /// newline-wait and tap-window settings were removed still import: their
-    /// extra keys are ignored.
+    /// newline-wait, tap-window and mode-indicator settings were removed still
+    /// import: their extra keys are ignored.
     func testExportWithRemovedSettingsStillImports() throws {
         let legacy = """
         {
@@ -140,6 +135,7 @@ final class SettingsTransferTests: XCTestCase {
           "exportedAt": "2026-07-22T09:00:00Z",
           "appVersion": "1.0.10",
           "inlineIndicatorEnabled": true,
+          "indicatorPositionMode": "mouse",
           "tapThreshold": 0.25,
           "preventABCSwitch": false,
           "developerModeEnabled": true,
@@ -165,6 +161,8 @@ final class SettingsTransferTests: XCTestCase {
         XCTAssertNil(targetDefaults.object(forKey: "shiftEnterDelay"), "The newline no longer waits")
         XCTAssertNil(targetDefaults.object(forKey: "codexNewlineDelay"))
         XCTAssertNil(targetDefaults.object(forKey: "tapOverlapWindow"), "The tap windows are fixed now")
+        XCTAssertNil(targetDefaults.object(forKey: "inlineIndicatorEnabled"), "The mode indicator is gone")
+        XCTAssertNil(targetDefaults.object(forKey: "indicatorPositionMode"))
         XCTAssertNil(targetDefaults.object(forKey: NewlineKeyPress.appsKey),
                      "An export that knew nothing of the list leaves this Mac's list alone")
     }

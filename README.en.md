@@ -60,7 +60,7 @@ During conversion: `Up/Down` to navigate, `1-9` for direct selection, `Enter` to
 
 ### Additional Features
 
-- **Inline mode indicator**: shows the current input mode near the text cursor (or mouse cursor) when the mode changes
+- **Mode in the menu bar**: the NRIME menu bar icon shows the current input mode (A/한/あ)
 - **Japanese user dictionary**: register your own words (reading, word, part of speech) as conversion candidates (Japanese tab > User Dictionary)
 - **Auto-update**: check and install updates from GitHub Releases (About tab, Stable/Beta channel)
 - **Multilingual settings UI**: Korean/English/Japanese (changeable in About tab, applies immediately)
@@ -82,7 +82,7 @@ Click the NRIME icon in the menu bar to open the settings app.
 | Shortcuts | Toggle English, Toggle Non-English Mode, Hanja Conversion — each can be recorded (Record) or disabled (Clear) |
 | Tap Threshold | Modifier-only tap recognition time slider (0.1-0.5s) |
 | Fast tap-switch correction (experimental) | Fixes stray capitals/double consonants when typing right after a Shift tap (off by default). Keys where Shift means nothing always switch; double consonants and capitals only when Shift comes up within 30 ms; a double consonant mid-word never does |
-| Display | Show inline indicator on mode switch (Indicator Position: Text Cursor/Mouse Cursor), Prevent switching to ABC, Switch to ABC while typing passwords, Candidate Font Size (12-24pt) |
+| Display | Prevent switching to ABC, Switch to ABC while typing passwords, Candidate Font Size (12-24pt) |
 | Shift+Enter newline wait | Newline insert and ⌘ shortcuts (0-100 ms, default 20 ms: the newline in apps built on web technology, and ⌘ shortcuts re-sent in any app), Shift+Enter re-send (0-100 ms, default 50 ms), the list of apps that get Shift+Enter re-sent (apps that send the message on an inserted newline, Codex by default — add/remove apps). The waits are kept per Mac |
 | Input method permissions | Device Control and Data Access (Accessibility on macOS 26 and earlier) status, Check again / Request, Open System Settings — needed to re-send ⌘+key or Codex Shift+Enter to the app after committing |
 | Developer | Enable Developer Mode (diagnostic log), Open Log/Reveal in Finder/Clear Log |

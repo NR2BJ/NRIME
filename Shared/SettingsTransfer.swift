@@ -6,14 +6,14 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     var schemaVersion: Int
     var exportedAt: Date
     var appVersion: String?
-    var inlineIndicatorEnabled: Bool
     var tapThreshold: Double
     var preventABCSwitch: Bool
     var developerModeEnabled: Bool
-    // Per-app mode memory (perAppMode*) was removed on 2026-09-29, and the
+    // Per-app mode memory (perAppMode*) was removed on 2026-09-29, the
     // Shift+Enter newline waits (shiftEnterDelay, codexNewlineDelay) and the
-    // tap-buffering window (tapOverlapWindow) on 2026-09-30. Older exports
-    // still carry those keys; decoding ignores them.
+    // tap-buffering window (tapOverlapWindow) on 2026-09-30, and the mode
+    // indicator (inlineIndicatorEnabled, indicatorPositionMode) on
+    // 2026-10-06. Older exports still carry those keys; decoding ignores them.
     var lastNonEnglishMode: String?
     var shortcutData: [String: Data]
     var japaneseKeyConfigData: Data?
@@ -22,7 +22,6 @@ struct SettingsTransferSnapshot: Codable, Equatable {
     // Added after the first schema. Optional so exports written before they
     // existed still decode; `nil` means "this export knew nothing about it",
     // which is different from "the user turned it off".
-    var indicatorPositionMode: String?
     var tapHoldBufferingEnabled: Bool?
     var secureInputASCIIFallback: Bool?
     /// Apps that get Shift+Enter re-sent (NewlineKeyPress). The waits stay
@@ -34,14 +33,12 @@ struct SettingsTransferSnapshot: Codable, Equatable {
 }
 
 enum SettingsTransfer {
-    static let inlineIndicatorEnabledKey = "inlineIndicatorEnabled"
     static let tapThresholdKey = "tapThreshold"
     static let preventABCSwitchKey = "preventABCSwitch"
     static let developerModeEnabledKey = "developerModeEnabled"
     static let lastNonEnglishModeKey = "lastNonEnglishMode"
     static let japaneseKeyConfigKey = "japaneseKeyConfig"
 
-    static let indicatorPositionModeKey = "indicatorPositionMode"
     static let tapHoldBufferingEnabledKey = "tapHoldBufferingEnabled"
     static let secureInputASCIIFallbackKey = "secureInputASCIIFallback"
 
@@ -73,9 +70,6 @@ enum SettingsTransfer {
             schemaVersion: SettingsTransferSnapshot.currentSchemaVersion,
             exportedAt: Date(),
             appVersion: appVersion,
-            inlineIndicatorEnabled: defaults.object(forKey: inlineIndicatorEnabledKey) == nil
-                ? true
-                : defaults.bool(forKey: inlineIndicatorEnabledKey),
             tapThreshold: defaults.double(forKey: tapThresholdKey) > 0
                 ? defaults.double(forKey: tapThresholdKey)
                 : 0.2,
@@ -85,7 +79,6 @@ enum SettingsTransfer {
             shortcutData: shortcutData,
             japaneseKeyConfigData: defaults.data(forKey: japaneseKeyConfigKey),
             hanjaSelectionMemoryData: defaults.data(forKey: HanjaSelectionStore.defaultsKey),
-            indicatorPositionMode: defaults.string(forKey: indicatorPositionModeKey) ?? "caret",
             tapHoldBufferingEnabled: defaults.bool(forKey: tapHoldBufferingEnabledKey),
             secureInputASCIIFallback: defaults.object(forKey: secureInputASCIIFallbackKey) == nil
                 ? true
@@ -114,7 +107,6 @@ enum SettingsTransfer {
     }
 
     static func apply(_ snapshot: SettingsTransferSnapshot, to defaults: UserDefaults) {
-        defaults.set(snapshot.inlineIndicatorEnabled, forKey: inlineIndicatorEnabledKey)
         defaults.set(snapshot.tapThreshold, forKey: tapThresholdKey)
         defaults.set(snapshot.preventABCSwitch, forKey: preventABCSwitchKey)
         defaults.set(snapshot.developerModeEnabled, forKey: developerModeEnabledKey)
@@ -126,9 +118,6 @@ enum SettingsTransfer {
         }
 
         // A value the export never carried must not overwrite this Mac's.
-        if let value = snapshot.indicatorPositionMode {
-            defaults.set(value, forKey: indicatorPositionModeKey)
-        }
         if let value = snapshot.tapHoldBufferingEnabled {
             defaults.set(value, forKey: tapHoldBufferingEnabledKey)
         }

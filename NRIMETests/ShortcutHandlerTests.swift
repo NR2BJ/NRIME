@@ -75,7 +75,7 @@ final class ShortcutHandlerTests: XCTestCase {
         StateManager.shared.switchTo(.english)
         // Switching to the same mode should not trigger callback
         var callbackCalled = false
-        StateManager.shared.onModeChanged = { _ in callbackCalled = true }
+        StateManager.shared.onStatusIconUpdate = { _ in callbackCalled = true }
         StateManager.shared.switchTo(.english) // Same mode
         XCTAssertFalse(callbackCalled)
     }
