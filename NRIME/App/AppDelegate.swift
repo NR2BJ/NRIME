@@ -1,11 +1,18 @@
 import Cocoa
 import InputMethodKit
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var server: IMKServer!
     var candidatePanel: CandidatePanel!
 
     private var statusItem: NSStatusItem!
+    private var modeItems: [(mode: InputMode, item: NSMenuItem)] = []
+    private var settingsItem: NSMenuItem?
+    private var restartItem: NSMenuItem?
+    private var quitItem: NSMenuItem?
+    /// The settings app's language, read when the menu opens (not on every
+    /// mode switch, which only needs it for the tooltip).
+    private var menuLanguage = AppDelegate.settingsAppLanguage()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let connectionName = Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String
@@ -47,6 +54,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Menu Bar Status Item
 
+    /// The current mode's letter in the menu bar. Its menu picks the mode (the
+    /// current one checked) — choosing one while another input source is
+    /// selected selects NRIME too — above settings, restart and quit.
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -57,37 +67,111 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.updateStatusIcon(for: mode)
         }
 
-        // Build menu
         let menu = NSMenu()
+        menu.delegate = self
 
-        let settingsItem = NSMenuItem(title: "NRIME Settings...", action: #selector(openSettings), keyEquivalent: ",")
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        let restartItem = NSMenuItem(title: "Restart NRIME", action: #selector(restartApp), keyEquivalent: "")
-        restartItem.target = self
-        menu.addItem(restartItem)
+        for mode in [InputMode.english, .korean, .japanese] {
+            let item = NSMenuItem(title: "", action: #selector(chooseMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.image = makeStatusIcon(text: mode.label, side: 16, fontSize: 12)
+            menu.addItem(item)
+            modeItems.append((mode, item))
+        }
 
         menu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "Quit NRIME", action: #selector(quitApp), keyEquivalent: "")
+        let settingsItem = NSMenuItem(title: "", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        self.settingsItem = settingsItem
+
+        let restartItem = NSMenuItem(title: "", action: #selector(restartApp), keyEquivalent: "")
+        restartItem.target = self
+        menu.addItem(restartItem)
+        self.restartItem = restartItem
+
+        menu.addItem(NSMenuItem.separator())
+
+        let quitItem = NSMenuItem(title: "", action: #selector(quitApp), keyEquivalent: "")
         quitItem.target = self
         menu.addItem(quitItem)
+        self.quitItem = quitItem
 
         statusItem.menu = menu
+        titleMenuItems()
+    }
+
+    /// Each time the menu opens: titles in the settings app's language (it
+    /// may have changed) and the current mode checked.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menuLanguage = Self.settingsAppLanguage()
+        titleMenuItems()
+        let current = StateManager.shared.currentMode
+        for (mode, item) in modeItems {
+            item.state = mode == current ? .on : .off
+        }
+        statusItem?.button?.toolTip = statusToolTip(for: current)
+    }
+
+    private func titleMenuItems() {
+        let language = menuLanguage
+        for (mode, item) in modeItems {
+            item.title = Self.modeName(mode, in: language)
+        }
+        settingsItem?.title = Self.text("NRIME 설정…", "NRIME Settings…", "NRIME 設定…", in: language)
+        restartItem?.title = Self.text("NRIME 다시 시작", "Restart NRIME", "NRIME を再起動", in: language)
+        quitItem?.title = Self.text("NRIME 종료", "Quit NRIME", "NRIME を終了", in: language)
+    }
+
+    /// The language picked in the settings app's About tab: "ko" (its
+    /// default), "en" or "ja".
+    private static func settingsAppLanguage() -> String {
+        let domain = "com.nrime.settings" as CFString
+        CFPreferencesAppSynchronize(domain)
+        return CFPreferencesCopyAppValue("appLanguage" as CFString, domain) as? String ?? "ko"
+    }
+
+    private static func text(_ ko: String, _ en: String, _ ja: String, in language: String) -> String {
+        switch language {
+        case "en": return en
+        case "ja": return ja
+        default: return ko
+        }
+    }
+
+    private static func modeName(_ mode: InputMode, in language: String) -> String {
+        switch mode {
+        case .english: return text("영어", "English", "英語", in: language)
+        case .korean: return text("한국어", "Korean", "韓国語", in: language)
+        case .japanese: return text("일본어", "Japanese", "日本語", in: language)
+        }
     }
 
     func updateStatusIcon(for mode: InputMode) {
         guard let button = statusItem?.button else { return }
         button.image = makeStatusIcon(text: mode.label)
         button.title = ""
+        button.toolTip = statusToolTip(for: mode)
     }
 
-    /// Render menu bar icon at runtime — handles Retina/non-HiDPI automatically.
-    private func makeStatusIcon(text: String) -> NSImage {
-        let size = NSSize(width: 18, height: 18)
+    private func statusToolTip(for mode: InputMode) -> String {
+        "NRIME: " + Self.modeName(mode, in: menuLanguage)
+    }
+
+    /// A mode picked from the menu (NRIMEInputController.chooseModeFromMenu).
+    @objc private func chooseMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = InputMode(rawValue: raw) else { return }
+        NRIMEInputController.chooseModeFromMenu(mode)
+    }
+
+    /// Render a mode letter as a template image, for the menu bar (and a little
+    /// smaller for the menu items) — handles Retina/non-HiDPI automatically.
+    private func makeStatusIcon(text: String, side: CGFloat = 18, fontSize: CGFloat = 14) -> NSImage {
+        let size = NSSize(width: side, height: side)
         let image = NSImage(size: size, flipped: false) { rect in
-            let font = NSFont.systemFont(ofSize: 14, weight: .medium)
+            let font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: NSColor.black
@@ -124,12 +208,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func restartApp() {
         DeveloperLogger.shared.log("App", "Restart requested")
-        // Kill mozc_server
-        let mozcTask = Process()
-        mozcTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-        mozcTask.arguments = ["mozc_server"]
-        try? mozcTask.run()
-        mozcTask.waitUntilExit()
+        // Mozc runs inside the input method (since 1.0.12-beta.2) and saves on
+        // termination; there is no mozc_server to stop any more.
 
         // Kill NRIMESettings if running
         let settingsTask = Process()

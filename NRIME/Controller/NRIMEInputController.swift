@@ -417,6 +417,52 @@ class NRIMEInputController: IMKInputController {
         koreanEngine.endHanjaSession(client: client)
     }
 
+    /// Commit what the current mode is composing, before the mode changes.
+    /// Not into a client that may not receive text (canCommitText): there the
+    /// composition stays pending and commits when a normal field has focus.
+    private func settleCompositionBeforeModeSwitch(client: (any IMKTextInput)?) {
+        guard let client, canCommitText(to: client) else { return }
+        endKoreanCandidateSession(client: client)
+        switch StateManager.shared.currentMode {
+        case .korean: koreanEngine.forceCommit(client: client)
+        case .japanese: japaneseEngine.forceCommit(client: client)
+        case .english: break
+        }
+    }
+
+    // MARK: - Menu Bar
+
+    /// A mode picked from the menu bar menu (AppDelegate).
+    static func chooseModeFromMenu(_ mode: InputMode) {
+        chooseMode(mode, fromMenuWith: activeController)
+    }
+
+    /// While NRIME is the input source, what the old mode was composing is
+    /// committed first, as a switch shortcut does. While another source is
+    /// selected, the app's field is left alone (the other input method may be
+    /// composing there; ours was committed on deactivation) and NRIME is
+    /// selected, if the owner added it.
+    static func chooseMode(_ mode: InputMode, fromMenuWith controller: NRIMEInputController?) {
+        let sourceID = InputSourceSelector.currentInputSourceID()
+        let nrimeIsCurrent = sourceID?.hasPrefix(InputSourceSelector.bundleID) ?? false
+        let previousMode = StateManager.shared.currentMode
+        if nrimeIsCurrent, let controller {
+            let client = controller.resolvedClient() ?? (controller.cachedClient as? (any IMKTextInput))
+            controller.settleCompositionBeforeModeSwitch(client: client)
+        }
+        StateManager.shared.switchTo(mode)
+
+        var metadata = [
+            "previousMode": previousMode.label,
+            "mode": mode.label,
+            "source": sourceID ?? "unknown",
+        ]
+        if !nrimeIsCurrent {
+            metadata["select"] = InputSourceSelector.selectNRIMEForMenu().map { "\($0)" } ?? "notAdded"
+        }
+        DeveloperLogger.shared.log("Menu", "Mode chosen", metadata: metadata)
+    }
+
     /// Finish a Shift+Enter that also confirmed a candidate. The newline belongs
     /// to the user's keystroke, not to the candidate list, so the same key means
     /// the same thing whether or not a candidate window happened to be open.
@@ -750,14 +796,7 @@ class NRIMEInputController: IMKInputController {
                 // into a password box. Leave it pending instead — it still
                 // commits when a normal field is focused again.
                 let commitStart = ProcessInfo.processInfo.systemUptime
-                if let client, self.canCommitText(to: client) {
-                    self.endKoreanCandidateSession(client: client)
-                    if previousMode == .korean {
-                        self.koreanEngine.forceCommit(client: client)
-                    } else if previousMode == .japanese {
-                        self.japaneseEngine.forceCommit(client: client)
-                    }
-                }
+                self.settleCompositionBeforeModeSwitch(client: client)
                 let switchStart = ProcessInfo.processInfo.systemUptime
                 switch action {
                 case .toggleEnglish:    StateManager.shared.toggleEnglish()

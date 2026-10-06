@@ -58,7 +58,19 @@ enum InputSourceSelector {
         return .success(targetSourceID: sourceID)
     }
 
+#if DEBUG
+    /// Test seams: tests decide what is selected and whether NRIME was added,
+    /// so they neither depend on nor change the Mac's real input source.
+    static var currentSourceIDForTesting: String?
+    static var addedForTesting: Bool?
+    /// What selectNRIMEForMenu() would have selected.
+    static var selectionRequestsForTesting: [String] = []
+#endif
+
     static func currentInputSourceID() -> String? {
+#if DEBUG
+        if let forced = currentSourceIDForTesting { return forced }
+#endif
         guard let currentSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
               let sourceIDPtr = TISGetInputSourceProperty(currentSource, kTISPropertyInputSourceID) else {
             return nil
@@ -99,5 +111,43 @@ enum InputSourceSelector {
         }
 
         return .success(targetSourceID: targetSourceID)
+    }
+
+    // MARK: - Choosing a mode from NRIME's menu
+
+    /// Whether the owner added NRIME as an input source, from the list System
+    /// Settings keeps. TIS cannot tell: on macOS 27 a mode whose default
+    /// state is on reads as enabled although the input method was never
+    /// added, and the enabled-only list depends on what the process asked
+    /// for before.
+    static var isAddedByOwner: Bool {
+#if DEBUG
+        if let forced = addedForTesting { return forced }
+#endif
+        let domain = "com.apple.inputsources" as CFString
+        CFPreferencesAppSynchronize(domain)
+        return enabledListContainsNRIME(
+            CFPreferencesCopyAppValue("AppleEnabledThirdPartyInputSources" as CFString, domain))
+    }
+
+    /// Whether that list has NRIME's visible mode, the source that stands for
+    /// NRIME in the input menu. Unreadable counts as not added.
+    static func enabledListContainsNRIME(_ list: Any?) -> Bool {
+        guard let entries = list as? [[String: Any]] else { return false }
+        return entries.contains { ($0["Input Mode"] as? String) == visibleInputSourceID }
+    }
+
+    /// Select NRIME because its menu bar menu picked a mode while another
+    /// source was selected. Only an input method the owner added; nil when it
+    /// was not. Tests only record the request.
+    static func selectNRIMEForMenu() -> InputSourceSelectionResult? {
+        guard isAddedByOwner else { return nil }
+        if AppGroupDefaults.isRunningTests {
+#if DEBUG
+            selectionRequestsForTesting.append(visibleInputSourceID)
+#endif
+            return .success(targetSourceID: visibleInputSourceID)
+        }
+        return selectVisibleNRIME()
     }
 }

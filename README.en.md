@@ -60,7 +60,7 @@ During conversion: `Up/Down` to navigate, `1-9` for direct selection, `Enter` to
 
 ### Additional Features
 
-- **Mode in the menu bar**: the NRIME menu bar icon shows the current input mode (A/한/あ)
+- **Mode in the menu bar**: the NRIME menu bar icon shows the current input mode (A/한/あ). Its menu picks the mode, and switches to NRIME if another input source was in use
 - **Japanese user dictionary**: register your own words (reading, word, part of speech) as conversion candidates (Japanese tab > User Dictionary)
 - **Auto-update**: check and install updates from GitHub Releases (About tab, Stable/Beta channel)
 - **Multilingual settings UI**: Korean/English/Japanese (changeable in About tab, applies immediately)
@@ -73,7 +73,7 @@ During conversion: `Up/Down` to navigate, `1-9` for direct selection, `Enter` to
 
 ## Settings
 
-Click the NRIME icon in the menu bar to open the settings app.
+Choose "NRIME Settings…" from the NRIME menu bar icon to open the settings app.
 
 ### General Tab
 
