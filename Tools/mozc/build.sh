@@ -41,7 +41,20 @@ if [ -n "${MOZC_BAZEL_FLAGS:-}" ]; then
     read -r -a EXTRA <<< "$MOZC_BAZEL_FLAGS"
     FLAGS+=("${EXTRA[@]}")
 fi
-bazelisk build "${FLAGS[@]}" //nrime:libnrime_mozc.dylib //data_manager/oss:mozc.data
+# Bazel downloads its dependencies from GitHub and elsewhere, and a server
+# error there fails the whole build (2026-10-12: a 500 on tar.bzl). Try again
+# a couple of times; what was already fetched or built is reused.
+for attempt in 1 2 3; do
+    if bazelisk build "${FLAGS[@]}" //nrime:libnrime_mozc.dylib //data_manager/oss:mozc.data; then
+        break
+    fi
+    if [ "$attempt" -eq 3 ]; then
+        echo "Mozc build failed 3 times" >&2
+        exit 1
+    fi
+    echo "Mozc build failed (attempt $attempt), retrying in 60 s..." >&2
+    sleep 60
+done
 BIN="$(bazelisk info "${FLAGS[@]}" bazel-bin 2>/dev/null)"
 
 rm -rf "$OUT/lib"
