@@ -35,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         InputSourceRecovery.shared.startMonitoring()
         DeveloperLogger.shared.startMainThreadStallMonitor()
         PermissionMonitor.start()
+        GlobalModifierWatch.shared.start()
         setupStatusItem()
 
         NSLog("NRIME: Server started with connection name: \(connectionName)")

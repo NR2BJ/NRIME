@@ -270,6 +270,24 @@ final class ShortcutHandler {
             wasDown = oldFlags.contains(flag)
         }
 
+        // Tell the global watch which releases this path saw, and skip one it
+        // already switched for (this event reached us after its grace period).
+        if !isNowDown, wasDown, isKeyRegisteredAsShortcut(keyCode) {
+            let ownsPending = pendingLetter?.modifierKeyCode == keyCode
+            if !ownsPending, TapReleaseLedger.firedGlobally(keyCode: keyCode, near: event.timestamp) {
+                if activeModifierKeyCode == keyCode {
+                    activeModifierKeyCode = nil
+                    modifierDownEventTimestamp = nil
+                }
+                if twinTapCandidate?.keyCode == keyCode { twinTapCandidate = nil }
+                logTap("alreadyFiredGlobally", key: keyCode)
+                return false
+            }
+            let tracked = ownsPending || activeModifierKeyCode == keyCode
+                || twinTapCandidate?.keyCode == keyCode
+            TapReleaseLedger.noteIMKRelease(keyCode: keyCode, timestamp: event.timestamp, tracked: tracked)
+        }
+
         if isNowDown && !wasDown {
             // Another modifier joining while a letter is buffered settles it as
             // a deliberate combo (hold).
@@ -689,6 +707,15 @@ final class ShortcutHandler {
     // MARK: - Shortcut Matching
 
     /// Check all modifier-only tap shortcuts
+    /// The action a solo tap of this modifier is set to, if any.
+    static func modifierTapAction(for keyCode: UInt16) -> Action? {
+        for (key, action) in allShortcuts {
+            let config = Settings.shared.shortcut(for: key)
+            if !config.disabled, config.isModifierOnlyTap, config.keyCode == keyCode { return action }
+        }
+        return nil
+    }
+
     private func checkModifierOnlyTap(_ keyCode: UInt16) -> Bool {
         for (key, action) in Self.allShortcuts {
             let config = Settings.shared.shortcut(for: key)
@@ -811,7 +838,7 @@ final class ShortcutHandler {
 
     // MARK: - Tap diagnostics (developer log only)
 
-    private static func keyName(_ keyCode: UInt16) -> String {
+    static func keyName(_ keyCode: UInt16) -> String {
         switch keyCode {
         case ShortcutConfig.keyCodeLeftShift: return "LShift"
         case ShortcutConfig.keyCodeRightShift: return "RShift"
@@ -819,7 +846,7 @@ final class ShortcutHandler {
         }
     }
 
-    private static func ms(_ seconds: TimeInterval) -> String {
+    static func ms(_ seconds: TimeInterval) -> String {
         String(format: "%.0f", seconds * 1000)
     }
 
@@ -906,7 +933,7 @@ final class ShortcutHandler {
     /// Device-dependent modifier bits (IOLLEvent.h NX_DEVICE*KEYMASK) for a physical
     /// modifier keyCode: the bit for that exact key, plus the bits for both sides so
     /// callers can tell "side is known" from "side is unavailable".
-    private static func deviceModifierMasks(
+    static func deviceModifierMasks(
         for modifierKeyCode: UInt16
     ) -> (requiredSide: UInt, eitherSide: UInt)? {
         let leftShift: UInt  = 0x0000_0002

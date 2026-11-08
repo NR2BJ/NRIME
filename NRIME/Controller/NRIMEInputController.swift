@@ -71,6 +71,10 @@ class NRIMEInputController: IMKInputController {
         // Cache client for the global mouse monitor callback.
         cachedClient = client as AnyObject
 
+        // A modifier tap this path never heard of (the global watch saw it)
+        // switches before this key is handled, as it came first.
+        GlobalModifierWatch.shared.settle(before: event)
+
         // A newline still waiting out its wait belongs before this keystroke.
         // Delivering it now keeps the order the user typed and stops its
         // replacement range from swallowing the composition this key starts.
@@ -430,6 +434,27 @@ class NRIMEInputController: IMKInputController {
         }
     }
 
+    /// settleCompositionBeforeModeSwitch for a switch that did not come with
+    /// a client (menu, global watch): the client this controller last had.
+    private func settleCompositionOfLastClient() {
+        settleCompositionBeforeModeSwitch(client: resolvedClient() ?? (cachedClient as? (any IMKTextInput)))
+    }
+
+    /// A Shift tap the global watch caught but this path never received
+    /// (GlobalModifierWatch). Switches as the shortcut would.
+    static func performMissedTap(_ action: ShortcutHandler.Action) {
+        performMissedTap(action, controller: activeController)
+    }
+
+    static func performMissedTap(_ action: ShortcutHandler.Action, controller: NRIMEInputController?) {
+        controller?.settleCompositionOfLastClient()
+        switch action {
+        case .toggleEnglish: StateManager.shared.toggleEnglish()
+        case .toggleNonEnglish: StateManager.shared.toggleNonEnglish()
+        case .hanjaConvert: break
+        }
+    }
+
     // MARK: - Menu Bar
 
     /// A mode picked from the menu bar menu (AppDelegate).
@@ -446,9 +471,8 @@ class NRIMEInputController: IMKInputController {
         let sourceID = InputSourceSelector.currentInputSourceID()
         let nrimeIsCurrent = sourceID?.hasPrefix(InputSourceSelector.bundleID) ?? false
         let previousMode = StateManager.shared.currentMode
-        if nrimeIsCurrent, let controller {
-            let client = controller.resolvedClient() ?? (controller.cachedClient as? (any IMKTextInput))
-            controller.settleCompositionBeforeModeSwitch(client: client)
+        if nrimeIsCurrent {
+            controller?.settleCompositionOfLastClient()
         }
         StateManager.shared.switchTo(mode)
 
